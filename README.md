@@ -103,20 +103,27 @@ Valkey runs on the `xtrusio-net` Docker network. Containers we add later that ne
 
 ## URLs
 
+- **Web (Vite):** http://localhost:5173
+  - `/` Dashboard
+  - `/users`, `/clients`, `/settings`, `/sign-in` (placeholder routes with empty states)
 - **API:** http://localhost:8000
   - Health: `/health`
   - OpenAPI: `/docs`
-- **Web:** http://localhost:5173
+- **Supabase Studio:** http://localhost:54323
+- **Inbucket (mail):** http://localhost:54324
 
 ## Engineering rules
 
 See [`docs/superpowers/ENGINEERING_PRINCIPLES.md`](docs/superpowers/ENGINEERING_PRINCIPLES.md). The big ones:
 
 - **TypeScript only on the frontend.** No `.js` / `.jsx` / `.mjs` / `.cjs`. Source AND configs (§2.0).
+- **No custom CSS** outside `apps/web/src/globals.css`. Every component composes Tailwind utilities + shadcn primitives.
+- **No hardcoded colors.** Use semantic tokens (`bg-background`, `text-muted-foreground`, `bg-success/10`, etc.). Pre-commit hook (`no-hardcoded-colors`) blocks `#hex` and `bg-zinc-*`/`bg-gray-*`/etc.
+- **No demo or mock data.** Empty states are first-class. The first platform owner is bootstrapped via a CLI script (Plan 1B/1C); every other user is invited via real flows.
 - **Strict typing.** No `any`, branded IDs, Zod-as-source-of-truth.
-- **mypy --strict** on Python.
+- **`mypy --strict`** on Python.
 - **500 LoC ceiling per file**, 200-300 target.
-- **Pre-commit hook** (added in Task 17A of Plan 1A) enforces these locally.
+- **Pre-commit hooks** enforce ruff, prettier, no-js-in-frontend, no-hardcoded-colors, and large-file checks locally.
 
 ## Why apps run on the host (not in Docker) for dev
 
