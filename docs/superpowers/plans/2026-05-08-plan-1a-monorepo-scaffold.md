@@ -6,7 +6,12 @@
 
 **Architecture:** Polyglot monorepo. **pnpm workspaces** drive `apps/web`, `packages/ui`, `packages/api-types`. **uv workspace** drives `apps/api` (Python). **Turborepo** orchestrates cross-package tasks (`build`, `lint`, `test`, `dev`). Local services run in Docker Compose. There is no CI/CD setup in this plan — local-equivalent commands only, per project policy.
 
-**Tech Stack:** Python 3.12, FastAPI, Uvicorn, Pydantic v2, pytest, Ruff, mypy. Node 22, pnpm 10, TypeScript 5.5+ (strict), React 19, Vite 8, Vitest, ESLint 9, Prettier. Turborepo 2. Postgres 16 + pgvector, Valkey 8.
+**Tech Stack:** Python 3.12, FastAPI, Uvicorn, Pydantic v2, pytest, Ruff, mypy. Node 22, pnpm 10, TypeScript 5.5+ (strict), React 19, Vite 8, Vitest, ESLint 9, Prettier. Turborepo 2. Postgres 16 + pgvector, Valkey 8. Tool versions pinned via `mise`. Local quality gate enforced via `pre-commit`.
+
+**Container conventions:**
+- All containers are **named with `xtrusio-` prefix** (e.g., `xtrusio-postgres`, `xtrusio-valkey`).
+- All containers run on a **custom Docker network** (`xtrusio-net`) so they resolve each other by name without exposing internal ports.
+- **Non-default host ports** are used to avoid colliding with other Postgres/Redis instances on the developer machine: Postgres on host port `54322`, Valkey on host port `63792`.
 
 ---
 
@@ -18,7 +23,7 @@
 - `turbo.json` — Turbo pipeline definition
 - `pyproject.toml` — uv workspace root + tool configs (ruff, mypy, pytest)
 - `uv.toml` — uv workspace declaration
-- `docker-compose.yml` — Postgres + pgvector + Valkey
+- `docker-compose.yml` — Postgres + pgvector + Valkey on `xtrusio-net`
 - `Makefile` — primary developer entrypoint
 - `.env.example` — documented environment variables
 - `.gitignore`
@@ -26,6 +31,8 @@
 - `README.md` — quickstart
 - `.python-version` — `3.12`
 - `.nvmrc` — `22`
+- `mise.toml` — pins Node/Python/pnpm versions for everyone
+- `.pre-commit-config.yaml` — local quality gate on `git commit`
 
 ### `apps/api/` (FastAPI)
 - `apps/api/pyproject.toml`
@@ -160,6 +167,46 @@ ls -a
 # Expected: .gitignore .editorconfig .python-version .nvmrc visible
 git add .gitignore .editorconfig .python-version .nvmrc
 git commit -m "chore: add repo metadata files"
+```
+
+---
+
+## Task 1A: Pin tool versions with `mise`
+
+**Files:**
+- Create: `mise.toml`
+
+**Why:** `mise` (formerly rtx) reads a single config file to install/select Node, Python, and pnpm. Engineers run `mise install` once and every shell uses the right versions automatically — replaces the per-tool dance of nvm + pyenv + corepack. Optional but strongly recommended; `.python-version` and `.nvmrc` from Task 1 still work for engineers who don't use `mise`.
+
+- [ ] **Step 1: Create `mise.toml`**
+
+```toml
+[tools]
+node = "22"
+python = "3.12"
+pnpm = "10"
+
+[env]
+# Default process role for shells that don't override (most engineers run `make api` / `make worker` which set this explicitly).
+XTRUSIO_PROCESS_ROLE = "api"
+```
+
+- [ ] **Step 2: (Optional) Verify `mise` installs the tools**
+
+If you have `mise` installed (`brew install mise` on macOS, or see https://mise.jdx.dev):
+
+```bash
+mise install
+mise current
+```
+
+Expected: prints `node 22.x.y`, `python 3.12.x`, `pnpm 10.x.y`. If `mise` is not installed, this step is skippable — `.python-version` and `.nvmrc` still drive nvm/pyenv users.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add mise.toml
+git commit -m "chore: pin tool versions via mise.toml"
 ```
 
 ---
@@ -1003,18 +1050,29 @@ CREATE EXTENSION IF NOT EXISTS citext;
 - [ ] **Step 2: Create `docker-compose.yml`**
 
 ```yaml
+name: xtrusio
+
+networks:
+  xtrusio-net:
+    name: xtrusio-net
+    driver: bridge
+
 services:
   postgres:
+    container_name: xtrusio-postgres
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    networks:
+      - xtrusio-net
     ports:
-      - "5432:5432"
+      # Host:Container — non-default host port to avoid colliding with other Postgres
+      - "54322:5432"
     environment:
       POSTGRES_USER: xtrusio
       POSTGRES_PASSWORD: xtrusio_dev
       POSTGRES_DB: xtrusio
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - xtrusio-postgres-data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U xtrusio -d xtrusio"]
@@ -1023,13 +1081,17 @@ services:
       retries: 10
 
   valkey:
+    container_name: xtrusio-valkey
     image: valkey/valkey:8
     restart: unless-stopped
+    networks:
+      - xtrusio-net
     ports:
-      - "6379:6379"
+      # Host:Container — non-default host port to avoid colliding with other Redis/Valkey
+      - "63792:6379"
     command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
     volumes:
-      - valkey_data:/data
+      - xtrusio-valkey-data:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -1037,9 +1099,18 @@ services:
       retries: 10
 
 volumes:
-  postgres_data:
-  valkey_data:
+  xtrusio-postgres-data:
+    name: xtrusio-postgres-data
+  xtrusio-valkey-data:
+    name: xtrusio-valkey-data
 ```
+
+> **Why these choices:**
+> - `name: xtrusio` at the top tells `docker compose` to use `xtrusio` as the project name regardless of the working directory.
+> - `container_name` pins the Docker container name (otherwise Compose generates one like `xtrusio-postgres-1`).
+> - `networks.xtrusio-net.name: xtrusio-net` pins the Docker network name (otherwise Compose prefixes with project name → `xtrusio_xtrusio-net`).
+> - Host ports `54322` and `63792` are deliberately uncommon — apps on host connect via `localhost:54322` / `localhost:63792`. If two `xtrusio` containers ever need to talk to each other, they use `postgres:5432` / `valkey:6379` over `xtrusio-net` (in-network, no host port).
+> - Named volumes (`xtrusio-postgres-data`, `xtrusio-valkey-data`) — stable across `docker compose down` so dev data survives restarts.
 
 - [ ] **Step 3: Bring services up**
 
@@ -1048,35 +1119,61 @@ docker compose up -d
 docker compose ps
 ```
 
-Expected: both `postgres` and `valkey` show `running` and `healthy` after ~10 seconds.
+Expected: containers `xtrusio-postgres` and `xtrusio-valkey` show `running` and `healthy` after ~10 seconds.
 
-- [ ] **Step 4: Verify Postgres + pgvector**
+- [ ] **Step 4: Verify the network and named containers**
 
 ```bash
-docker compose exec postgres psql -U xtrusio -d xtrusio -c "\dx"
+docker network inspect xtrusio-net --format '{{range $k,$v := .Containers}}{{$v.Name}}{{"\n"}}{{end}}'
+```
+
+Expected output:
+```
+xtrusio-postgres
+xtrusio-valkey
+```
+
+- [ ] **Step 5: Verify Postgres + pgvector**
+
+```bash
+docker exec xtrusio-postgres psql -U xtrusio -d xtrusio -c "\dx"
 ```
 
 Expected output includes: `vector | ... | extensions for pgvector`, `pgcrypto`, `citext`.
 
-- [ ] **Step 5: Verify Valkey**
+Verify host port mapping:
 
 ```bash
-docker compose exec valkey valkey-cli ping
+docker port xtrusio-postgres 5432
+```
+
+Expected: `0.0.0.0:54322` (or similar — key is the `54322`).
+
+- [ ] **Step 6: Verify Valkey**
+
+```bash
+docker exec xtrusio-valkey valkey-cli ping
 ```
 
 Expected: `PONG`.
 
-- [ ] **Step 6: Tear down (the Makefile handles this in Task 14)**
+```bash
+docker port xtrusio-valkey 6379
+```
+
+Expected: `0.0.0.0:63792`.
+
+- [ ] **Step 7: Tear down (the Makefile handles this in Task 14)**
 
 ```bash
 docker compose down
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add docker-compose.yml infra/postgres/init.sql
-git commit -m "feat(infra): add Postgres + pgvector + Valkey docker compose"
+git commit -m "feat(infra): add named Postgres + Valkey containers on xtrusio-net (host ports 54322/63792)"
 ```
 
 ---
@@ -1095,10 +1192,12 @@ git commit -m "feat(infra): add Postgres + pgvector + Valkey docker compose"
 XTRUSIO_PROCESS_ROLE=api
 
 # === Database ===
-DATABASE_URL=postgresql+asyncpg://xtrusio:xtrusio_dev@localhost:5432/xtrusio
+# Host port 54322 maps to xtrusio-postgres:5432 inside the xtrusio-net network.
+DATABASE_URL=postgresql+asyncpg://xtrusio:xtrusio_dev@localhost:54322/xtrusio
 
 # === Valkey ===
-VALKEY_URL=redis://localhost:6379/0
+# Host port 63792 maps to xtrusio-valkey:6379 inside the xtrusio-net network.
+VALKEY_URL=redis://localhost:63792/0
 
 # === Frontend ===
 VITE_API_BASE_URL=http://localhost:8000
@@ -1432,6 +1531,111 @@ git commit -m "docs: add quickstart README"
 
 ---
 
+## Task 17A: Wire pre-commit hooks for local quality gate
+
+**Files:**
+- Create: `.pre-commit-config.yaml`
+- Add devDependency to root `package.json`: none (`pre-commit` itself is installed via `uv` because it's a Python tool)
+
+**Why:** `pre-commit` runs the same lint+format checks `make check` runs, but on every `git commit`, on only the changed files. Catches issues before they hit the repo. This is **local tooling, not CI/CD** — it complies with the project policy (no GitHub Actions / no automated runners).
+
+- [ ] **Step 1: Add `pre-commit` to the root Python dev dependencies**
+
+Edit `pyproject.toml` to add `pre-commit` to the dev group. If the root `pyproject.toml` doesn't yet have a `[dependency-groups]` section, add one:
+
+```toml
+[dependency-groups]
+dev = [
+    "pre-commit~=3.8.0",
+]
+```
+
+Sync:
+
+```bash
+uv sync
+```
+
+- [ ] **Step 2: Create `.pre-commit-config.yaml`**
+
+```yaml
+# Local quality gate. Runs on `git commit` against changed files only.
+# Mirrors what `make check` does — same tools, smaller scope.
+
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^apps/api/
+      - id: ruff-format
+        files: ^apps/api/
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.3.3
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, yaml, markdown, css]
+        exclude: |
+          (?x)^(
+            pnpm-lock\.yaml|
+            uv\.lock|
+            apps/web/dist/|
+            .*\.tsbuildinfo
+          )$
+```
+
+- [ ] **Step 3: Install the hooks locally**
+
+```bash
+uv run pre-commit install
+```
+
+Expected: `pre-commit installed at .git/hooks/pre-commit`.
+
+- [ ] **Step 4: Run pre-commit against all files once to baseline**
+
+```bash
+uv run pre-commit run --all-files
+```
+
+Expected: all hooks pass (some may auto-fix trailing whitespace / EOF — that's normal on the first run). Re-run if it auto-fixed anything; second run should be clean.
+
+If anything fails legitimately (not auto-fixable), fix the underlying file and re-run. Don't disable hooks.
+
+- [ ] **Step 5: Commit (the hook will run on this very commit)**
+
+```bash
+git add .pre-commit-config.yaml pyproject.toml uv.lock
+git commit -m "chore: add pre-commit config (local quality gate, no CI)"
+```
+
+If the hook makes auto-fixes during this commit, re-stage and commit again:
+
+```bash
+git add -A
+git commit --amend --no-edit
+```
+
+---
+
 ## Task 18: Final validation — fresh clone simulation
 
 This is the **definition-of-done gate** for Plan 1A. Pretend you are a brand-new engineer cloning the repo for the first time. No file changes; pure validation.
@@ -1494,17 +1698,21 @@ When all of the following are true, Plan 1A is complete and Plan 1B (DB foundati
 3. `make dev` brings up Postgres, Valkey, API on `:8000`, and web on `:5173`.
 4. `curl http://localhost:8000/health` returns `{"status":"ok"}`.
 5. `curl http://localhost:5173` returns HTTP 200.
-6. `docker compose exec postgres psql -U xtrusio -d xtrusio -c "\dx"` shows `vector`, `pgcrypto`, `citext` extensions installed.
-7. `docker compose exec valkey valkey-cli ping` returns `PONG`.
-8. `apps/api/src/xtrusio_api/main.py` and `apps/web/src/App.tsx` exist with the exact contents shown in Tasks 7 and 9.
-9. The repo has zero `.github/workflows/*` files and no CI/CD setup, per project policy.
+6. `docker exec xtrusio-postgres psql -U xtrusio -d xtrusio -c "\dx"` shows `vector`, `pgcrypto`, `citext` extensions installed.
+7. `docker exec xtrusio-valkey valkey-cli ping` returns `PONG`.
+8. `docker network inspect xtrusio-net` shows both `xtrusio-postgres` and `xtrusio-valkey` attached.
+9. `docker port xtrusio-postgres 5432` returns `0.0.0.0:54322`; `docker port xtrusio-valkey 6379` returns `0.0.0.0:63792`.
+10. `apps/api/src/xtrusio_api/main.py` and `apps/web/src/App.tsx` exist with the exact contents shown in Tasks 7 and 9.
+11. `mise.toml` exists pinning Node 22, Python 3.12, pnpm 10.
+12. `.pre-commit-config.yaml` exists; `uv run pre-commit run --all-files` passes.
+13. The repo has zero `.github/workflows/*` files and no CI/CD setup, per project policy.
 
 ---
 
 ## Notes for the Engineer
 
 - **Why TDD on a scaffold?** Because the smoke test for `/health` is the simplest possible regression detector — if a future change breaks the API server, this test fails before anything subtle does. Same for the `App` smoke test.
-- **Why no `.env` file by default?** It's gitignored. `make api` and `make web` read environment variables; for local dev, `.env.example`'s defaults already point at `localhost:5432` / `localhost:6379` / `localhost:8000`, so most engineers don't need to copy `.env.example` to `.env` until they want to override something.
+- **Why no `.env` file by default?** It's gitignored. `make api` and `make web` read environment variables; for local dev, `.env.example`'s defaults already point at `localhost:54322` (Postgres) / `localhost:63792` (Valkey) / `localhost:8000` (API), so most engineers don't need to copy `.env.example` to `.env` until they want to override something.
 - **Why `XTRUSIO_PROCESS_ROLE`?** Plan 1A doesn't use it for anything functional yet — but Plan 1C (auth) and the analysis toolkit (spec #3) both rely on it. Setting it correctly from day one prevents a class of bugs later.
 - **Why is `make worker` a placeholder?** The worker process needs Dramatiq/Prefect, which are introduced in later plans (around Plan 1C/1D). The placeholder keeps the developer-facing command surface stable so we don't have to retrain muscle memory later.
 - **Why no shadcn/ui or Tailwind yet?** That comes with the frontend shell plan (around Plan 1D). Plan 1A is intentionally minimal — adding design-system pieces too early creates churn.
