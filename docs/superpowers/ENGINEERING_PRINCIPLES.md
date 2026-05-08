@@ -21,9 +21,27 @@ Project-wide engineering constraints. These apply to **every** spec, every PR, e
 
 ## 2. TypeScript discipline
 
+### 2.0 No JavaScript files anywhere in the frontend stack
+
+**Allowed extensions in `apps/web/`, `packages/ui/`, `packages/api-types/`, and any future frontend package: `.ts` and `.tsx` only.** Forbidden: `.js`, `.jsx`, `.mjs`, `.cjs`. This applies to **source AND config files**.
+
+- ESLint flat config: **`eslint.config.ts`** — load via `jiti` (devDep) so ESLint 9 reads TypeScript natively. Never `eslint.config.js`/`.mjs`.
+- Vite config: **`vite.config.ts`** (already the default).
+- Vitest config: **`vitest.config.ts`** (already the default).
+- Tailwind / PostCSS / Storybook configs (when added): use the `.ts` variant. If a tool *fundamentally* cannot load TypeScript and JS is the only option, raise it for review before introducing any `.js` file — never silently add one.
+- Backend (`apps/api/`, future `apps/worker/`) is unaffected — Python uses `.py`.
+- Build outputs (`dist/`, `.turbo/`, etc.) are gitignored and don't count.
+
+A grep gate in CI (when CI lands) and as a local pre-commit hook fails the build if a `.js`/`.jsx`/`.mjs`/`.cjs` file is staged in any frontend path. **No exceptions without a written deviation in this doc.**
+
+### 2.1 Compiler strictness
+
 - **Strict mode on, no exceptions.** `tsconfig.json` enables `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`.
 - **No `any`.** Ever. If you genuinely need an escape hatch, use `unknown` and narrow it. PRs with `any` are rejected unless an inline comment explains why no type works.
 - **No `// @ts-ignore` / `// @ts-expect-error`** without a reason on the same line: `// @ts-expect-error: Supabase types lag SDK v3.x release, see issue #N`.
+
+### 2.2 Type design
+
 - **Branded types for IDs.** `type TenantId = string & { __brand: "TenantId" }`. This prevents passing a `userId` where a `tenantId` is expected — the compiler catches it.
 - **Zod schemas are the source of truth.** Infer TS types from Zod (`type X = z.infer<typeof xSchema>`). Don't define a TS interface and a Zod schema separately — they will drift.
 - **Prefer `type` over `interface`** for new code, except when you need declaration merging.
@@ -97,6 +115,7 @@ Project-wide engineering constraints. These apply to **every** spec, every PR, e
 
 A PR fails review if:
 - Any file exceeds 500 LoC
+- **Any frontend path contains a `.js`/`.jsx`/`.mjs`/`.cjs` file** (§2.0)
 - Any new TS file uses `any` without a justification comment
 - Any new endpoint is missing pagination, error tests, or auth tests
 - Any new tenant-scoped table is missing RLS policies + RLS tests

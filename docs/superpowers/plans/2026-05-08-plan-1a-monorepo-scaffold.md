@@ -1597,14 +1597,25 @@ repos:
     rev: v3.3.3
     hooks:
       - id: prettier
-        types_or: [javascript, jsx, ts, tsx, json, yaml, markdown, css]
+        types_or: [ts, tsx, json, yaml, markdown, css]
         exclude: |
           (?x)^(
             pnpm-lock\.yaml|
             uv\.lock|
             apps/web/dist/|
+            docs/|
+            Algo\.md|
             .*\.tsbuildinfo
           )$
+
+  - repo: local
+    hooks:
+      - id: no-js-in-frontend
+        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES §2.0)
+        entry: bash -c 'staged=$(git diff --cached --name-only --diff-filter=AM | grep -E "^(apps/web|packages/(ui|api-types))/.*\\.(js|jsx|mjs|cjs)$" || true); if [ -n "$staged" ]; then echo "ERROR: forbidden non-TS files in frontend:"; echo "$staged"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
 ```
 
 - [ ] **Step 3: Install the hooks locally**
