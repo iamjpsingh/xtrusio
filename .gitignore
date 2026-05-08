@@ -1,0 +1,33 @@
+# Node
+node_modules/
+.pnpm-store/
+dist/
+.turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.uv-cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.egg-info/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+build/
+*.tsbuildinfo
