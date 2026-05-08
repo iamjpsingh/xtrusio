@@ -127,10 +127,11 @@ If you've used a "full docker-compose" stack elsewhere and miss the "one command
 
 - **Database + Auth + Realtime:** **self-hosted Supabase** (the full stack on owned infrastructure — NOT supabase.com cloud). The Supabase CLI we use locally pulls the same Docker images as the official self-hosted reference, so dev→prod parity is real and migrations apply byte-identically.
 - **Web frontend:** **Cloudflare Pages.** `pnpm build` produces the static `dist/` that ships to the CDN.
-- **API:** runtime TBD (Cloudflare Workers, Fly.io, Render, or self-hosted — decided in the deploy plan). Will land as `apps/api/Dockerfile` when we ship.
-- **Cache:** TBD (self-hosted Valkey or managed equivalent).
+- **API:** **VPS-hosted FastAPI** (long-running uvicorn/gunicorn behind Caddy or nginx for TLS). Not Cloudflare Workers, not Fly machines — full VPS so we can run heavy Python libraries (sentence-transformers, Polars, etc.) and long-running background workers without edge-runtime constraints. Will land as `apps/api/Dockerfile` when we ship.
+- **Workers (Dramatiq + Prefect, future):** same VPS as the API (or a sibling VPS if scale demands), as separate processes (systemd units or sibling containers).
+- **Cache:** self-hosted Valkey on the API VPS.
 
-A future deploy plan covers production `docker-compose.yml` for Supabase, the API Dockerfile, the Pages build pipeline, migration deploy automation, backups, and secrets management. None of this is part of Plan 1A.
+A future deploy plan covers production `docker-compose.yml` for Supabase, the API Dockerfile, VPS provisioning, the Pages build pipeline, migration deploy automation, backups, secrets management, and TLS. None of this is part of Plan 1A.
 
 ## CI/CD
 
