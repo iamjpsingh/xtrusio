@@ -13,6 +13,7 @@ from typing import Annotated
 
 import typer
 from sqlalchemy import select
+
 from supabase import create_client
 
 from ..core.config import get_settings

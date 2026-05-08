@@ -40,7 +40,8 @@ def make_jwt() -> Iterator[Callable[..., str]]:
             "iat": now,
             "exp": now - 60 if expired else now + 3600,
         }
-        return jwt.encode(payload, SETTINGS.supabase_jwt_secret, algorithm="HS256")
+        token: str = jwt.encode(payload, SETTINGS.supabase_jwt_secret, algorithm="HS256")
+        return token
 
     yield _factory
 

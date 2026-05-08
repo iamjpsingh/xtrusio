@@ -41,6 +41,17 @@ make env-force
 
 `.env` is gitignored — never commit it.
 
+## Bootstrap the first super_admin
+
+Once the local stack is up and migrations are applied, create the first platform owner via CLI:
+
+```bash
+make migrate
+make create-platform-owner email=you@x.com password='SecurePass123!'
+```
+
+Then sign in at http://localhost:5173/sign-in with those credentials.
+
 ## Daily development
 
 | Command                       | What it does                                                |
