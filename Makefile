@@ -21,7 +21,7 @@ help:
 
 install:
 	pnpm install
-	uv sync
+	uv sync --all-packages
 
 db-up:
 	docker compose up -d postgres valkey

@@ -28,19 +28,19 @@ make install
 
 ## Daily development
 
-| Command | What it does |
-| --- | --- |
-| `make dev` | Brings up Postgres + Valkey + API + Web in one terminal. |
-| `make db-up` / `make db-down` | DBs only. |
-| `make api` | FastAPI dev server on `:8000` (`XTRUSIO_PROCESS_ROLE=api`). |
-| `make web` | Vite dev server on `:5173`. |
-| `make worker` | Placeholder until later plans add Dramatiq / Prefect. |
-| `make lint` | Ruff + ESLint check. |
-| `make format` | Auto-format Python + TypeScript. |
-| `make typecheck` | mypy + tsc. |
-| `make test` | pytest + Vitest. |
-| `make check` | lint + typecheck + test (run before committing). |
-| `make clean` | Wipe caches and venvs. |
+| Command                       | What it does                                                |
+| ----------------------------- | ----------------------------------------------------------- |
+| `make dev`                    | Brings up Postgres + Valkey + API + Web in one terminal.    |
+| `make db-up` / `make db-down` | DBs only.                                                   |
+| `make api`                    | FastAPI dev server on `:8000` (`XTRUSIO_PROCESS_ROLE=api`). |
+| `make web`                    | Vite dev server on `:5173`.                                 |
+| `make worker`                 | Placeholder until later plans add Dramatiq / Prefect.       |
+| `make lint`                   | Ruff + ESLint check.                                        |
+| `make format`                 | Auto-format Python + TypeScript.                            |
+| `make typecheck`              | mypy + tsc.                                                 |
+| `make test`                   | pytest + Vitest.                                            |
+| `make check`                  | lint + typecheck + test (run before committing).            |
+| `make clean`                  | Wipe caches and venvs.                                      |
 
 ## Layout
 
@@ -62,10 +62,10 @@ docs/
 
 All services run on a custom Docker network (`xtrusio-net`) with named containers and **non-default host ports** so they don't collide with other databases on your machine:
 
-| Service | Container name | Host port | In-network address |
-| --- | --- | --- | --- |
-| Postgres 16 + pgvector | `xtrusio-postgres` | `localhost:54322` | `postgres:5432` |
-| Valkey 8 | `xtrusio-valkey` | `localhost:63792` | `valkey:6379` |
+| Service                | Container name     | Host port         | In-network address |
+| ---------------------- | ------------------ | ----------------- | ------------------ |
+| Postgres 16 + pgvector | `xtrusio-postgres` | `localhost:54322` | `postgres:5432`    |
+| Valkey 8               | `xtrusio-valkey`   | `localhost:63792` | `valkey:6379`      |
 
 Apps running on the host connect via the host ports above (defaults already set in `.env.example`). Containers that join `xtrusio-net` (later plans) talk to each other by name.
 

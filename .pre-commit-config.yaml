@@ -1,0 +1,53 @@
+# Local quality gate. Runs on `git commit` against changed files only.
+# Mirrors what `make check` does — same tools, smaller scope.
+# Project policy: this is LOCAL tooling only. CI/CD is deferred.
+
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^apps/api/
+      - id: ruff-format
+        files: ^apps/api/
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier (via pnpm-installed binary)
+        entry: pnpm exec prettier --write
+        language: system
+        types_or: [ts, tsx, json, yaml, markdown, css]
+        exclude: |
+          (?x)^(
+            pnpm-lock\.yaml|
+            uv\.lock|
+            apps/web/dist/|
+            docs/|
+            Algo\.md|
+            .*\.tsbuildinfo
+          )$
+
+      - id: no-js-in-frontend
+        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES §2.0)
+        entry: scripts/check-no-js-in-frontend.sh
+        language: system
+        pass_filenames: false
+        always_run: true
