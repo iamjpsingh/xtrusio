@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install env env-force supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean
+.PHONY: help install env env-force supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
 
 help:
 	@echo "Xtrusio dev Makefile"
@@ -111,6 +111,21 @@ test:
 	pnpm exec turbo run test
 
 check: lint typecheck test
+
+migrate:
+	uv run --directory apps/api alembic upgrade head
+
+migrate-down:
+	uv run --directory apps/api alembic downgrade -1
+
+create-platform-owner:
+	@if [ -z "$(email)" ] || [ -z "$(password)" ]; then \
+		echo "Usage: make create-platform-owner email=you@x.com password=..."; \
+		exit 1; \
+	fi
+	XTRUSIO_PROCESS_ROLE=api uv run --directory apps/api \
+		python -m xtrusio_api.scripts.bootstrap \
+		--email "$(email)" --password "$(password)"
 
 clean:
 	rm -rf node_modules .pnpm-store .venv .turbo
