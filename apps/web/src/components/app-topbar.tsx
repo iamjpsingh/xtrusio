@@ -10,6 +10,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SearchTrigger } from "@/components/search-trigger";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import { platformNav } from "@/lib/nav";
 
 function findLabel(pathname: string): string {
@@ -45,6 +47,8 @@ export function AppTopbar() {
       </Breadcrumb>
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
+        <ThemeToggle />
+        <UserMenu />
       </div>
     </header>
   );
