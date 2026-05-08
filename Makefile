@@ -1,10 +1,12 @@
 SHELL := /bin/bash
-.PHONY: help install supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean
+.PHONY: help install env env-force supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean
 
 help:
 	@echo "Xtrusio dev Makefile"
 	@echo ""
 	@echo "  make install         - install JS + Python dependencies"
+	@echo "  make env             - generate .env from supabase status (refuses if .env exists)"
+	@echo "  make env-force       - regenerate .env, overwriting if it exists"
 	@echo "  make db-up           - start Supabase stack + xtrusio-valkey"
 	@echo "  make db-down         - stop Supabase stack + xtrusio-valkey"
 	@echo "  make db-logs         - tail Valkey logs (Supabase logs: \`supabase logs\`)"
@@ -27,6 +29,18 @@ help:
 install:
 	pnpm install
 	uv sync --all-packages
+
+env:
+	@if [ -f .env ]; then \
+		echo "ERROR: .env already exists. Use 'make env-force' to overwrite, or edit it manually."; \
+		exit 1; \
+	fi
+	@./scripts/generate-env.sh > .env
+	@echo "Wrote .env with live Supabase keys."
+
+env-force:
+	@./scripts/generate-env.sh > .env
+	@echo "Regenerated .env (existing values overwritten)."
 
 supabase-start:
 	supabase start

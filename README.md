@@ -28,9 +28,18 @@ Optional but recommended: install [`mise`](https://mise.jdx.dev) (`brew install 
 ```bash
 git clone <repo>
 cd xtrusio
-cp .env.example .env       # optional — defaults work for local dev
 make install
+make db-up    # start Supabase (CLI) + Valkey (docker)
+make env      # generate .env with live Supabase keys
 ```
+
+After this, `make dev` from now on. If Supabase keys ever rotate (e.g., you wiped local Supabase volumes), regenerate:
+
+```bash
+make env-force
+```
+
+`.env` is gitignored — never commit it.
 
 ## Daily development
 
