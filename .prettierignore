@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+.turbo
+.venv
+**/__pycache__
+**/*.py
+pnpm-lock.yaml
+uv.lock
+
+# Hand-written documentation — preserve manual formatting (tables, line breaks)
+docs/
+Algo.md
