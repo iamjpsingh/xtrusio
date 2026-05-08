@@ -667,18 +667,23 @@ Each step has unit tests with mocked providers and tools. Tests assert: input va
 
 Per spec #1 §6.4: every new table (`runs`, `run_steps`, `run_events`, `artifacts`, `prompts`, `prompt_versions`, `model_pricing`) has RLS isolation tests.
 
-### 13.6 Live LLM smoke
+### 13.6 Live LLM smoke (deferred)
 
-Once-a-day GitHub Actions cron runs the full `company_research_run` flow against a fixed canary URL with a $0.50 budget cap. Catches: provider API breakage, prompt regression, tool reliability. Failure pages on-call (when on-call exists; for now alerts to email).
+Run on demand locally during development: `make smoke-live` invokes the full `company_research_run` flow against a fixed canary URL with a $0.50 budget cap. Catches provider API breakage, prompt regression, tool reliability. Scheduling this nightly via CI/CD is part of the deferred CI work (see §14).
 
 ---
 
-## 14. CI additions on top of spec #1
+## 14. CI additions on top of spec #1 (deferred — see project policy)
 
-- New lint rule: every `Step` subclass must define `input_schema`, `output_schema`, `name`. CI fails otherwise.
-- New lint rule: every step that calls an LLM must declare `requires_prompt = "..."`. CI fails otherwise.
+**Deferred until local development runs cleanly end-to-end** (project policy 2026-05-08, identical to spec #1 §14). The lint rules and integrity checks below are still implemented as **local commands** (runnable via `make lint` / `make check-prompts` / etc.), they are simply not wired into CI runners until the readiness bar is met.
+
+Local checks to implement:
+- Static check: every `Step` subclass must define `input_schema`, `output_schema`, `name`. Fail-fast at app startup; lint script wraps it.
+- Static check: every step that calls an LLM must declare `requires_prompt = "..."`.
 - Pricing-table integrity check: every model used in any step's default config has a current pricing row.
-- Live-LLM smoke (nightly).
+- Live-LLM smoke as a manual `make smoke-live` target.
+
+When the local-stable bar is met, these become CI lanes alongside spec #1's deferred CI lanes.
 
 ---
 

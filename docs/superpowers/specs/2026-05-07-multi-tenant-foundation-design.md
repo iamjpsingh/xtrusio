@@ -592,14 +592,17 @@ CI gates: all tests must pass; RLS coverage linter must pass; type check must pa
 
 ---
 
-## 14. CI/CD (GitHub Actions)
+## 14. CI/CD (deferred — see project policy)
 
-Workflows:
-- `on: pull_request` — lint (ruff, eslint, prettier), type-check (mypy, tsc), unit + integration tests, RLS suite, build frontend, build backend image. All must pass to merge.
-- `on: push to main` — same as above + deploy preview.
+**Deferred until local development runs cleanly end-to-end.** Project policy (recorded 2026-05-08): no CI/CD setup — GitHub Actions workflows, Turborepo remote cache, deploy pipelines, image build automation — until every dev can run the full stack locally without issues. The local-equivalent tooling (ruff, eslint, prettier, mypy, tsc, pytest, vitest, Playwright, RLS test harness) is still set up and runnable from the developer's shell — only the CI runners and deploy automation are out of scope for v1.
+
+When the local-stable bar is met, the following lanes will be the starting point:
+- `on: pull_request` — lint, type-check, unit + integration tests, RLS suite, frontend/backend build.
+- `on: push to main` — same + preview deploy.
 - `on: tag v*` — production deploy.
+- Turborepo remote cache backed by Cloudflare R2.
 
-Turborepo cache is restored across runs (Cloudflare R2 cache backend).
+Tracked in a separate "CI/CD enablement" spec written when readiness criteria are met.
 
 ---
 
