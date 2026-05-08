@@ -118,9 +118,19 @@ This is a deliberate choice:
 - **Hot reload** is much faster on the host than across volume mounts.
 - **IDE + types + debugger** work naturally on the host. In Docker, the IDE can't see container internals cleanly.
 - **Test loops** are sub-second on the host.
-- Production deploy doesn't ship our `docker-compose.yml` either — Supabase Cloud + a serverless API runtime + a CDN-served `dist/` is the prod target. Dockerfiles for deployment will be added when we ship, separately from `make dev`.
+
+Production is a separate concern — see below.
 
 If you've used a "full docker-compose" stack elsewhere and miss the "one command" simplicity: `make dev` is that one command, just with better DX.
+
+## Production target
+
+- **Database + Auth + Realtime:** **self-hosted Supabase** (the full stack on owned infrastructure — NOT supabase.com cloud). The Supabase CLI we use locally pulls the same Docker images as the official self-hosted reference, so dev→prod parity is real and migrations apply byte-identically.
+- **Web frontend:** **Cloudflare Pages.** `pnpm build` produces the static `dist/` that ships to the CDN.
+- **API:** runtime TBD (Cloudflare Workers, Fly.io, Render, or self-hosted — decided in the deploy plan). Will land as `apps/api/Dockerfile` when we ship.
+- **Cache:** TBD (self-hosted Valkey or managed equivalent).
+
+A future deploy plan covers production `docker-compose.yml` for Supabase, the API Dockerfile, the Pages build pipeline, migration deploy automation, backups, and secrets management. None of this is part of Plan 1A.
 
 ## CI/CD
 
