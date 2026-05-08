@@ -120,12 +120,14 @@ migrate-down:
 
 create-platform-owner:
 	@if [ -z "$(email)" ] || [ -z "$(password)" ]; then \
-		echo "Usage: make create-platform-owner email=you@x.com password=..."; \
+		echo "Usage: make create-platform-owner email=you@x.com password=...  [force=true]"; \
 		exit 1; \
 	fi
+	@FORCE_FLAG=""; \
+	if [ "$(force)" = "true" ]; then FORCE_FLAG="--force"; fi; \
 	XTRUSIO_PROCESS_ROLE=api uv run --directory apps/api \
 		python -m xtrusio_api.scripts.bootstrap \
-		--email "$(email)" --password "$(password)"
+		--email "$(email)" --password "$(password)" $$FORCE_FLAG
 
 clean:
 	rm -rf node_modules .pnpm-store .venv .turbo
