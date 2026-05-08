@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuroraBackground } from "@/components/aurora-background";
@@ -36,12 +37,22 @@ function SignInRoute() {
       <AuroraBackground />
 
       <div className="flex w-full max-w-[400px] flex-1 flex-col items-center justify-center">
-        <div className="mb-10 space-y-2 text-center">
+        <motion.div
+          className="mb-10 space-y-2 text-center"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <h1 className="text-4xl font-semibold tracking-tight text-foreground">Xtrusio</h1>
           <p className="text-sm text-muted-foreground">Multi-tenant AI workflows</p>
-        </div>
+        </motion.div>
 
-        <div className="w-full rounded-2xl border border-foreground/10 bg-background/40 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
+        <motion.div
+          className="w-full rounded-2xl border border-foreground/10 bg-background/40 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
+        >
           <div className="mb-6 space-y-1.5 text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h2>
             <p className="text-sm text-muted-foreground">Sign in to your dashboard</p>
@@ -117,12 +128,17 @@ function SignInRoute() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-        </div>
+        </motion.div>
       </div>
 
-      <p className="text-xs text-muted-foreground/70">
+      <motion.p
+        className="text-xs text-muted-foreground/70"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.4 }}
+      >
         Powered by <span className="font-medium text-muted-foreground">Xtrusio</span>
-      </p>
+      </motion.p>
     </div>
   );
 }
