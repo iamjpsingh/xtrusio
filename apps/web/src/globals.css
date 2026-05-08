@@ -129,57 +129,31 @@
   }
 
   /*
-   * Auth page treatment — atmospheric "deep field" lighting.
+   * Auth page — animated aurora background driven by Framer Motion.
    *
-   * Multi-source soft ambient: dominant top-center spotlight, two subtle
-   * upper-corner glows, and a faint mid-bottom lift. No animation, no card,
-   * no grid. The depth comes from layered soft gradients at different
-   * positions, the way premium dark auth pages (the reference) handle it.
+   * The aurora itself is rendered as <motion.div> blobs in
+   * components/aurora-background.tsx. This file only declares the colour
+   * tokens those blobs reference, so they live in the design system rather
+   * than as inline hex literals (keeps the no-hardcoded-colors rule honest).
+   *
+   * Aurora colours are intentionally saturated — the goal is "premium tech
+   * dark with chromatic atmosphere", not the B/W restraint of in-app pages.
+   * They are scoped to .aurora-bg so they cannot leak into the rest of the app.
    */
 
-  .auth-bg {
+  .aurora-bg {
+    --aurora-1: 244 75% 57%;  /* indigo */
+    --aurora-2: 258 90% 66%;  /* violet */
+    --aurora-3: 199 89% 48%;  /* sky */
+    --aurora-4: 188 95% 50%;  /* cyan */
+    --aurora-5: 292 84% 61%;  /* fuchsia */
     position: relative;
     overflow: hidden;
     background-color: hsl(var(--background));
+    isolation: isolate;
   }
 
-  .auth-bg::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      /* dominant top-center spotlight */
-      radial-gradient(
-        ellipse 60% 50% at 50% -5%,
-        hsl(var(--foreground) / 0.22) 0%,
-        hsl(var(--foreground) / 0.08) 35%,
-        transparent 70%
-      ),
-      /* subtle upper-left glow */
-      radial-gradient(
-        ellipse 45% 40% at 15% 10%,
-        hsl(var(--foreground) / 0.1) 0%,
-        transparent 55%
-      ),
-      /* subtle upper-right glow */
-      radial-gradient(
-        ellipse 45% 40% at 85% 15%,
-        hsl(var(--foreground) / 0.1) 0%,
-        transparent 55%
-      ),
-      /* faint mid lift */
-      radial-gradient(
-        ellipse 70% 35% at 50% 60%,
-        hsl(var(--foreground) / 0.04) 0%,
-        transparent 60%
-      ),
-      /* bottom vignette to ground the page */
-      linear-gradient(to top, hsl(var(--background)) 0%, transparent 30%);
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  .auth-bg > * {
+  .aurora-bg > * {
     position: relative;
     z-index: 1;
   }

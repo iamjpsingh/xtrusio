@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AuroraBackground } from "@/components/aurora-background";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/sign-in")({
@@ -31,15 +32,17 @@ function SignInRoute() {
   };
 
   return (
-    <div className="dark auth-bg flex min-h-screen flex-col items-center justify-between bg-background px-6 py-16">
-      <div className="flex w-full max-w-[420px] flex-1 flex-col items-center justify-center gap-16">
-        <div className="space-y-2 text-center">
+    <div className="dark aurora-bg flex min-h-screen flex-col items-center justify-between bg-background px-6 py-12">
+      <AuroraBackground />
+
+      <div className="flex w-full max-w-[400px] flex-1 flex-col items-center justify-center">
+        <div className="mb-10 space-y-2 text-center">
           <h1 className="text-4xl font-semibold tracking-tight text-foreground">Xtrusio</h1>
           <p className="text-sm text-muted-foreground">Multi-tenant AI workflows</p>
         </div>
 
-        <div className="w-full space-y-6">
-          <div className="space-y-1.5 text-center">
+        <div className="w-full rounded-2xl border border-foreground/10 bg-background/40 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
+          <div className="mb-6 space-y-1.5 text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h2>
             <p className="text-sm text-muted-foreground">Sign in to your dashboard</p>
           </div>
@@ -63,7 +66,7 @@ function SignInRoute() {
                   autoComplete="email"
                   placeholder="Enter your email"
                   disabled={loading}
-                  className="bg-foreground/[0.03] hover:bg-foreground/[0.05] focus:bg-foreground/[0.06] h-11 w-full rounded-md border border-border/50 pl-10 pr-3 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="bg-foreground/5 hover:bg-foreground/[0.07] focus:bg-foreground/[0.08] h-11 w-full rounded-md border border-foreground/10 pl-10 pr-3 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/25 focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
             </div>
@@ -86,7 +89,7 @@ function SignInRoute() {
                   autoComplete="current-password"
                   placeholder="Enter your password"
                   disabled={loading}
-                  className="bg-foreground/[0.03] hover:bg-foreground/[0.05] focus:bg-foreground/[0.06] h-11 w-full rounded-md border border-border/50 pl-10 pr-10 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="bg-foreground/5 hover:bg-foreground/[0.07] focus:bg-foreground/[0.08] h-11 w-full rounded-md border border-foreground/10 pl-10 pr-10 text-sm text-foreground transition-colors placeholder:text-muted-foreground/60 focus:border-foreground/25 focus:outline-none focus:ring-2 focus:ring-foreground/10 disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <button
                   type="button"
@@ -108,7 +111,7 @@ function SignInRoute() {
 
             <Button
               type="submit"
-              className="bg-foreground/10 text-foreground hover:bg-foreground/15 h-11 w-full border border-border/60 font-medium backdrop-blur-sm"
+              className="bg-foreground text-background hover:bg-foreground/90 h-11 w-full font-medium shadow-lg"
               disabled={loading}
             >
               {loading ? "Signing in…" : "Sign in"}
