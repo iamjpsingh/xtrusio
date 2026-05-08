@@ -1,40 +1,66 @@
 SHELL := /bin/bash
-.PHONY: help install db-up db-down db-logs api worker web dev lint format typecheck test check clean
+.PHONY: help install supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean
 
 help:
 	@echo "Xtrusio dev Makefile"
 	@echo ""
-	@echo "  make install     - install JS + Python dependencies"
-	@echo "  make db-up       - start xtrusio-postgres + xtrusio-valkey"
-	@echo "  make db-down     - stop them"
-	@echo "  make db-logs     - tail Postgres + Valkey logs"
-	@echo "  make api         - run FastAPI dev server (XTRUSIO_PROCESS_ROLE=api)"
-	@echo "  make worker      - placeholder; real worker added in later plans"
-	@echo "  make web         - run Vite dev server"
-	@echo "  make dev         - bring up DBs + API + web in parallel"
-	@echo "  make lint        - lint Python + JS"
-	@echo "  make format      - format Python + JS"
-	@echo "  make typecheck   - mypy + tsc"
-	@echo "  make test        - run all tests (Python + JS)"
-	@echo "  make check       - lint + typecheck + test"
-	@echo "  make clean       - remove caches and venvs"
+	@echo "  make install         - install JS + Python dependencies"
+	@echo "  make db-up           - start Supabase stack + xtrusio-valkey"
+	@echo "  make db-down         - stop Supabase stack + xtrusio-valkey"
+	@echo "  make db-logs         - tail Valkey logs (Supabase logs: \`supabase logs\`)"
+	@echo "  make supabase-start  - Supabase only"
+	@echo "  make supabase-stop   - Supabase only"
+	@echo "  make supabase-status - print Supabase service URLs + keys"
+	@echo "  make valkey-up       - Valkey only"
+	@echo "  make valkey-down     - Valkey only"
+	@echo "  make api             - run FastAPI dev server (XTRUSIO_PROCESS_ROLE=api)"
+	@echo "  make worker          - placeholder; real worker added in later plans"
+	@echo "  make web             - run Vite dev server"
+	@echo "  make dev             - bring up DBs + API + web in parallel"
+	@echo "  make lint            - lint Python + JS"
+	@echo "  make format          - format Python + JS"
+	@echo "  make typecheck       - mypy + tsc"
+	@echo "  make test            - run all tests (Python + JS)"
+	@echo "  make check           - lint + typecheck + test"
+	@echo "  make clean           - remove caches and venvs"
 
 install:
 	pnpm install
 	uv sync --all-packages
 
-db-up:
-	docker compose up -d postgres valkey
-	@echo "Waiting for xtrusio-postgres and xtrusio-valkey to be healthy..."
-	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-postgres 2>/dev/null | grep -q healthy; do sleep 1; done
-	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-valkey 2>/dev/null | grep -q healthy; do sleep 1; done
-	@echo "DBs ready (postgres on host :54322, valkey on host :63792)."
+supabase-start:
+	supabase start
 
-db-down:
+supabase-stop:
+	supabase stop
+
+supabase-status:
+	supabase status
+
+valkey-up:
+	docker compose up -d valkey
+	@echo "Waiting for xtrusio-valkey to be healthy..."
+	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-valkey 2>/dev/null | grep -q healthy; do sleep 1; done
+	@echo "Valkey ready (host :63792)."
+
+valkey-down:
 	docker compose down
 
+db-up: supabase-start valkey-up
+	@echo ""
+	@echo "All services up:"
+	@echo "  Supabase API     http://localhost:54321"
+	@echo "  Supabase DB      postgresql://postgres:postgres@localhost:54322/postgres"
+	@echo "  Supabase Studio  http://localhost:54323"
+	@echo "  Inbucket (mail)  http://localhost:54324"
+	@echo "  Valkey           localhost:63792"
+	@echo ""
+	@echo "Run 'make supabase-status' for anon/service-role keys."
+
+db-down: supabase-stop valkey-down
+
 db-logs:
-	docker compose logs -f postgres valkey
+	docker compose logs -f valkey
 
 api:
 	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --port 8000 --app-dir apps/api/src

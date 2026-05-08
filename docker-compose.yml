@@ -1,33 +1,16 @@
 name: xtrusio
 
+# Note: Postgres + GoTrue + Realtime + PostgREST + Studio are managed by the
+# Supabase CLI (`supabase start`), which spawns its own Docker containers on
+# its own internal network. This file owns ONLY services that Supabase CLI
+# does not provide — currently just Valkey for caches/queues.
+
 networks:
   xtrusio-net:
     name: xtrusio-net
     driver: bridge
 
 services:
-  postgres:
-    container_name: xtrusio-postgres
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    networks:
-      - xtrusio-net
-    ports:
-      # Host:Container — non-default host port to avoid colliding with other Postgres
-      - "54322:5432"
-    environment:
-      POSTGRES_USER: xtrusio
-      POSTGRES_PASSWORD: xtrusio_dev
-      POSTGRES_DB: xtrusio
-    volumes:
-      - xtrusio-postgres-data:/var/lib/postgresql/data
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U xtrusio -d xtrusio"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   valkey:
     container_name: xtrusio-valkey
     image: valkey/valkey:8
@@ -47,7 +30,5 @@ services:
       retries: 10
 
 volumes:
-  xtrusio-postgres-data:
-    name: xtrusio-postgres-data
   xtrusio-valkey-data:
     name: xtrusio-valkey-data

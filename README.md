@@ -13,6 +13,12 @@ Multi-tenant AI SaaS platform.
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
 
+- **Supabase CLI** — manages the local Postgres + GoTrue + Realtime stack:
+
+  ```bash
+  brew install supabase/tap/supabase-beta   # macOS
+  ```
+
 - **GNU Make** (preinstalled on macOS / Linux).
 
 Optional but recommended: install [`mise`](https://mise.jdx.dev) (`brew install mise` on macOS), then `mise install` from the repo root pins Node, Python, and pnpm in one shot.
@@ -58,16 +64,33 @@ docs/
   superpowers/plans/   Implementation plans
 ```
 
-## Local services (Docker)
+## Local services
 
-All services run on a custom Docker network (`xtrusio-net`) with named containers and **non-default host ports** so they don't collide with other databases on your machine:
+The local stack is split between two managers:
 
-| Service                | Container name     | Host port         | In-network address |
-| ---------------------- | ------------------ | ----------------- | ------------------ |
-| Postgres 16 + pgvector | `xtrusio-postgres` | `localhost:54322` | `postgres:5432`    |
-| Valkey 8               | `xtrusio-valkey`   | `localhost:63792` | `valkey:6379`      |
+**Supabase CLI** (`supabase start` — wrapped by `make db-up`):
 
-Apps running on the host connect via the host ports above (defaults already set in `.env.example`). Containers that join `xtrusio-net` (later plans) talk to each other by name.
+| Service                       | URL / port                        |
+| ----------------------------- | --------------------------------- |
+| Supabase API gateway (Kong)   | `http://localhost:54321`          |
+| GoTrue (auth)                 | `http://localhost:54321/auth/v1`  |
+| PostgREST                     | `http://localhost:54321/rest/v1`  |
+| Realtime                      | `http://localhost:54321/realtime` |
+| **Postgres 17 + pgvector**    | `localhost:54322`                 |
+| Studio (web UI for Postgres)  | `http://localhost:54323`          |
+| Inbucket (local email viewer) | `http://localhost:54324`          |
+
+Run `make supabase-status` to print URLs + freshly-generated anon/service-role keys (copy the keys into your `.env`, never commit them).
+
+**Our `docker-compose.yml`** (Valkey only — Supabase doesn't ship Valkey):
+
+| Service  | Container name   | Host port         | In-network address |
+| -------- | ---------------- | ----------------- | ------------------ |
+| Valkey 8 | `xtrusio-valkey` | `localhost:63792` | `valkey:6379`      |
+
+Valkey runs on the `xtrusio-net` Docker network. Containers we add later that need to talk to Valkey will join `xtrusio-net` and resolve `valkey:6379` by name.
+
+> **Why split?** Supabase CLI manages its own private Docker network. Putting our Valkey on `xtrusio-net` keeps our future containerized services (workers, etc.) on a network we control, while Supabase services stay on the Supabase-managed network. Cross-network communication via host ports.
 
 ## URLs
 
