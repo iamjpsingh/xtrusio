@@ -129,49 +129,29 @@
   }
 
   /*
-   * Auth page treatment — static dark gradient, premium-grade.
+   * Auth page treatment — Linear-style atmospheric.
    *
-   * No animations. Quality comes from the layered composition: a top
-   * spotlight, two corner glows, a dotted grid for depth, and a vignette.
-   * Reads like Vercel / Linear / Anthropic console: confident and still.
+   * Single soft radial spotlight from the top-center. No card, no grid, no
+   * corner glows, no animation. Just one light source on a deep dark base,
+   * the way Linear / Cursor / Raycast handle their auth pages.
    */
 
   .auth-bg {
     position: relative;
     overflow: hidden;
     background-color: hsl(var(--background));
-    background-image:
-      /* dotted grid for depth */
-      radial-gradient(hsl(var(--foreground) / 0.06) 1px, transparent 1px);
-    background-size: 28px 28px;
   }
 
-  /* Top spotlight — the dominant gradient */
   .auth-bg::before {
     content: "";
     position: absolute;
-    inset: -25% -10% auto -10%;
-    height: 80%;
-    background:
-      radial-gradient(
-        ellipse 70% 95% at 50% 0%,
-        hsl(var(--foreground) / 0.28) 0%,
-        hsl(var(--foreground) / 0.1) 30%,
-        transparent 65%
-      );
-    pointer-events: none;
-    z-index: 0;
-  }
-
-  /* Corner glows + bottom vignette */
-  .auth-bg::after {
-    content: "";
-    position: absolute;
     inset: 0;
-    background:
-      radial-gradient(circle at 0% 35%, hsl(var(--foreground) / 0.14) 0%, transparent 35%),
-      radial-gradient(circle at 100% 65%, hsl(var(--foreground) / 0.14) 0%, transparent 35%),
-      linear-gradient(to top, hsl(var(--background)) 0%, transparent 30%);
+    background: radial-gradient(
+      ellipse 65% 55% at 50% 0%,
+      hsl(var(--foreground) / 0.18) 0%,
+      hsl(var(--foreground) / 0.06) 30%,
+      transparent 65%
+    );
     pointer-events: none;
     z-index: 0;
   }
@@ -179,10 +159,5 @@
   .auth-bg > * {
     position: relative;
     z-index: 1;
-  }
-
-  /* Static brand mark — soft glow only, no decorative ring */
-  .auth-mark {
-    box-shadow: 0 0 32px 4px hsl(var(--foreground) / 0.18);
   }
 }
