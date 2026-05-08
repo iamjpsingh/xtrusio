@@ -181,10 +181,8 @@
     z-index: 1;
   }
 
-  /* Static brand mark — subtle ring + soft glow, no motion */
+  /* Static brand mark — soft glow only, no decorative ring */
   .auth-mark {
-    box-shadow:
-      0 0 0 1px hsl(var(--foreground) / 0.3),
-      0 0 32px 4px hsl(var(--foreground) / 0.22);
+    box-shadow: 0 0 32px 4px hsl(var(--foreground) / 0.18);
   }
 }

@@ -47,7 +47,7 @@ function SignInRoute() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/50 bg-card/40 p-6 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-xl bg-card/30 p-6 shadow-2xl backdrop-blur-xl">
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
