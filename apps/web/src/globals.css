@@ -127,4 +127,53 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+
+  /*
+   * Auth-page mesh gradient. Uses ONLY our token colors at low opacity, so it
+   * works in light and dark. Three radial blobs slowly drift in opposing
+   * directions to give a calm "alive but quiet" feel — not a marketing-page
+   * spectacle.
+   */
+  @keyframes auth-bg-drift {
+    0%,
+    100% {
+      background-position:
+        0% 0%,
+        100% 100%,
+        50% 50%;
+    }
+    50% {
+      background-position:
+        100% 100%,
+        0% 0%,
+        80% 20%;
+    }
+  }
+
+  .auth-bg {
+    background-image:
+      radial-gradient(circle at 20% 20%, hsl(var(--foreground) / 0.05) 0, transparent 40%),
+      radial-gradient(circle at 80% 80%, hsl(var(--foreground) / 0.07) 0, transparent 45%),
+      radial-gradient(circle at 50% 50%, hsl(var(--foreground) / 0.03) 0, transparent 60%);
+    background-size:
+      200% 200%,
+      200% 200%,
+      200% 200%;
+    animation: auth-bg-drift 18s ease-in-out infinite;
+  }
+
+  /* Subtle pulse glow under the auth brand mark. */
+  @keyframes auth-mark-glow {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 hsl(var(--foreground) / 0.12);
+    }
+    50% {
+      box-shadow: 0 0 24px 4px hsl(var(--foreground) / 0.18);
+    }
+  }
+
+  .auth-mark {
+    animation: auth-mark-glow 4s ease-in-out infinite;
+  }
 }

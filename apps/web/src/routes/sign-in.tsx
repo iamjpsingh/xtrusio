@@ -31,10 +31,10 @@ function SignInRoute() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+    <div className="auth-bg relative flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-foreground text-background text-xl font-bold tracking-tight">
+          <div className="auth-mark flex h-12 w-12 items-center justify-center rounded-xl bg-foreground text-xl font-bold tracking-tight text-background">
             X
           </div>
           <div className="text-center">
@@ -76,6 +76,7 @@ function SignInRoute() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="current-password"
+                placeholder="Enter your password"
                 disabled={loading}
                 className="h-10"
               />
