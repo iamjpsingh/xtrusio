@@ -48,7 +48,7 @@
 - `apps/web/src/main.tsx`
 - `apps/web/src/App.tsx`
 - `apps/web/src/App.test.tsx` — smoke test
-- `apps/web/eslint.config.js`
+- `apps/web/eslint.config.ts`
 - `apps/web/.prettierrc.json`
 - `apps/web/vitest.config.ts`
 
@@ -607,7 +607,7 @@ git commit -m "feat(api): add /health endpoint"
 - Create: `apps/web/tsconfig.json`
 - Create: `apps/web/vite.config.ts`
 - Create: `apps/web/vitest.config.ts`
-- Create: `apps/web/eslint.config.js`
+- Create: `apps/web/eslint.config.ts`
 - Create: `apps/web/index.html`
 - Create: `apps/web/src/App.test.tsx` (failing test, written first)
 
@@ -642,9 +642,11 @@ git commit -m "feat(api): add /health endpoint"
     "jsdom": "^25.0.0",
     "eslint": "^9.10.0",
     "@eslint/js": "^9.10.0",
+    "@types/eslint__js": "^9.0.0",
     "typescript-eslint": "^8.5.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.0",
+    "jiti": "^2.4.0",
     "typescript": "^5.5.0"
   }
 }
@@ -712,9 +714,11 @@ export default mergeConfig(
 );
 ```
 
-- [ ] **Step 5: Create `apps/web/eslint.config.js`**
+- [ ] **Step 5: Create `apps/web/eslint.config.ts`**
 
-```js
+> Per project rule: frontend uses TypeScript exclusively, including config files. ESLint 9 loads `eslint.config.ts` natively when `jiti` is installed as a devDependency.
+
+```ts
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
@@ -734,10 +738,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
@@ -803,7 +804,7 @@ Expected: **FAIL** — `Cannot find module './App'` or similar. Test is correctl
 - [ ] **Step 11: Commit failing test scaffold**
 
 ```bash
-git add apps/web/package.json apps/web/tsconfig.json apps/web/vite.config.ts apps/web/vitest.config.ts apps/web/eslint.config.js apps/web/index.html apps/web/src/App.test.tsx apps/web/src/test-setup.ts pnpm-lock.yaml
+git add apps/web/package.json apps/web/tsconfig.json apps/web/vite.config.ts apps/web/vitest.config.ts apps/web/eslint.config.ts apps/web/index.html apps/web/src/App.test.tsx apps/web/src/test-setup.ts pnpm-lock.yaml
 git commit -m "test(web): scaffold Vite + Vitest with failing App test"
 ```
 
