@@ -21,8 +21,7 @@
 - `package.json` — pnpm workspace root
 - `pnpm-workspace.yaml`
 - `turbo.json` — Turbo pipeline definition
-- `pyproject.toml` — uv workspace root + tool configs (ruff, mypy, pytest)
-- `uv.toml` — uv workspace declaration
+- `pyproject.toml` — uv workspace root (members + shared Python tool configs: ruff, mypy, pytest)
 - `docker-compose.yml` — Postgres + pgvector + Valkey on `xtrusio-net`
 - `Makefile` — primary developer entrypoint
 - `.env.example` — documented environment variables
@@ -374,12 +373,26 @@ git commit -m "chore: configure root Prettier"
 ## Task 5: Set up uv workspace + root pyproject.toml
 
 **Files:**
-- Create: `pyproject.toml` (root, for shared Python tool config)
-- Create: `uv.toml`
+- Create: `pyproject.toml` (root: workspace declaration + shared Python tool config)
+
+> **Note:** uv 0.11+ requires the workspace declaration in `pyproject.toml` (not in `uv.toml`). Earlier guidance in this plan that mentioned `uv.toml` for workspace setup is outdated — do not create one.
 
 - [ ] **Step 1: Create root `pyproject.toml`**
 
 ```toml
+[tool.uv]
+required-version = ">=0.11.0"
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+# requires-python at workspace root silences uv's default warning.
+# Each member's own pyproject.toml may pin a tighter range.
+[project]
+name = "xtrusio-workspace"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
@@ -425,27 +438,18 @@ markers = [
 ]
 ```
 
-- [ ] **Step 2: Create `uv.toml`**
-
-```toml
-[workspace]
-members = ["apps/api"]
-```
-
-- [ ] **Step 3: Verify uv recognizes the workspace**
+- [ ] **Step 2: Verify uv recognizes the workspace**
 
 ```bash
 uv sync
-# Expected: "warning: No `[project]` table found" is OK at root since it's a workspace root.
-# uv creates .venv/ and finishes without errors. Workspace member apps/api doesn't exist yet — that's fine.
 ```
 
-If uv complains about the missing member, that's expected — Task 6 creates it. Skip the verify step until Task 6 if uv refuses to proceed.
+Expected: creates `.venv/` and finishes with `Resolved N packages` / `Checked in ...`. No errors. The workspace member `apps/api` doesn't exist yet — uv tolerates this until Task 6.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add pyproject.toml uv.toml
+git add pyproject.toml uv.lock
 git commit -m "chore: set up uv workspace + Python tool configs"
 ```
 
