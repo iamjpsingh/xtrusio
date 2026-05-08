@@ -7,7 +7,7 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy import DateTime, Text, Uuid, func
 from sqlalchemy.dialects.postgresql import CITEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,9 +28,10 @@ class Tenant(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        ForeignKey("auth.users.id", ondelete="RESTRICT"), nullable=False
-    )
+    # FK to auth.users(id) is enforced at DB level (see migration 0001).
+    # We don't declare ForeignKey here because Supabase's auth.users isn't an
+    # ORM-mapped table in this project.
+    created_by: Mapped[UUID] = mapped_column(Uuid, nullable=False)
 
 
 class TenantIn(BaseModel):

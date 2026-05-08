@@ -7,7 +7,6 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient
-
 from xtrusio_api.models.platform_user import PlatformUser
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

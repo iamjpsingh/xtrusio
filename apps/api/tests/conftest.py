@@ -12,7 +12,6 @@ from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from xtrusio_api.core.config import get_settings
 from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.main import app
@@ -61,9 +60,7 @@ async def super_admin_user() -> AsyncIterator[PlatformUser]:
             ),
             {"id": str(user_id), "email": email},
         )
-        pu = PlatformUser(
-            id=user_id, email=email, role=PlatformRole.SUPER_ADMIN, is_active=True
-        )
+        pu = PlatformUser(id=user_id, email=email, role=PlatformRole.SUPER_ADMIN, is_active=True)
         s.add(pu)
         await s.commit()
         await s.refresh(pu)
