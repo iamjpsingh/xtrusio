@@ -31,7 +31,7 @@ function SignInRoute() {
   };
 
   return (
-    <div className="auth-bg relative flex min-h-screen items-center justify-center bg-background p-6">
+    <div className="dark auth-bg flex min-h-screen items-center justify-center bg-background p-6">
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-4">
           <div className="auth-mark flex h-12 w-12 items-center justify-center rounded-xl bg-foreground text-xl font-bold tracking-tight text-background">
@@ -47,7 +47,7 @@ function SignInRoute() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="rounded-xl border border-border/50 bg-card/40 p-6 shadow-2xl backdrop-blur-xl">
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
