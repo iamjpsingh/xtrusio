@@ -24,13 +24,10 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
-  // @ts-expect-error: not in jsdom; Radix uses it on focus.
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView ?? (() => {});
-  // @ts-expect-error: not in jsdom; Radix Select uses it.
   window.HTMLElement.prototype.hasPointerCapture =
     window.HTMLElement.prototype.hasPointerCapture ?? (() => false);
-  // @ts-expect-error: not in jsdom; Radix Select uses it.
   window.HTMLElement.prototype.releasePointerCapture =
     window.HTMLElement.prototype.releasePointerCapture ?? (() => {});
 }
