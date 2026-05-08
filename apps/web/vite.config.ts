@@ -18,6 +18,8 @@ export default defineConfig({
       "@": path.resolve(__dirname, "src"),
     },
   },
+  // Read .env from the repo root, not apps/web/.
+  envDir: path.resolve(__dirname, "../.."),
   server: {
     port: 5173,
   },
