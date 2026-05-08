@@ -1,0 +1,9 @@
+[tools]
+node = "22"
+python = "3.12"
+pnpm = "10"
+
+[env]
+# Default process role for shells that don't override.
+# `make api` and `make worker` set this explicitly.
+XTRUSIO_PROCESS_ROLE = "api"
