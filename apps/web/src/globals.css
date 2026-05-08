@@ -141,12 +141,15 @@
    * in-app surfaces, which stay strict B/W per spec #4.
    */
 
+  /*
+   * Three-colour family only — premium aurora is restrained, not rainbow.
+   * Aceternity / shadcn.io aurora references use 3 closely-related blues
+   * with one accent. We follow the same palette discipline.
+   */
   .aurora-bg {
-    --aurora-1: 244 80% 62%; /* indigo */
-    --aurora-2: 258 90% 66%; /* violet */
-    --aurora-3: 199 90% 55%; /* sky */
-    --aurora-4: 180 85% 55%; /* cyan-teal */
-    --aurora-5: 292 84% 61%; /* fuchsia */
+    --aurora-1: 220 85% 60%; /* blue */
+    --aurora-2: 244 80% 65%; /* indigo */
+    --aurora-3: 175 75% 55%; /* teal accent */
     position: relative;
     overflow: hidden;
     background-color: hsl(var(--background));
@@ -162,8 +165,8 @@
     position: absolute;
     inset: -10px;
     pointer-events: none;
-    opacity: 0.55;
-    filter: blur(12px) saturate(1.1);
+    opacity: 0.4;
+    filter: blur(14px) saturate(1.05);
     background-image:
       repeating-linear-gradient(
         100deg,
@@ -175,11 +178,10 @@
       ),
       repeating-linear-gradient(
         100deg,
-        hsl(var(--aurora-3)) 10%,
-        hsl(var(--aurora-1)) 15%,
-        hsl(var(--aurora-4)) 20%,
-        hsl(var(--aurora-2)) 25%,
-        hsl(var(--aurora-5)) 30%
+        hsl(var(--aurora-1)) 10%,
+        hsl(var(--aurora-2)) 18%,
+        hsl(var(--aurora-1)) 26%,
+        hsl(var(--aurora-3)) 34%
       );
     background-size:
       300% 200%,
@@ -188,15 +190,18 @@
       50% 50%,
       50% 50%;
     background-blend-mode: difference;
+    /* Full-bleed: very gentle centre-emphasis, corners barely darker */
     mask-image: radial-gradient(
-      ellipse 85% 70% at 50% 0%,
-      black 10%,
-      transparent 70%
+      ellipse 100% 100% at 50% 50%,
+      black 35%,
+      hsl(0 0% 0% / 0.7) 80%,
+      hsl(0 0% 0% / 0.4) 100%
     );
     -webkit-mask-image: radial-gradient(
-      ellipse 85% 70% at 50% 0%,
-      black 10%,
-      transparent 70%
+      ellipse 100% 100% at 50% 50%,
+      black 35%,
+      hsl(0 0% 0% / 0.7) 80%,
+      hsl(0 0% 0% / 0.4) 100%
     );
     animation: aurora-flow 60s linear infinite;
   }
@@ -214,18 +219,17 @@
     }
   }
 
-  /* Vignette layered over the aurora so the card stays readable */
+  /* Soft central readability vignette. Just darkens corners a touch so the
+     card has clean negative space behind it; aurora still shows everywhere. */
   .aurora-vignette {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background:
-      radial-gradient(
-        ellipse 60% 55% at 50% 50%,
-        transparent 0%,
-        hsl(var(--background) / 0.45) 70%,
-        hsl(var(--background) / 0.75) 100%
-      ),
-      linear-gradient(to top, hsl(var(--background)) 0%, transparent 35%);
+    background: radial-gradient(
+      ellipse 70% 60% at 50% 50%,
+      transparent 0%,
+      hsl(var(--background) / 0.25) 80%,
+      hsl(var(--background) / 0.55) 100%
+    );
   }
 }
