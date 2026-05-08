@@ -23,9 +23,7 @@ function RootLayout() {
         <AuthProvider>
           <AuthGuard>
             {isAuthRoute ? (
-              <main className="min-h-screen bg-background p-6">
-                <Outlet />
-              </main>
+              <Outlet />
             ) : (
               <SidebarProvider>
                 <AppSidebar />
