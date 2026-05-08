@@ -109,6 +109,19 @@ See [`docs/superpowers/ENGINEERING_PRINCIPLES.md`](docs/superpowers/ENGINEERING_
 - **500 LoC ceiling per file**, 200-300 target.
 - **Pre-commit hook** (added in Task 17A of Plan 1A) enforces these locally.
 
+## Why apps run on the host (not in Docker) for dev
+
+Stateful services (Postgres, Valkey, Inbucket, etc.) run in Docker. **Application code (FastAPI, Vite/React, future workers) runs natively on the host** via `uv` and `pnpm`. The `Makefile` ties them together.
+
+This is a deliberate choice:
+
+- **Hot reload** is much faster on the host than across volume mounts.
+- **IDE + types + debugger** work naturally on the host. In Docker, the IDE can't see container internals cleanly.
+- **Test loops** are sub-second on the host.
+- Production deploy doesn't ship our `docker-compose.yml` either — Supabase Cloud + a serverless API runtime + a CDN-served `dist/` is the prod target. Dockerfiles for deployment will be added when we ship, separately from `make dev`.
+
+If you've used a "full docker-compose" stack elsewhere and miss the "one command" simplicity: `make dev` is that one command, just with better DX.
+
 ## CI/CD
 
 Not in scope yet. Project policy: CI/CD is added once the local development environment runs cleanly end-to-end. Until then, `make check` and the pre-commit hook are the contract.
