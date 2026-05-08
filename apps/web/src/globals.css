@@ -129,11 +129,12 @@
   }
 
   /*
-   * Auth page treatment — Linear-style atmospheric.
+   * Auth page treatment — atmospheric "deep field" lighting.
    *
-   * Single soft radial spotlight from the top-center. No card, no grid, no
-   * corner glows, no animation. Just one light source on a deep dark base,
-   * the way Linear / Cursor / Raycast handle their auth pages.
+   * Multi-source soft ambient: dominant top-center spotlight, two subtle
+   * upper-corner glows, and a faint mid-bottom lift. No animation, no card,
+   * no grid. The depth comes from layered soft gradients at different
+   * positions, the way premium dark auth pages (the reference) handle it.
    */
 
   .auth-bg {
@@ -146,12 +147,34 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-      ellipse 65% 55% at 50% 0%,
-      hsl(var(--foreground) / 0.18) 0%,
-      hsl(var(--foreground) / 0.06) 30%,
-      transparent 65%
-    );
+    background:
+      /* dominant top-center spotlight */
+      radial-gradient(
+        ellipse 60% 50% at 50% -5%,
+        hsl(var(--foreground) / 0.22) 0%,
+        hsl(var(--foreground) / 0.08) 35%,
+        transparent 70%
+      ),
+      /* subtle upper-left glow */
+      radial-gradient(
+        ellipse 45% 40% at 15% 10%,
+        hsl(var(--foreground) / 0.1) 0%,
+        transparent 55%
+      ),
+      /* subtle upper-right glow */
+      radial-gradient(
+        ellipse 45% 40% at 85% 15%,
+        hsl(var(--foreground) / 0.1) 0%,
+        transparent 55%
+      ),
+      /* faint mid lift */
+      radial-gradient(
+        ellipse 70% 35% at 50% 60%,
+        hsl(var(--foreground) / 0.04) 0%,
+        transparent 60%
+      ),
+      /* bottom vignette to ground the page */
+      linear-gradient(to top, hsl(var(--background)) 0%, transparent 30%);
     pointer-events: none;
     z-index: 0;
   }
