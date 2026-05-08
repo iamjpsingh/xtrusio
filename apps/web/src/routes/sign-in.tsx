@@ -45,7 +45,7 @@ function SignInRoute() {
         </motion.div>
 
         <motion.div
-          className="w-full rounded-2xl border border-foreground/10 bg-card p-8 shadow-2xl"
+          className="w-full rounded-2xl border border-foreground/10 bg-card p-8"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
