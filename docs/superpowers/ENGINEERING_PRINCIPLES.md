@@ -36,7 +36,8 @@ A grep gate in CI (when CI lands) and as a local pre-commit hook fails the build
 
 ### 2.1 Compiler strictness
 
-- **Strict mode on, no exceptions.** `tsconfig.json` enables `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`.
+- **Strict mode on.** `tsconfig.json` enables `strict: true`, `noUncheckedIndexedAccess: true`.
+- **`exactOptionalPropertyTypes` is OFF** (deviation from "fully strict"). Reason: shadcn-ui's prop-spread patterns are fundamentally incompatible with this flag, and we treat shadcn as a vendored library we own but don't fork. Re-enabling means patching every shadcn component on every CLI re-add — not worth the marginal type-safety win. We compensate with `noUncheckedIndexedAccess` + `noImplicitAny` + lint rules forbidding `any`.
 - **No `any`.** Ever. If you genuinely need an escape hatch, use `unknown` and narrow it. PRs with `any` are rejected unless an inline comment explains why no type works.
 - **No `// @ts-ignore` / `// @ts-expect-error`** without a reason on the same line: `// @ts-expect-error: Supabase types lag SDK v3.x release, see issue #N`.
 
