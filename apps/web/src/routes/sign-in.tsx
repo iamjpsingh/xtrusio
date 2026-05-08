@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AuroraBackground } from "@/components/aurora-background";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/sign-in")({
@@ -33,9 +32,7 @@ function SignInRoute() {
   };
 
   return (
-    <div className="dark aurora-bg flex min-h-screen flex-col items-center justify-between bg-background px-6 py-12">
-      <AuroraBackground />
-
+    <div className="dark flex min-h-screen flex-col items-center justify-between bg-background px-6 py-12">
       <div className="flex w-full max-w-[400px] flex-1 flex-col items-center justify-center">
         <motion.div
           className="mb-10 space-y-2 text-center"
@@ -48,7 +45,7 @@ function SignInRoute() {
         </motion.div>
 
         <motion.div
-          className="w-full rounded-2xl border border-foreground/10 bg-background/40 p-8 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] backdrop-blur-2xl"
+          className="w-full rounded-2xl border border-foreground/10 bg-card p-8 shadow-2xl"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
