@@ -129,101 +129,62 @@
   }
 
   /*
-   * Auth page treatment — Vercel/Linear-grade dark gradient.
+   * Auth page treatment — static dark gradient, premium-grade.
    *
-   * Composition:
-   *   1. Deep black base layer (--background in dark)
-   *   2. Top spotlight (the thing that gives real premium pages their depth)
-   *   3. Side glows that drift in/out
-   *   4. A subtle dotted grid under everything for texture
-   *   5. A soft vignette at the bottom for grounding
+   * No animations. Quality comes from the layered composition: a top
+   * spotlight, two corner glows, a dotted grid for depth, and a vignette.
+   * Reads like Vercel / Linear / Anthropic console: confident and still.
    */
-
-  @keyframes auth-spotlight-pulse {
-    0%,
-    100% {
-      opacity: 0.85;
-      transform: translate3d(0, 0, 0) scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: translate3d(0, 6%, 0) scale(1.05);
-    }
-  }
-
-  @keyframes auth-side-drift {
-    0%,
-    100% {
-      transform: translate3d(-8%, -4%, 0);
-    }
-    50% {
-      transform: translate3d(8%, 4%, 0);
-    }
-  }
 
   .auth-bg {
     position: relative;
     overflow: hidden;
     background-color: hsl(var(--background));
-    /* Dotted grid under everything — Linear/Vercel signature */
     background-image:
-      radial-gradient(hsl(var(--foreground) / 0.07) 1px, transparent 1px);
+      /* dotted grid for depth */
+      radial-gradient(hsl(var(--foreground) / 0.06) 1px, transparent 1px);
     background-size: 28px 28px;
-    background-position: 0 0;
   }
 
-  /* Top spotlight — the dominant gradient. Strong, not whispered. */
+  /* Top spotlight — the dominant gradient */
   .auth-bg::before {
     content: "";
     position: absolute;
-    inset: -20% -10% auto -10%;
-    height: 75%;
-    background: radial-gradient(
-      ellipse 70% 90% at 50% 0%,
-      hsl(var(--foreground) / 0.32) 0%,
-      hsl(var(--foreground) / 0.12) 28%,
-      transparent 65%
-    );
-    animation: auth-spotlight-pulse 9s ease-in-out infinite;
+    inset: -25% -10% auto -10%;
+    height: 80%;
+    background:
+      radial-gradient(
+        ellipse 70% 95% at 50% 0%,
+        hsl(var(--foreground) / 0.28) 0%,
+        hsl(var(--foreground) / 0.1) 30%,
+        transparent 65%
+      );
     pointer-events: none;
     z-index: 0;
   }
 
-  /* Drifting side glows that breathe slowly */
+  /* Corner glows + bottom vignette */
   .auth-bg::after {
     content: "";
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at 0% 30%, hsl(var(--foreground) / 0.18) 0%, transparent 35%),
-      radial-gradient(circle at 100% 70%, hsl(var(--foreground) / 0.18) 0%, transparent 35%),
-      /* bottom vignette to ground the page */
-      linear-gradient(to top, hsl(var(--background)) 0%, transparent 25%);
-    animation: auth-side-drift 14s ease-in-out infinite;
+      radial-gradient(circle at 0% 35%, hsl(var(--foreground) / 0.14) 0%, transparent 35%),
+      radial-gradient(circle at 100% 65%, hsl(var(--foreground) / 0.14) 0%, transparent 35%),
+      linear-gradient(to top, hsl(var(--background)) 0%, transparent 30%);
     pointer-events: none;
     z-index: 0;
   }
 
-  /* Children of .auth-bg sit above the gradient layers */
   .auth-bg > * {
     position: relative;
     z-index: 1;
   }
 
-  /* Pulsing brand mark — slightly brighter glow now that the bg is darker */
-  @keyframes auth-mark-glow {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 hsl(var(--foreground) / 0.18);
-    }
-    50% {
-      box-shadow:
-        0 0 32px 6px hsl(var(--foreground) / 0.32),
-        0 0 0 1px hsl(var(--foreground) / 0.4);
-    }
-  }
-
+  /* Static brand mark — subtle ring + soft glow, no motion */
   .auth-mark {
-    animation: auth-mark-glow 4s ease-in-out infinite;
+    box-shadow:
+      0 0 0 1px hsl(var(--foreground) / 0.3),
+      0 0 32px 4px hsl(var(--foreground) / 0.22);
   }
 }
