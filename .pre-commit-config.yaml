@@ -51,3 +51,10 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: no-hardcoded-colors
+        name: Block hardcoded colors in frontend paths (ENGINEERING_PRINCIPLES §2.0 + spec #4 §9)
+        entry: scripts/check-colors.sh
+        language: system
+        pass_filenames: false
+        always_run: true
