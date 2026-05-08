@@ -1,8 +1,8 @@
 """Smoke test for the /health endpoint."""
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-
 from xtrusio_api.main import app
 
 
