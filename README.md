@@ -4,7 +4,7 @@ Multi-tenant AI SaaS platform.
 
 ## Prerequisites
 
-- **Docker Desktop** (or compatible runtime) — running.
+- **Docker Desktop** (or compatible runtime) — running. Used for the local Valkey container.
 - **Node 22** — manage with `mise` (preferred), `fnm`, `nvm`, or `volta`. Project uses the version in `.nvmrc` / `mise.toml`.
 - **pnpm 10** — `corepack enable && corepack prepare pnpm@10 --activate`, or installed via `mise`.
 - **Python 3.12** — `uv` will manage the interpreter; install `uv` itself:
@@ -13,13 +13,8 @@ Multi-tenant AI SaaS platform.
   curl -LsSf https://astral.sh/uv/install.sh | sh
   ```
 
-- **Supabase CLI** — manages the local Postgres + GoTrue + Realtime stack:
-
-  ```bash
-  brew install supabase/tap/supabase-beta   # macOS
-  ```
-
 - **GNU Make** (preinstalled on macOS / Linux).
+- **Managed Supabase project** — create one at https://supabase.com. Postgres (with pgvector available), GoTrue, Realtime, and Storage are all provided by the project. We do **not** use the Supabase CLI for local dev.
 
 Optional but recommended: install [`mise`](https://mise.jdx.dev) (`brew install mise` on macOS), then `mise install` from the repo root pins Node, Python, and pnpm in one shot.
 
@@ -29,44 +24,48 @@ Optional but recommended: install [`mise`](https://mise.jdx.dev) (`brew install 
 git clone <repo>
 cd xtrusio
 make install
-make db-up    # start Supabase (CLI) + Valkey (docker)
-make env      # generate .env with live Supabase keys
+cp .env.example .env       # fill in values from your Supabase project
+make db-up                 # start local Valkey
+make migrate               # apply Alembic migrations to your Supabase Postgres
 ```
 
-After this, `make dev` from now on. If Supabase keys ever rotate (e.g., you wiped local Supabase volumes), regenerate:
+Edit `.env`:
 
-```bash
-make env-force
-```
+- `DATABASE_URL` — Supabase Dashboard → Project Settings → Database → **Direct connection** (port 5432, host `db.<PROJECT_REF>.supabase.co`). Prefix with `postgresql+asyncpg://` for SQLAlchemy.
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` — Dashboard → Project Settings → API.
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — same project URL + anon key (frontend bundle; never use service_role here).
 
 `.env` is gitignored — never commit it.
 
 ## Bootstrap the first super_admin
 
-Once the local stack is up and migrations are applied, create the first platform owner via CLI:
+Once migrations are applied, create the first platform owner via CLI:
 
 ```bash
-make migrate
 make create-platform-owner email=you@x.com password='SecurePass123!'
 ```
+
+This calls the Supabase Admin API (service_role) to create the auth user, then inserts the matching `platform_users` row with `role='super_admin'`.
 
 Then sign in at http://localhost:5173/sign-in with those credentials.
 
 ## Daily development
 
-| Command                       | What it does                                                |
-| ----------------------------- | ----------------------------------------------------------- |
-| `make dev`                    | Brings up Postgres + Valkey + API + Web in one terminal.    |
-| `make db-up` / `make db-down` | DBs only.                                                   |
+| Command                       | What it does                                            |
+| ----------------------------- | ------------------------------------------------------- |
+| `make dev`                    | Brings up local Valkey + API + Web in one terminal.     |
+| `make db-up` / `make db-down` | Local Valkey only.                                      |
 | `make api`                    | FastAPI dev server on `:8000` (`XTRUSIO_PROCESS_ROLE=api`). |
-| `make web`                    | Vite dev server on `:5173`.                                 |
-| `make worker`                 | Placeholder until later plans add Dramatiq / Prefect.       |
-| `make lint`                   | Ruff + ESLint check.                                        |
-| `make format`                 | Auto-format Python + TypeScript.                            |
-| `make typecheck`              | mypy + tsc.                                                 |
-| `make test`                   | pytest + Vitest.                                            |
-| `make check`                  | lint + typecheck + test (run before committing).            |
-| `make clean`                  | Wipe caches and venvs.                                      |
+| `make web`                    | Vite dev server on `:5173`.                             |
+| `make worker`                 | Placeholder until later plans add Dramatiq / Prefect.   |
+| `make migrate`                | Apply Alembic migrations to the `DATABASE_URL` project. |
+| `make migrate-down`           | Revert the most recent migration.                       |
+| `make lint`                   | Ruff + ESLint check.                                    |
+| `make format`                 | Auto-format Python + TypeScript.                        |
+| `make typecheck`              | mypy + tsc.                                             |
+| `make test`                   | pytest + Vitest.                                        |
+| `make check`                  | lint + typecheck + test (run before committing).        |
+| `make clean`                  | Wipe caches and venvs.                                  |
 
 ## Layout
 
@@ -77,8 +76,6 @@ apps/
 packages/
   ui/        Shared UI components (placeholder until later plans)
   api-types/ Generated OpenAPI types (placeholder until later plans)
-infra/
-  postgres/  Postgres init scripts (extensions)
 docs/
   superpowers/specs/   Design specs
   superpowers/plans/   Implementation plans
@@ -86,42 +83,36 @@ docs/
 
 ## Local services
 
-The local stack is split between two managers:
+Only Valkey runs locally; everything else lives in your managed Supabase project.
 
-**Supabase CLI** (`supabase start` — wrapped by `make db-up`):
+**`docker-compose.yml`:**
 
-| Service                       | URL / port                        |
-| ----------------------------- | --------------------------------- |
-| Supabase API gateway (Kong)   | `http://localhost:54321`          |
-| GoTrue (auth)                 | `http://localhost:54321/auth/v1`  |
-| PostgREST                     | `http://localhost:54321/rest/v1`  |
-| Realtime                      | `http://localhost:54321/realtime` |
-| **Postgres 17 + pgvector**    | `localhost:54322`                 |
-| Studio (web UI for Postgres)  | `http://localhost:54323`          |
-| Inbucket (local email viewer) | `http://localhost:54324`          |
+| Service  | Container name   | Host (OrbStack DNS)              | In-network address |
+| -------- | ---------------- | -------------------------------- | ------------------ |
+| Valkey 8 | `xtrusio-valkey` | `xtrusio-valkey.orb.local:6379`  | `valkey:6379`      |
 
-Run `make supabase-status` to print URLs + freshly-generated anon/service-role keys (copy the keys into your `.env`, never commit them).
+No host ports are published — OrbStack's auto-DNS (`<container>.orb.local`) is how the host reaches Valkey. This guarantees zero conflict with other local Docker stacks. Containers we add later that need to talk to Valkey will join `xtrusio-net` and resolve `valkey:6379` by name.
 
-**Our `docker-compose.yml`** (Valkey only — Supabase doesn't ship Valkey):
+(If you're on Docker Desktop instead of OrbStack, add a `ports:` mapping in `docker-compose.yml` and set `VALKEY_URL=redis://localhost:63792/0`.)
 
-| Service  | Container name   | Host port         | In-network address |
-| -------- | ---------------- | ----------------- | ------------------ |
-| Valkey 8 | `xtrusio-valkey` | `localhost:63792` | `valkey:6379`      |
+**Managed Supabase (set in `.env`):**
 
-Valkey runs on the `xtrusio-net` Docker network. Containers we add later that need to talk to Valkey will join `xtrusio-net` and resolve `valkey:6379` by name.
-
-> **Why split?** Supabase CLI manages its own private Docker network. Putting our Valkey on `xtrusio-net` keeps our future containerized services (workers, etc.) on a network we control, while Supabase services stay on the Supabase-managed network. Cross-network communication via host ports.
+| Service             | URL                                                |
+| ------------------- | -------------------------------------------------- |
+| Supabase API        | `https://<PROJECT_REF>.supabase.co`                |
+| Postgres (direct)   | `db.<PROJECT_REF>.supabase.co:5432`                |
+| Auth (GoTrue)       | `https://<PROJECT_REF>.supabase.co/auth/v1`        |
+| Realtime            | `https://<PROJECT_REF>.supabase.co/realtime/v1`    |
+| Studio (dashboard)  | `https://supabase.com/dashboard/project/<PROJECT_REF>` |
 
 ## URLs
 
 - **Web (Vite):** http://localhost:5173
   - `/` Dashboard
-  - `/users`, `/clients`, `/settings`, `/sign-in` (placeholder routes with empty states)
+  - `/users`, `/clients`, `/settings`, `/sign-in`
 - **API:** http://localhost:8000
   - Health: `/health`
   - OpenAPI: `/docs`
-- **Supabase Studio:** http://localhost:54323
-- **Inbucket (mail):** http://localhost:54324
 
 ## Engineering rules
 
@@ -138,7 +129,7 @@ See [`docs/superpowers/ENGINEERING_PRINCIPLES.md`](docs/superpowers/ENGINEERING_
 
 ## Why apps run on the host (not in Docker) for dev
 
-Stateful services (Postgres, Valkey, Inbucket, etc.) run in Docker. **Application code (FastAPI, Vite/React, future workers) runs natively on the host** via `uv` and `pnpm`. The `Makefile` ties them together.
+Valkey runs in Docker. **Application code (FastAPI, Vite/React, future workers) runs natively on the host** via `uv` and `pnpm`. The `Makefile` ties them together.
 
 This is a deliberate choice:
 
@@ -148,17 +139,15 @@ This is a deliberate choice:
 
 Production is a separate concern — see below.
 
-If you've used a "full docker-compose" stack elsewhere and miss the "one command" simplicity: `make dev` is that one command, just with better DX.
-
 ## Production target
 
-- **Database + Auth + Realtime:** **self-hosted Supabase** (the full stack on owned infrastructure — NOT supabase.com cloud). The Supabase CLI we use locally pulls the same Docker images as the official self-hosted reference, so dev→prod parity is real and migrations apply byte-identically.
+- **Database + Auth + Realtime:** managed **Supabase** project (same one you use for dev, or a separate prod project). Migrations apply via `make migrate` against the prod `DATABASE_URL`.
 - **Web frontend:** **Cloudflare Pages.** `pnpm build` produces the static `dist/` that ships to the CDN.
 - **API:** **VPS-hosted FastAPI** (long-running uvicorn/gunicorn behind Caddy or nginx for TLS). Not Cloudflare Workers, not Fly machines — full VPS so we can run heavy Python libraries (sentence-transformers, Polars, etc.) and long-running background workers without edge-runtime constraints. Will land as `apps/api/Dockerfile` when we ship.
 - **Workers (Dramatiq + Prefect, future):** same VPS as the API (or a sibling VPS if scale demands), as separate processes (systemd units or sibling containers).
 - **Cache:** self-hosted Valkey on the API VPS.
 
-A future deploy plan covers production `docker-compose.yml` for Supabase, the API Dockerfile, VPS provisioning, the Pages build pipeline, migration deploy automation, backups, secrets management, and TLS. None of this is part of Plan 1A.
+A future deploy plan covers the API Dockerfile, VPS provisioning, the Pages build pipeline, migration deploy automation, backups, secrets management, and TLS.
 
 ## CI/CD
 

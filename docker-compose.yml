@@ -1,9 +1,13 @@
 name: xtrusio
 
-# Note: Postgres + GoTrue + Realtime + PostgREST + Studio are managed by the
-# Supabase CLI (`supabase start`), which spawns its own Docker containers on
-# its own internal network. This file owns ONLY services that Supabase CLI
-# does not provide — currently just Valkey for caches/queues.
+# Postgres + Auth + Realtime are provided by managed Supabase (project URL in
+# .env). This file owns only the local infra that isn't part of Supabase —
+# currently just Valkey for caches/queues.
+#
+# Networking: no host ports are published. Reach services from the host via
+# OrbStack DNS — `xtrusio-valkey.orb.local:6379` resolves to the container's
+# internal port. This guarantees zero conflict with other local Docker stacks.
+# (Docker Desktop users without DNS would need to add a `ports:` mapping.)
 
 networks:
   xtrusio-net:
@@ -17,9 +21,6 @@ services:
     restart: unless-stopped
     networks:
       - xtrusio-net
-    ports:
-      # Host:Container — non-default host port to avoid colliding with other Redis/Valkey
-      - "63792:6379"
     command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
     volumes:
       - xtrusio-valkey-data:/data
@@ -28,6 +29,9 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    labels:
+      com.xtrusio.stack: "true"
+      com.xtrusio.role: "cache"
 
 volumes:
   xtrusio-valkey-data:
