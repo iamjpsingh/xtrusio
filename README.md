@@ -32,7 +32,7 @@ make migrate               # apply Alembic migrations to your Supabase Postgres
 Edit `.env`:
 
 - `DATABASE_URL` — Supabase Dashboard → Project Settings → Database → **Direct connection** (port 5432, host `db.<PROJECT_REF>.supabase.co`). Prefix with `postgresql+asyncpg://` for SQLAlchemy.
-- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET` — Dashboard → Project Settings → API.
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWKS_URL` — Dashboard → Project Settings → API (JWKS URL under JWT Settings).
 - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — same project URL + anon key (frontend bundle; never use service_role here).
 
 `.env` is gitignored — never commit it.
