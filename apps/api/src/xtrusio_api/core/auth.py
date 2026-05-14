@@ -111,3 +111,43 @@ async def require_super_admin(
     if user.role != PlatformRole.SUPER_ADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "super_admin required")
     return user
+
+
+@dataclass
+class AuthIdentity:
+    user_id: UUID
+    email: str
+
+
+async def require_authenticated(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> AuthIdentity:
+    """JWT-validated identity. Does NOT require a platform_users row.
+
+    Used for endpoints that fresh signup users (no platform_users, no
+    tenant_memberships yet) need to call — currently /onboarding/tenants and
+    /me. The JWT goes through the same JWKS verification path; only the
+    post-decode platform_users lookup is skipped.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
+    token = authorization.split(" ", 1)[1]
+    payload = await _decode_jwt(token)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token missing sub")
+    try:
+        user_id = UUID(sub)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid sub") from e
+    from sqlalchemy import text  # local import to avoid top-level churn
+
+    row = (
+        await db.execute(
+            text("SELECT email FROM auth.users WHERE id = :id"), {"id": str(user_id)}
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not in auth.users")
+    return AuthIdentity(user_id=user_id, email=row[0])
