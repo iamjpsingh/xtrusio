@@ -21,6 +21,7 @@ _AUDIENCE = "authenticated"
 _JWKS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
 _JWKS_TTL_SEC = 300.0
 _JWKS_FETCH_TIMEOUT_SEC = 5.0
+_ALLOWED_ALGS: frozenset[str] = frozenset({"RS256", "RS384", "RS512", "ES256", "ES384"})
 
 
 @dataclass
@@ -64,12 +65,12 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if key is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no matching jwks key")
+    alg = key.get("alg", "RS256")
+    if alg not in _ALLOWED_ALGS:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
     try:
         payload: dict[str, Any] = jwt.decode(
-            token,
-            key,
-            algorithms=[key.get("alg", "RS256")],
-            audience=_AUDIENCE,
+            token, key, algorithms=[alg], audience=_AUDIENCE
         )
     except JWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e

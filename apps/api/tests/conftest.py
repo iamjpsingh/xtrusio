@@ -68,13 +68,16 @@ def _patch_jwks(
     jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Replace the live JWKS fetcher with one that returns our test JWKS."""
+    from xtrusio_api.core import auth as _auth_mod
+
+    _auth_mod._JWKS_CACHE.clear()
 
     jwks: dict[str, Any] = jwks_keypair["jwks"]
 
     async def _fake_fetch(url: str) -> dict[str, Any]:
         return jwks
 
-    monkeypatch.setattr("xtrusio_api.core.auth._fetch_jwks", _fake_fetch)
+    monkeypatch.setattr(_auth_mod, "_fetch_jwks", _fake_fetch)
 
 
 @pytest.fixture
