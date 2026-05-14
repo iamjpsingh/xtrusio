@@ -19,6 +19,16 @@ vi.mock("@/lib/supabase", () => ({
   },
 }));
 
+vi.mock("@/lib/api", () => ({
+  fetchMe: vi.fn().mockResolvedValue({
+    user_id: "u1",
+    email: "test@example.com",
+    platform: { role: "super_admin", is_active: true },
+    tenants: [],
+    pending_invite: null,
+  }),
+}));
+
 function renderAt(initial: string) {
   const router = createRouter({
     routeTree,
