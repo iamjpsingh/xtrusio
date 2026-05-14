@@ -49,4 +49,4 @@ async def test_super_admin_returns_200(
     assert res.status_code == 200
     body = res.json()
     assert body["email"] == super_admin_user.email
-    assert body["role"] == "super_admin"
+    assert body["platform"]["role"] == "super_admin"
