@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import type { MeResponse } from "./route-resolver";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -29,4 +30,45 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+export async function fetchMe(): Promise<MeResponse> {
+  return apiFetch<MeResponse>("/api/me");
+}
+
+export async function fetchSignupStatus(): Promise<{ signups_enabled: boolean }> {
+  return apiFetch("/api/platform/signup-status");
+}
+
+export async function postSignup(email: string, password: string): Promise<void> {
+  await apiFetch("/api/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function postOnboarding(workspace_name: string): Promise<{
+  tenant: { id: string; slug: string; name: string; role: string };
+}> {
+  return apiFetch("/api/onboarding/tenants", {
+    method: "POST",
+    body: JSON.stringify({ workspace_name }),
+  });
+}
+
+export async function fetchPlatformSettings(): Promise<{
+  signups_enabled: boolean;
+  updated_at: string;
+  updated_by_email: string | null;
+}> {
+  return apiFetch("/api/platform/settings");
+}
+
+export async function putPlatformSettings(signups_enabled: boolean): Promise<{
+  signups_enabled: boolean;
+}> {
+  return apiFetch("/api/platform/settings", {
+    method: "PUT",
+    body: JSON.stringify({ signups_enabled }),
+  });
 }
