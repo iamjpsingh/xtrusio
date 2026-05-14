@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -143,3 +144,16 @@ async def http_client() -> AsyncIterator[AsyncClient]:
     """ASGI in-process client (no real network)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as c:
         yield c
+
+
+@pytest.fixture
+def mock_supabase_admin(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
+    """Replace the supabase client factory so tests never hit the real API."""
+    mock_client = MagicMock()
+    mock_client.auth.admin = MagicMock()
+
+    def _factory(*_args: object, **_kwargs: object) -> MagicMock:
+        return mock_client
+
+    monkeypatch.setattr("xtrusio_api.services.signup.create_client", _factory)
+    yield mock_client
