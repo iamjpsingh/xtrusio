@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { fetchSignupStatus } from "@/lib/api";
 import { motion } from "motion/react";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +10,11 @@ import { useAuth } from "@/lib/auth";
 export function SignInPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const { data: signupStatus } = useQuery({
+    queryKey: ["signup-status"],
+    queryFn: fetchSignupStatus,
+  });
+  const signupsEnabled = signupStatus?.signups_enabled === true;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -121,6 +128,17 @@ export function SignInPage() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
+          {signupsEnabled && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              New organization?{" "}
+              <Link
+                to="/sign-up"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                Client sign up
+              </Link>
+            </p>
+          )}
         </motion.div>
       </div>
 
