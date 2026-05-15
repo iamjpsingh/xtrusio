@@ -2,9 +2,61 @@
 
 **Written:** 2026-05-15
 **Branch:** `plan-2-settings-signup-invites` (cut from `main`)
-**Status:** Plan 2A code-complete (un-smoke-tested). Plan 2B not started.
+**Status:** Plan 2A merged to `main`. Plan 2B in progress: Tasks 1–6 done, Task 7 next.
 
 This document lets a fresh session on any machine resume exactly where we stopped. Read it top to bottom before doing anything.
+
+---
+
+## ⏩ RESUME HERE — updated 2026-05-15 EOD
+
+**Branch `plan-2-settings-signup-invites`, working tree clean, 13 commits ahead of its (stale) remote — NOT pushed.** `main` already has Plan 2A + CORS fix + config externalization + the sign-in client-signup link (merged `76f175e`, pushed to `origin/main`).
+
+**Test baseline:** backend `72 passed` (`uv run --directory apps/api pytest tests/ -p no:warnings`), frontend `23 passed` (`pnpm --filter @xtrusio/web test`). ruff `All checks passed`; mypy `--strict src` = 1 pre-existing `jose` baseline error only. Alembic head = `0004`.
+
+**Plan 2B progress (executing via `superpowers:subagent-driven-development`, plan file `docs/superpowers/plans/2026-05-14-plan-2b-platform-and-tenant-invites.md`):**
+
+| Task | State | Commit |
+|---|---|---|
+| 2B-1 migration 0004 invite tables + RLS | ✅ done | `2a38068` |
+| 2B-2 SQLAlchemy invite models | ✅ done | `fb3bc37` |
+| 2B-3 `can_invite()` rules + TDD | ✅ done | `bbd4345` |
+| 2B-4 invite pydantic schemas | ✅ done | `b8f8f5e` |
+| 2B-5 platform invites service+route | ✅ done | `de17ad5` |
+| 2B-6 tenant invites service+route | ✅ done | `97d26f4` |
+| 2B-7 `/api/invites/accept` endpoint | ⏳ NEXT (not started) | — |
+| 2B-8 … 2B-14 | pending | — |
+| 2B-15 manual e2e smoke (invites) | pending — USER-DRIVEN | — |
+
+**Per-task review loop in force:** implementer subagent → spec-compliance reviewer → code-quality reviewer → fix subagent → accept. Continue this.
+
+### Plan-2B execution gotchas (the plan file is STALE — apply these every task)
+
+1. **Migration is `0004`** (done) — plan file says 0003; that slot was the RLS fix.
+2. **`mock_supabase_admin` conftest fixture must be extended per service module.** It currently patches `create_client` for `signup`, `platform_invites`, `tenant_invites`. **Task 7's `invite_acceptance` service does NOT call `create_client` (no email send on accept) so no extension needed there — but any future service that does must add its own `monkeypatch.setattr("xtrusio_api.services.<mod>.create_client", _factory)` line.**
+3. **Every route/integration test file:** `pytestmark = pytest.mark.asyncio(loop_scope="session")` (plan uses bare `pytest.mark.asyncio` — wrong, breaks shared asyncpg loop).
+4. **Service Supabase calls:** `except TimeoutError` AND `except Exception` both `await db.rollback()` then raise `EmailProviderUnavailableError`; timeout from `cfg.supabase_timeout_sec` (one `cfg = get_settings()` per fn, NO hardcoded `_SUPABASE_TIMEOUT`).
+5. **`InviteAlreadyAcceptedError` is its own class** (don't reuse `InvitePendingError` for the accepted-guard). Idempotent revoke: missing→204 no-op, already-revoked→204 no-op.
+6. **Response schemas hit by `Model.model_validate(<ORM obj>)` need `model_config = ConfigDict(from_attributes=True)`.** Already added to `PlatformInviteResponse` + `TenantInviteResponse` in `schemas/invite.py`. `AcceptInviteResult` is validated from a **dict**, so it does NOT need it.
+7. **Backend uses the owner DB connection — RLS does NOT constrain it.** Any list/revoke/read endpoint must enforce authz explicitly in the service (see `tenant_invites._require_owner_or_admin`), never "rely on RLS".
+8. **asyncpg rejects multi-statement `text()`** — split semicolon-joined SQL (esp. test cleanup) into separate `db.execute(text(...))` calls.
+9. **Posting `role:"owner"`/`"super_admin"` is NOT a 422** — those are valid enum members; `can_invite()`/DB-CHECK reject them → expect 403 `forbidden_role`.
+10. **DELETE routes:** `@router.delete(..., status_code=204, response_class=Response)` returning `Response(status_code=204)` (FastAPI 204+body assertion). Established convention.
+11. **Accepted lint/type baseline:** ruff clean; mypy = 1 `jose` stub error in `core/auth.py`. Zero NEW. Keep any `# type: ignore` scoped to the exact code (e.g. `[call-arg]` on supabase `data=` kwarg).
+
+### Task 7 specifics (was interrupted mid-prep — DO THIS FIRST when resuming)
+Before dispatching 2B-7, verify these (the dispatch was interrupted at exactly this check):
+- `apps/api/tests/conftest.py` `make_jwt` `_factory`: **HANDOFF gotcha #7 says it already accepts `user_metadata`** — confirm its current signature/payload; if it already injects `user_metadata`, the plan's Step 1 conftest edit is a no-op/duplicate — don't double-add.
+- `apps/api/src/xtrusio_api/core/auth.py` `AuthIdentity` + `require_authenticated`: plan adds a `user_metadata: dict[str,Any]` field. **`grep -rn 'AuthIdentity('` first** — confirm `require_authenticated` is the ONLY constructor (so adding a required field is safe); if anything else constructs it, update those too. `core/auth.py` is shared by every authenticated route (incl. tenant_invites) — a broken `AuthIdentity` breaks the whole suite.
+- Task 7 also needs the test-file gotchas #3 (loop_scope) and #8 (split cleanup SQL); plan's `test_invite_acceptance.py` uses bare `pytest.mark.asyncio` and semicolon-joined cleanup DELETEs — correct both in the dispatch.
+- `AcceptInviteResult.model_validate(result_dict)` is fine without `from_attributes` (dict input).
+
+### Still-open user-driven items (cannot be delegated)
+- **Plan 2A Task 18 manual smoke** — never run. Needs user: restart `make dev` (note: `.env` must exist with the managed-Supabase values + the externalized keys API_HOST/API_PORT/WEB_DEV_PORT/WEB_APP_URL/CORS_ALLOW_ORIGINS/JWKS_*/SUPABASE_TIMEOUT_SEC; see `.env.example`), bootstrap a platform owner (`make create-platform-owner email=… password=…`), then click through.
+- **Plan 2B Task 2B-15 manual smoke** — at the very end.
+
+### Memory note
+A new feedback memory was added: `feedback_no_hardcoded_config.md` ([[feedback-no-hardcoded-config]]) — all env-varying values come from `.env`; no literals/Field-defaults in py/Makefile/vite.
 
 ---
 
