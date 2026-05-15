@@ -1,83 +1,69 @@
 SHELL := /bin/bash
-.PHONY: help install env env-force supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
+.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
+
+# API bind host/port come from .env (no hardcoded values in the Makefile).
+# Surgically extract just these two keys; never source the whole .env (its
+# values contain characters the shell would mis-parse).
+API_HOST := $(shell grep -E '^API_HOST=' .env 2>/dev/null | head -1 | cut -d= -f2-)
+API_PORT := $(shell grep -E '^API_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2-)
 
 help:
 	@echo "Xtrusio dev Makefile"
 	@echo ""
 	@echo "  make install         - install JS + Python dependencies"
-	@echo "  make env             - generate .env from supabase status (refuses if .env exists)"
-	@echo "  make env-force       - regenerate .env, overwriting if it exists"
-	@echo "  make db-up           - start Supabase stack + xtrusio-valkey"
-	@echo "  make db-down         - stop Supabase stack + xtrusio-valkey"
-	@echo "  make db-logs         - tail Valkey logs (Supabase logs: \`supabase logs\`)"
-	@echo "  make supabase-start  - Supabase only"
-	@echo "  make supabase-stop   - Supabase only"
-	@echo "  make supabase-status - print Supabase service URLs + keys"
+	@echo "  make db-up           - start local infra (Valkey container)"
+	@echo "  make db-down         - stop local infra"
+	@echo "  make db-logs         - tail Valkey logs"
 	@echo "  make valkey-up       - Valkey only"
 	@echo "  make valkey-down     - Valkey only"
 	@echo "  make api             - run FastAPI dev server (XTRUSIO_PROCESS_ROLE=api)"
 	@echo "  make worker          - placeholder; real worker added in later plans"
 	@echo "  make web             - run Vite dev server"
-	@echo "  make dev             - bring up DBs + API + web in parallel"
+	@echo "  make dev             - bring up Valkey + API + web in parallel"
+	@echo "  make migrate         - apply Alembic migrations to the database in DATABASE_URL"
+	@echo "  make migrate-down    - revert the most recent migration"
+	@echo "  make create-platform-owner email=you@x.com password='...' [force=true]"
 	@echo "  make lint            - lint Python + JS"
 	@echo "  make format          - format Python + JS"
 	@echo "  make typecheck       - mypy + tsc"
 	@echo "  make test            - run all tests (Python + JS)"
 	@echo "  make check           - lint + typecheck + test"
 	@echo "  make clean           - remove caches and venvs"
+	@echo ""
+	@echo "Supabase (managed): create a project at https://supabase.com, copy keys"
+	@echo "from Project Settings into a .env file (use .env.example as the template),"
+	@echo "then run 'make migrate' to apply migrations against your project's database."
 
 install:
 	pnpm install
 	uv sync --all-packages
 
-env:
-	@if [ -f .env ]; then \
-		echo "ERROR: .env already exists. Use 'make env-force' to overwrite, or edit it manually."; \
-		exit 1; \
-	fi
-	@./scripts/generate-env.sh > .env
-	@echo "Wrote .env with live Supabase keys."
-
-env-force:
-	@./scripts/generate-env.sh > .env
-	@echo "Regenerated .env (existing values overwritten)."
-
-supabase-start:
-	supabase start
-
-supabase-stop:
-	supabase stop
-
-supabase-status:
-	supabase status
-
 valkey-up:
 	docker compose up -d valkey
 	@echo "Waiting for xtrusio-valkey to be healthy..."
 	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-valkey 2>/dev/null | grep -q healthy; do sleep 1; done
-	@echo "Valkey ready (host :63792)."
+	@echo "Valkey ready (host: xtrusio-valkey.orb.local:6379 via OrbStack DNS)."
 
 valkey-down:
 	docker compose down
 
-db-up: supabase-start valkey-up
+db-up: valkey-up
 	@echo ""
-	@echo "All services up:"
-	@echo "  Supabase API     http://localhost:54321"
-	@echo "  Supabase DB      postgresql://postgres:postgres@localhost:54322/postgres"
-	@echo "  Supabase Studio  http://localhost:54323"
-	@echo "  Inbucket (mail)  http://localhost:54324"
-	@echo "  Valkey           localhost:63792"
+	@echo "Local infra up:"
+	@echo "  Valkey  xtrusio-valkey.orb.local:6379 (OrbStack DNS)"
 	@echo ""
-	@echo "Run 'make supabase-status' for anon/service-role keys."
+	@echo "Supabase Postgres/Auth/Realtime is managed — see .env for the project URL."
 
-db-down: supabase-stop valkey-down
+db-down: valkey-down
 
 db-logs:
 	docker compose logs -f valkey
 
 api:
-	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --port 8000 --app-dir apps/api/src
+	@if [ -z "$(API_HOST)" ] || [ -z "$(API_PORT)" ]; then \
+		echo "API_HOST and API_PORT must be set in .env (see .env.example)"; exit 1; \
+	fi
+	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --host $(API_HOST) --port $(API_PORT) --app-dir apps/api/src
 
 worker:
 	@echo "worker target is a placeholder until later plans add Dramatiq/Prefect."

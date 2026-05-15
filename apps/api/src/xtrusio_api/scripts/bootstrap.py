@@ -71,7 +71,7 @@ async def _run(*, email: str, password: str, force: bool) -> None:
         await db.commit()
 
     typer.echo(f"✅ super_admin created: {email}")
-    typer.echo("   Sign in at http://localhost:5173/sign-in")
+    typer.echo(f"   Sign in at {get_settings().web_app_url}/sign-in")
 
 
 def main() -> None:

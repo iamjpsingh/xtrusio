@@ -31,3 +31,6 @@ htmlcov/
 # Build outputs
 build/
 *.tsbuildinfo
+
+# Supabase CLI local artifacts (project uses managed Supabase, no local stack)
+supabase/
