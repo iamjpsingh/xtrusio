@@ -6,12 +6,11 @@ import asyncio
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from supabase import create_client
 
 from ..core.config import get_settings
 from .platform_settings import is_signups_enabled
-
-_SUPABASE_TIMEOUT = 10.0
 
 
 class SignupsDisabledError(Exception):
@@ -40,7 +39,7 @@ async def create_signup_user(*, db: AsyncSession, email: str, password: str) -> 
         )
 
     try:
-        result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=_SUPABASE_TIMEOUT)
+        result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
     except TimeoutError as e:
         raise EmailProviderUnavailableError() from e
     except Exception as e:

@@ -1,6 +1,12 @@
 SHELL := /bin/bash
 .PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
 
+# API bind host/port come from .env (no hardcoded values in the Makefile).
+# Surgically extract just these two keys; never source the whole .env (its
+# values contain characters the shell would mis-parse).
+API_HOST := $(shell grep -E '^API_HOST=' .env 2>/dev/null | head -1 | cut -d= -f2-)
+API_PORT := $(shell grep -E '^API_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2-)
+
 help:
 	@echo "Xtrusio dev Makefile"
 	@echo ""
@@ -54,7 +60,10 @@ db-logs:
 	docker compose logs -f valkey
 
 api:
-	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --port 8000 --app-dir apps/api/src
+	@if [ -z "$(API_HOST)" ] || [ -z "$(API_PORT)" ]; then \
+		echo "API_HOST and API_PORT must be set in .env (see .env.example)"; exit 1; \
+	fi
+	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --host $(API_HOST) --port $(API_PORT) --app-dir apps/api/src
 
 worker:
 	@echo "worker target is a placeholder until later plans add Dramatiq/Prefect."

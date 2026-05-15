@@ -1,7 +1,10 @@
 import { supabase } from "./supabase";
 import type { MeResponse } from "./route-resolver";
 
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const baseUrl = import.meta.env.VITE_API_BASE_URL;
+if (!baseUrl) {
+  throw new Error("VITE_API_BASE_URL must be set in .env");
+}
 
 export class ApiError extends Error {
   constructor(

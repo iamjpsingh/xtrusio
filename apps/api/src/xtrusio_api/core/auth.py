@@ -19,8 +19,6 @@ from .db import get_db
 
 _AUDIENCE = "authenticated"
 _JWKS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
-_JWKS_TTL_SEC = 300.0
-_JWKS_FETCH_TIMEOUT_SEC = 5.0
 _ALLOWED_ALGS: frozenset[str] = frozenset({"RS256", "RS384", "RS512", "ES256", "ES384"})
 
 
@@ -37,11 +35,12 @@ async def _fetch_jwks(url: str) -> dict[str, Any]:
     cached = _JWKS_CACHE.get(url)
     if cached and cached[1] > time.time():
         return cached[0]
-    async with httpx.AsyncClient(timeout=_JWKS_FETCH_TIMEOUT_SEC) as client:
+    settings = get_settings()
+    async with httpx.AsyncClient(timeout=settings.jwks_fetch_timeout_sec) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         jwks: dict[str, Any] = resp.json()
-    _JWKS_CACHE[url] = (jwks, time.time() + _JWKS_TTL_SEC)
+    _JWKS_CACHE[url] = (jwks, time.time() + settings.jwks_ttl_sec)
     return jwks
 
 
@@ -50,18 +49,14 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     try:
         header = jwt.get_unverified_header(token)
     except JWTError as e:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, f"invalid token header: {e}"
-        ) from e
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token header: {e}") from e
     kid = header.get("kid")
     if not kid:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token missing kid")
     try:
         jwks = await _fetch_jwks(get_settings().supabase_jwks_url)
     except httpx.HTTPError as e:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, f"jwks fetch failed: {e}"
-        ) from e
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"jwks fetch failed: {e}") from e
     key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if key is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no matching jwks key")
@@ -69,9 +64,7 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     if alg not in _ALLOWED_ALGS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
     try:
-        payload: dict[str, Any] = jwt.decode(
-            token, key, algorithms=[alg], audience=_AUDIENCE
-        )
+        payload: dict[str, Any] = jwt.decode(token, key, algorithms=[alg], audience=_AUDIENCE)
     except JWTError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e
     return payload
@@ -100,9 +93,7 @@ async def get_current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not provisioned")
     if not row.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "user disabled")
-    return CurrentUser(
-        user_id=row.id, email=row.email, role=row.role, is_active=row.is_active
-    )
+    return CurrentUser(user_id=row.id, email=row.email, role=row.role, is_active=row.is_active)
 
 
 async def require_super_admin(
@@ -144,9 +135,7 @@ async def require_authenticated(
     from sqlalchemy import text  # local import to avoid top-level churn
 
     row = (
-        await db.execute(
-            text("SELECT email FROM auth.users WHERE id = :id"), {"id": str(user_id)}
-        )
+        await db.execute(text("SELECT email FROM auth.users WHERE id = :id"), {"id": str(user_id)})
     ).first()
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not in auth.users")
