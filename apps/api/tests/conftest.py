@@ -155,4 +155,5 @@ def mock_supabase_admin(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
 
     monkeypatch.setattr("xtrusio_api.services.signup.create_client", _factory)
     monkeypatch.setattr("xtrusio_api.services.platform_invites.create_client", _factory)
+    monkeypatch.setattr("xtrusio_api.services.tenant_invites.create_client", _factory)
     yield mock_client

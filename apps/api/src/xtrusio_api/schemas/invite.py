@@ -45,6 +45,8 @@ class CreateTenantInviteRequest(BaseModel):
 
 
 class TenantInviteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     tenant_id: UUID
     email: EmailStr

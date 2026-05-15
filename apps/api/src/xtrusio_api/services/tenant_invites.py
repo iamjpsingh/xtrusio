@@ -1,0 +1,196 @@
+"""Tenant invites: create / list / revoke."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import and_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from supabase import create_client
+
+from ..core.config import get_settings
+from ..models.tenant_invite import TenantInvite
+from ..models.tenant_membership import TenantMembership, TenantRole
+from .invite_rules import can_invite
+
+_TTL_DAYS = 7
+
+
+class NotAMemberError(Exception):
+    pass
+
+
+class NotOwnerOrAdminError(Exception):
+    pass
+
+
+class ForbiddenRoleError(Exception):
+    pass
+
+
+class UserAlreadyMemberError(Exception):
+    pass
+
+
+class InvitePendingError(Exception):
+    pass
+
+
+class InviteAlreadyAcceptedError(Exception):
+    pass
+
+
+class EmailProviderUnavailableError(Exception):
+    pass
+
+
+async def _require_owner_or_admin(
+    db: AsyncSession, *, tenant_id: UUID, user_id: UUID
+) -> TenantMembership:
+    membership = (
+        await db.execute(
+            select(TenantMembership).where(
+                and_(
+                    TenantMembership.tenant_id == tenant_id,
+                    TenantMembership.user_id == user_id,
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if membership is None:
+        raise NotAMemberError()
+    if membership.role not in (TenantRole.OWNER, TenantRole.ADMIN):
+        raise NotOwnerOrAdminError()
+    return membership
+
+
+async def create_tenant_invite(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    inviter_id: UUID,
+    email: str,
+    role: TenantRole,
+) -> TenantInvite:
+    membership = await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=inviter_id)
+
+    if not can_invite(inviter=membership.role, target=role):
+        raise ForbiddenRoleError()
+
+    member_row = (
+        await db.execute(
+            text(
+                """
+                SELECT 1
+                FROM tenant_memberships m
+                JOIN auth.users u ON u.id = m.user_id
+                WHERE m.tenant_id = :tid AND u.email = :email
+                LIMIT 1
+                """
+            ),
+            {"tid": str(tenant_id), "email": email},
+        )
+    ).first()
+    if member_row is not None:
+        raise UserAlreadyMemberError()
+
+    pending = (
+        await db.execute(
+            select(TenantInvite).where(
+                and_(
+                    TenantInvite.tenant_id == tenant_id,
+                    TenantInvite.email == email,
+                    TenantInvite.accepted_at.is_(None),
+                    TenantInvite.revoked_at.is_(None),
+                )
+            )
+        )
+    ).scalar_one_or_none()
+    if pending is not None:
+        raise InvitePendingError()
+
+    invite = TenantInvite(
+        tenant_id=tenant_id,
+        email=email,
+        role=role,
+        invited_by=inviter_id,
+        expires_at=datetime.now(UTC) + timedelta(days=_TTL_DAYS),
+    )
+    db.add(invite)
+    await db.flush()
+    invite_id = invite.id
+
+    cfg = get_settings()
+    sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
+
+    def _call() -> Any:
+        return sb.auth.admin.invite_user_by_email(  # type: ignore[call-arg]
+            email,
+            data={
+                "tenant_invite_id": str(invite_id),
+                "tenant_id": str(tenant_id),
+                "tenant_role": role.value,
+            },
+        )
+
+    try:
+        await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
+    except TimeoutError as e:
+        await db.rollback()
+        raise EmailProviderUnavailableError() from e
+    except Exception as e:
+        await db.rollback()
+        raise EmailProviderUnavailableError() from e
+
+    await db.commit()
+    await db.refresh(invite)
+    return invite
+
+
+async def list_tenant_invites(
+    db: AsyncSession, *, tenant_id: UUID, requester_id: UUID
+) -> list[TenantInvite]:
+    await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=requester_id)
+    rows = (
+        (
+            await db.execute(
+                select(TenantInvite)
+                .where(TenantInvite.tenant_id == tenant_id)
+                .order_by(TenantInvite.created_at.desc())
+                .limit(50)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+async def revoke_tenant_invite(
+    db: AsyncSession, *, tenant_id: UUID, invite_id: UUID, requester_id: UUID
+) -> None:
+    await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=requester_id)
+    invite = (
+        await db.execute(
+            select(TenantInvite).where(
+                and_(TenantInvite.id == invite_id, TenantInvite.tenant_id == tenant_id)
+            )
+        )
+    ).scalar_one_or_none()
+    if invite is None:
+        return  # idempotent: revoking an unknown invite is a 204 no-op
+    if invite.accepted_at is not None:
+        raise InviteAlreadyAcceptedError()
+    if invite.revoked_at is not None:
+        return  # already revoked — idempotent no-op
+    invite.revoked_at = datetime.now(UTC)
+    await db.commit()
+    # NOTE: unlike revoke_platform_invite, we intentionally do NOT delete the
+    # Supabase auth.users row here. A tenant invite's email may belong to a
+    # user who is a legitimate member of other tenants; deleting their auth
+    # identity on one tenant's revoke would be a cross-tenant destructive
+    # action. Auth-user lifecycle is not tied to a single tenant invite.
