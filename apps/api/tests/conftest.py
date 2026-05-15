@@ -65,9 +65,7 @@ def jwks_keypair() -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwks(
-    jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _patch_jwks(jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the live JWKS fetcher with one that returns our test JWKS."""
     from xtrusio_api.core import auth as _auth_mod
 
@@ -156,4 +154,5 @@ def mock_supabase_admin(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
         return mock_client
 
     monkeypatch.setattr("xtrusio_api.services.signup.create_client", _factory)
+    monkeypatch.setattr("xtrusio_api.services.platform_invites.create_client", _factory)
     yield mock_client

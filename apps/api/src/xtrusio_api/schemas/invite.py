@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 from ..models.platform_user import PlatformRole
 from ..models.tenant_membership import TenantRole
@@ -20,6 +20,8 @@ class CreatePlatformInviteRequest(BaseModel):
 
 
 class PlatformInviteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     email: EmailStr
     role: PlatformRole
