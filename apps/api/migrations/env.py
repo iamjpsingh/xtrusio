@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from xtrusio_api.core.config import get_settings
 from xtrusio_api.core.db import Base
 from xtrusio_api.models import (  # noqa: F401  (register tables on Base)
+    PlatformInvite,
     PlatformSettings,
     PlatformUser,
     Tenant,
+    TenantInvite,
     TenantMembership,
 )
 
