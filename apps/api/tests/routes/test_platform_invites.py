@@ -176,3 +176,17 @@ async def test_revoke_invite(
     assert row is not None
     await db_session.execute(text("DELETE FROM platform_invites WHERE id = :id"), {"id": invite_id})
     await db_session.commit()
+
+
+async def test_create_invite_super_admin_role_rejected_422(
+    http_client: AsyncClient,
+    super_admin_user: PlatformUser,
+    make_jwt,
+) -> None:
+    token = make_jwt(sub=super_admin_user.id)
+    r = await http_client.post(
+        "/api/platform/users/invites",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"email": "x@example.com", "role": "super_admin"},
+    )
+    assert r.status_code == 422

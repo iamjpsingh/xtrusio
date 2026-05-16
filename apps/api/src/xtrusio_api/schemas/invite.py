@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 from ..models.platform_user import PlatformRole
 from ..models.tenant_membership import TenantRole
@@ -16,7 +16,14 @@ from ..models.tenant_membership import TenantRole
 
 class CreatePlatformInviteRequest(BaseModel):
     email: EmailStr
-    role: PlatformRole  # CHECK constraint in DB rejects 'super_admin'
+    role: PlatformRole  # super_admin rejected by the validator below + DB CHECK
+
+    @field_validator("role")
+    @classmethod
+    def _reject_super_admin(cls, v: PlatformRole) -> PlatformRole:
+        if v == PlatformRole.SUPER_ADMIN:
+            raise ValueError("super_admin cannot be invited")
+        return v
 
 
 class PlatformInviteResponse(BaseModel):

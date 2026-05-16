@@ -109,7 +109,7 @@ export function UsersPage() {
         action={<InviteDialog />}
       />
       <section>
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Pending invites</h2>
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Invitations</h2>
         {invites.length === 0 ? (
           <p className="text-sm text-muted-foreground">No pending invites.</p>
         ) : (
