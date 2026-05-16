@@ -19,6 +19,18 @@ from xtrusio_api.main import app
 from xtrusio_api.models.platform_user import PlatformRole, PlatformUser
 
 
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _purge_test_data_around_session() -> AsyncIterator[None]:
+    """Crash-proof cleanup: purge BEFORE the suite (removes any leftovers from a
+    previously killed run) and AFTER it. The pre-sweep is the real guarantee —
+    a killed run is always cleaned by the next run or `make test-clean`."""
+    from tests._cleanup import purge_test_data
+
+    await purge_test_data()
+    yield
+    await purge_test_data()
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
     """Per-test session against the global engine."""

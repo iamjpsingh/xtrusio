@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
+.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test test-clean check clean migrate migrate-down create-platform-owner
 
 # API bind host/port come from .env (no hardcoded values in the Makefile).
 # Surgically extract just these two keys; never source the whole .env (its
@@ -92,7 +92,11 @@ typecheck:
 	uv run mypy apps/api
 	pnpm exec turbo run typecheck
 
+test-clean:
+	uv run --directory apps/api python -m tests._cleanup
+
 test:
+	uv run --directory apps/api python -m tests._cleanup
 	uv run pytest apps/api/tests
 	pnpm exec turbo run test
 
