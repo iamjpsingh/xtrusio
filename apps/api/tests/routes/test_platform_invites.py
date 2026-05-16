@@ -154,8 +154,9 @@ async def test_revoke_invite(
     db_session: AsyncSession,
 ) -> None:
     token = make_jwt(sub=existing_super_admin.id)
+    sb_uid = str(uuid4())
     mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
-        user=MagicMock(id=str(uuid4()))
+        user=MagicMock(id=sb_uid)
     )
     r = await http_client.post(
         "/api/platform/users/invites",
@@ -174,6 +175,9 @@ async def test_revoke_invite(
         )
     ).scalar_one()
     assert row is not None
+    mock_supabase_admin.auth.admin.delete_user.assert_called_once()
+    (called_id,), _ = mock_supabase_admin.auth.admin.delete_user.call_args
+    assert called_id == sb_uid
     await db_session.execute(text("DELETE FROM platform_invites WHERE id = :id"), {"id": invite_id})
     await db_session.commit()
 

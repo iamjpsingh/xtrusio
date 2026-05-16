@@ -83,13 +83,20 @@ async def create_platform_invite(
         )
 
     try:
-        await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
+        result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
     except TimeoutError as e:
         await db.rollback()
         raise EmailProviderUnavailableError() from e
     except Exception as e:
         await db.rollback()
         raise EmailProviderUnavailableError() from e
+
+    sb_user_id: str | None = getattr(getattr(result, "user", None), "id", None)
+    if isinstance(sb_user_id, str):
+        try:
+            invite.supabase_user_id = UUID(sb_user_id)
+        except ValueError:
+            invite.supabase_user_id = None
 
     await db.commit()
     await db.refresh(invite)
@@ -109,23 +116,17 @@ async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
     invite.revoked_at = datetime.now(UTC)
     await db.commit()
 
-    cfg = get_settings()
-    sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
-    invite_email = invite.email
-
-    def _revoke_auth_user() -> None:
-        for u in sb.auth.admin.list_users():
-            if (
-                getattr(u, "email", None) == invite_email
-                and getattr(u, "email_confirmed_at", None) is None
-            ):
-                sb.auth.admin.delete_user(u.id)
-
-    with contextlib.suppress(Exception):
-        await asyncio.wait_for(
-            asyncio.to_thread(_revoke_auth_user),
-            timeout=cfg.supabase_timeout_sec,
-        )
+    # Best-effort: delete the unconfirmed Supabase auth user by the id we
+    # captured at invite creation (O(1); no global list_users scan).
+    if invite.supabase_user_id is not None:
+        cfg = get_settings()
+        sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
+        sb_user_id = str(invite.supabase_user_id)
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(
+                asyncio.to_thread(lambda: sb.auth.admin.delete_user(sb_user_id)),
+                timeout=cfg.supabase_timeout_sec,
+            )
 
 
 async def list_platform_invites(db: AsyncSession, *, limit: int = 50) -> list[PlatformInvite]:

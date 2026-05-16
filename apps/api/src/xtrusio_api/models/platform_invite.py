@@ -35,6 +35,7 @@ class PlatformInvite(Base):
         nullable=False,
     )
     invited_by: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    supabase_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
