@@ -8,24 +8,37 @@ This document lets a fresh session on any machine resume exactly where we stoppe
 
 ---
 
-## ⏩ RESUME HERE — updated 2026-05-16
+## ⏩ RESUME HERE — updated 2026-05-16 (EOD) — NEXT: RBAC re-architecture
 
-**Plan 2B is CODE-COMPLETE.** All 14 implementation tasks done (each spec + code-quality reviewed), final whole-implementation review = "Ready to finalize" with its findings fixed. Branch `plan-2-settings-signup-invites`, tree clean, NOT pushed; `main` has Plan 2A + CORS + config externalization + sign-in link (`76f175e`).
+**Everything is MERGED + PUSHED to `origin/main` at `51ff4ca`.** Local `main == origin/main`, tree clean, nothing pending. The feature branch `plan-2-settings-signup-invites` (tip `8ef1b62`) is fully contained in that merge; **the user will delete it themselves** (`git branch -D plan-2-settings-signup-invites` [+ `git push origin --delete …`]).
 
-**Test baseline:** backend **`81 passed`** (`uv run --directory apps/api pytest tests/ -p no:warnings`), frontend **`29 passed`** deterministic (`pnpm --filter @xtrusio/web test`). ruff/tsc/eslint clean; mypy `--strict src` = 1 pre-existing `jose` baseline only. Alembic single head `0004`.
+`main` now contains: Plan 2A, CORS fix, config externalization, sign-in client-signup link, **Plan 2B (full invites system)**, crash-proof test-data hygiene, single-super_admin bootstrap, scalable platform-invite revoke.
 
-**Plan 2B commits (all done):** `2a38068` mig0004 · `fb3bc37` models · `bbd4345` can_invite · `b8f8f5e` schemas · `de17ad5` platform invites · `97d26f4` tenant invites · `89b3865` /invites/accept · `de6ad42` /me pending_invite · `d8435d3` RLS tests · `b88b78b` integration · `d8b85d2` FE api wrappers · `ec813d2` /accept-invite · `99a3701` /users UI · `9428241`/`af804d0` /clients/$slug/users · `127fc05` final-review fixes.
+**Test baseline (on `main`):** backend **`82 passed`**, frontend **`29 passed`** (deterministic); ruff/tsc/eslint clean; mypy `--strict src` = 1 pre-existing `jose` baseline only; Alembic single head **`0005`**. Managed DB pristine: exactly 1 `platform_users` row (`admin@xtrusio.com` super_admin), `platform_settings` untouched, zero `@example.com` rows.
 
-**Only remaining = USER-DRIVEN manual smokes (cannot be delegated):**
-- **2B-15** invite e2e smoke (see Plan 2B Task 15: super_admin invites editor → email link → /accept-invite → land on /; then incognito self-serve signup → onboard → /clients/<slug>/users invite admin → accept).
-- **Plan 2A Task 18** signup-chain smoke (still never run).
-Both need: real `.env`, `make dev` (OrbStack up), a bootstrapped owner, real email inboxes.
+### ▶ TOMORROW START HERE: full RBAC re-architecture (user will give the complete plan)
 
-**Commit convention (user pref, 2026-05-16):** NO `Co-Authored-By` trailer — commits use only the user's git identity.
+The user is pivoting to a **foundational re-architecture**. Do NOT implement anything yet — the user will deliver the **entire plan tomorrow**. We were mid-`superpowers:brainstorming` (architecture explored, NOT finalized — `i don't need copy [those products] as-is, will discuss later`).
 
-**Known deferred debt:** (a) sign-up-page/onboarding-page still misuse `ApiError.message` → generic error text (see `project_apierror_message_debt` memory); (b) `revoke_platform_invite` best-effort `list_users()` only scans page 1 (orphan unconfirmed auth users on >50-user platforms; suppressed, non-security).
+**Confirmed direction (locked decisions so far — but the user's full plan tomorrow is authoritative):**
+- **Platform and Client(workspace) are two separate domains — never mixed.** One shared Supabase `auth.users` login; **two fully separate authz domains** (platform identities/roles vs per-workspace members/roles), in their own tables, never referencing each other beyond the login id; an account belongs to one domain.
+- **Dynamic RBAC** (modeled on Superset/Supabase/Vercel, NOT copied): **code-defined permission catalog** (`scope.resource.action` keys, scope ∈ {platform, workspace}; devs add keys as features ship) + **roles as data** (super_admin manages platform roles; a client owner manages roles **within their own workspace**) + `role_permissions` + `user_roles` (multiple roles, effective = union). Immutable seed/system roles; custom roles on top.
+- **DB-enforced RLS**: `SECURITY DEFINER` `has_platform_perm(uid,key)` / `has_workspace_perm(uid,tid,key)` resolve user→roles→permissions; **RLS policies AND backend call the same fns** (reads tables → instant revocation). This SUPERSEDES the enum `is_super_admin`/`is_tenant_owner_or_admin` helpers and the `platform_users.role`/`tenant_memberships.role` enum columns (migration must seed system roles from existing enum rows → `user_roles`, then retire the enum columns; nothing breaks mid-migration).
+- **Proposed 6-phase decomposition (NOT yet approved):** P1 schema+migration · P2 RLS engine · P3 backend `require_permission()` replaces enum checks (`/me` returns effective perms) · P4 platform role/perm mgmt + platform settings area · P5 per-workspace role/perm mgmt + workspace settings area · P6 frontend: two physically separate shells (platform vs workspace), permission-driven nav.
+- Confirmed nav-visibility matrix (will be permission-driven): unauth/onboarding/pending-invite → standalone pages only; platform super_admin/admin → Dashboard+Platform Users+Clients+Settings; platform editor → Dashboard+Clients; tenant owner/admin → Dashboard+workspace+their client's Users; tenant editor/read_only → Dashboard+workspace (view).
 
-**Next step:** `superpowers:finishing-a-development-branch` — present merge/PR options to the user (do NOT auto-merge; user chose merge+push for the prior batch but must decide again for Plan 2B).
+**Folded INTO the RBAC project (deferred until then — do NOT fix piecemeal):**
+- 🐞 **Shell-bleed bug** (real, confirmed): `apps/web/src/routes/__root.tsx` only exempts `/sign-in` from the app shell — so `/sign-up`, `/onboarding`, `/accept-invite` wrongly render inside the dashboard sidebar. Fix = clean route-tree split (a pathless app-shell layout route wrapping ONLY in-app pages; auth/onboarding/accept-invite outside it, no sidebar by structure). Lands in P6.
+- **Signup-status rename** (user-approved scope): move the public status check out of `/api/platform/...` → public `GET /api/signup-status` meaning "is public CLIENT signup open"; relabel `/settings` toggle + disabled message + sign-in link to **"Public client signup"**; keep the super_admin-managed setting at `/api/platform/settings` (semantic = public-client-signup-enabled). NOTE: there is NO "platform signup" concept — platform users are bootstrap/invite only.
+- Auth-page polish: `/sign-up`, `/onboarding`, `/accept-invite` must match the `/sign-in` shadcn dark-card design (shared `AuthLayout`, consistent spacing, shadcn+Tailwind only, no raw CSS).
+
+**Still USER-DRIVEN, never run:** 2B-15 invite e2e smoke + Plan 2A Task 18 signup-chain smoke (need real `.env`, `make dev`/OrbStack, bootstrapped owner, real email inboxes).
+
+**Commit convention (user pref):** NO `Co-Authored-By` trailer — commits use only the user's git identity. See memory `feedback_no_claude_coauthor`, `feedback_test_data_hygiene`, `feedback_no_hardcoded_config`, `project_apierror_message_debt`.
+
+**Known deferred debt:** sign-up-page/onboarding-page still misuse `ApiError.message` → generic error text (memory `project_apierror_message_debt`) — fix when those pages are reworked in P6.
+
+**Next action on resume:** ask the user for their full RBAC plan; reconcile with the locked decisions above; continue `superpowers:brainstorming` → spec → `writing-plans` → phased `subagent-driven-development`. Do NOT start coding before the user delivers the plan and a spec is approved.
 
 ### Plan-2B execution gotchas (the plan file is STALE — apply these every task)
 
