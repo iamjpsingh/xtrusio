@@ -6,17 +6,60 @@ import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.main import app
 from xtrusio_api.models.platform_user import PlatformRole, PlatformUser
+
+
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _purge_test_data_around_session() -> AsyncIterator[None]:
+    """Crash-proof cleanup: purge BEFORE the suite (removes any leftovers from a
+    previously killed run) and AFTER it. The pre-sweep is the real guarantee —
+    a killed run is always cleaned by the next run or `make test-clean`."""
+    from tests._cleanup import purge_test_data
+
+    await purge_test_data()
+    yield
+    await purge_test_data()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_platform_settings() -> AsyncIterator[None]:
+    """Snapshot the global platform_settings singleton before each test and
+    restore it after, so tests never persistently mutate the operator's real
+    config. Preserves whatever value the operator set (snapshot is taken live)."""
+    async with SessionLocal() as s:
+        snap = (
+            await s.execute(
+                text("SELECT signups_enabled, updated_by FROM platform_settings WHERE id = 1")
+            )
+        ).first()
+    yield
+    if snap is None:
+        return
+    async with SessionLocal() as s:
+        cur = (
+            await s.execute(
+                text("SELECT signups_enabled, updated_by FROM platform_settings WHERE id = 1")
+            )
+        ).first()
+        if cur is not None and (cur[0], cur[1]) != (snap[0], snap[1]):
+            await s.execute(
+                text(
+                    "UPDATE platform_settings SET signups_enabled = :se, updated_by = :ub "
+                    "WHERE id = 1"
+                ),
+                {"se": snap[0], "ub": snap[1]},
+            )
+            await s.commit()
 
 
 @pytest_asyncio.fixture
@@ -65,9 +108,7 @@ def jwks_keypair() -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwks(
-    jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _patch_jwks(jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the live JWKS fetcher with one that returns our test JWKS."""
     from xtrusio_api.core import auth as _auth_mod
 
@@ -111,32 +152,26 @@ def make_jwt(jwks_keypair: dict[str, Any]) -> Iterator[Callable[..., str]]:
     yield _factory
 
 
-@pytest_asyncio.fixture
-async def super_admin_user() -> AsyncIterator[PlatformUser]:
-    """Insert a super_admin platform user; clean up rows on teardown."""
-    user_id = uuid4()
-    email = f"sa-{user_id.hex[:8]}@example.com"
+@pytest_asyncio.fixture(scope="session")
+async def existing_super_admin() -> AsyncIterator[PlatformUser]:
+    """The ONE super_admin the operator created via `make create-platform-owner`.
+
+    Read-only: tests verify super-admin behaviour against this real row but
+    NEVER create or delete a super_admin. If none exists the dependent tests
+    skip (they never fail and never create one)."""
     async with SessionLocal() as s:
-        await s.execute(
-            text(
-                "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, "
-                "email_confirmed_at, created_at, updated_at) VALUES "
-                "(:id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', "
-                ":email, '', now(), now(), now())"
-            ),
-            {"id": str(user_id), "email": email},
+        row = (
+            await s.execute(
+                select(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN).limit(1)
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        pytest.skip(
+            "No super_admin in the database — run "
+            "`make create-platform-owner email=... password=...` first. "
+            "Tests never create a super_admin."
         )
-        pu = PlatformUser(id=user_id, email=email, role=PlatformRole.SUPER_ADMIN, is_active=True)
-        s.add(pu)
-        await s.commit()
-        await s.refresh(pu)
-    try:
-        yield pu
-    finally:
-        async with SessionLocal() as s:
-            await s.execute(text("DELETE FROM platform_users WHERE id = :id"), {"id": str(user_id)})
-            await s.execute(text("DELETE FROM auth.users WHERE id = :id"), {"id": str(user_id)})
-            await s.commit()
+    yield row
 
 
 @pytest_asyncio.fixture
@@ -156,4 +191,6 @@ def mock_supabase_admin(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
         return mock_client
 
     monkeypatch.setattr("xtrusio_api.services.signup.create_client", _factory)
+    monkeypatch.setattr("xtrusio_api.services.platform_invites.create_client", _factory)
+    monkeypatch.setattr("xtrusio_api.services.tenant_invites.create_client", _factory)
     yield mock_client

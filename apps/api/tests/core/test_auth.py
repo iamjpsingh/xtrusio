@@ -42,11 +42,11 @@ async def test_unprovisioned_user_returns_401(
 async def test_super_admin_returns_200(
     http_client: AsyncClient,
     make_jwt: Callable[..., str],
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     res = await http_client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     body = res.json()
-    assert body["email"] == super_admin_user.email
-    assert body["platform"]["role"] == "super_admin"
+    assert body["email"] == existing_super_admin.email
+    assert body["platform"]["role"] == existing_super_admin.role.value

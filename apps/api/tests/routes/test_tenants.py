@@ -60,9 +60,9 @@ async def test_list_403_for_non_super_admin(
 async def test_list_empty_for_super_admin(
     http_client: AsyncClient,
     make_jwt: Callable[..., str],
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     res = await http_client.get("/api/tenants", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert res.json() == []
@@ -71,9 +71,9 @@ async def test_list_empty_for_super_admin(
 async def test_create_tenant_succeeds(
     http_client: AsyncClient,
     make_jwt: Callable[..., str],
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     res = await http_client.post(
         "/api/tenants",
         headers={"Authorization": f"Bearer {token}"},
@@ -94,9 +94,9 @@ async def test_create_tenant_succeeds(
 async def test_create_tenant_slug_conflict(
     http_client: AsyncClient,
     make_jwt: Callable[..., str],
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     headers = {"Authorization": f"Bearer {token}"}
     a = await http_client.post(
         "/api/tenants", headers=headers, json={"slug": "globex", "name": "Globex"}
@@ -115,9 +115,9 @@ async def test_create_tenant_slug_conflict(
 async def test_create_tenant_invalid_slug(
     http_client: AsyncClient,
     make_jwt: Callable[..., str],
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     res = await http_client.post(
         "/api/tenants",
         headers={"Authorization": f"Bearer {token}"},

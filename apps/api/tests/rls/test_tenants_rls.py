@@ -73,7 +73,7 @@ async def test_member_sees_only_their_tenants(rls_as: RlsAs) -> None:
 
 
 async def test_super_admin_sees_all_tenants(
-    rls_as: RlsAs, super_admin_user: PlatformUser
+    rls_as: RlsAs, existing_super_admin: PlatformUser
 ) -> None:
     decoy_owner = uuid4()
     async with SessionLocal() as s:
@@ -92,7 +92,7 @@ async def test_super_admin_sees_all_tenants(
         )
         await s.commit()
     try:
-        async with rls_as(super_admin_user.id) as s:
+        async with rls_as(existing_super_admin.id) as s:
             rows = (await s.execute(text("SELECT slug FROM tenants"))).all()
         slugs = {r[0] for r in rows}
         assert f"sa-decoy-{decoy_owner.hex[:8]}" in slugs

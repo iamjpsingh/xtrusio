@@ -15,7 +15,9 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ClientsRouteImport } from './routes/clients'
+import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ClientsSlugUsersRouteImport } from './routes/clients.$slug.users'
 
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
@@ -47,73 +49,96 @@ const ClientsRoute = ClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AcceptInviteRoute = AcceptInviteRouteImport.update({
+  id: '/accept-invite',
+  path: '/accept-invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ClientsSlugUsersRoute = ClientsSlugUsersRouteImport.update({
+  id: '/$slug/users',
+  path: '/$slug/users',
+  getParentRoute: () => ClientsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/clients': typeof ClientsRoute
+  '/accept-invite': typeof AcceptInviteRoute
+  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/users': typeof UsersRoute
+  '/clients/$slug/users': typeof ClientsSlugUsersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/clients': typeof ClientsRoute
+  '/accept-invite': typeof AcceptInviteRoute
+  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/users': typeof UsersRoute
+  '/clients/$slug/users': typeof ClientsSlugUsersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/clients': typeof ClientsRoute
+  '/accept-invite': typeof AcceptInviteRoute
+  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
   '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/users': typeof UsersRoute
+  '/clients/$slug/users': typeof ClientsSlugUsersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/accept-invite'
     | '/clients'
     | '/onboarding'
     | '/settings'
     | '/sign-in'
     | '/sign-up'
     | '/users'
+    | '/clients/$slug/users'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/accept-invite'
     | '/clients'
     | '/onboarding'
     | '/settings'
     | '/sign-in'
     | '/sign-up'
     | '/users'
+    | '/clients/$slug/users'
   id:
     | '__root__'
     | '/'
+    | '/accept-invite'
     | '/clients'
     | '/onboarding'
     | '/settings'
     | '/sign-in'
     | '/sign-up'
     | '/users'
+    | '/clients/$slug/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ClientsRoute: typeof ClientsRoute
+  AcceptInviteRoute: typeof AcceptInviteRoute
+  ClientsRoute: typeof ClientsRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
   SettingsRoute: typeof SettingsRoute
   SignInRoute: typeof SignInRoute
@@ -165,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/accept-invite': {
+      id: '/accept-invite'
+      path: '/accept-invite'
+      fullPath: '/accept-invite'
+      preLoaderRoute: typeof AcceptInviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -172,12 +204,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/clients/$slug/users': {
+      id: '/clients/$slug/users'
+      path: '/$slug/users'
+      fullPath: '/clients/$slug/users'
+      preLoaderRoute: typeof ClientsSlugUsersRouteImport
+      parentRoute: typeof ClientsRoute
+    }
   }
 }
 
+interface ClientsRouteChildren {
+  ClientsSlugUsersRoute: typeof ClientsSlugUsersRoute
+}
+
+const ClientsRouteChildren: ClientsRouteChildren = {
+  ClientsSlugUsersRoute: ClientsSlugUsersRoute,
+}
+
+const ClientsRouteWithChildren =
+  ClientsRoute._addFileChildren(ClientsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ClientsRoute: ClientsRoute,
+  AcceptInviteRoute: AcceptInviteRoute,
+  ClientsRoute: ClientsRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
   SettingsRoute: SettingsRoute,
   SignInRoute: SignInRoute,

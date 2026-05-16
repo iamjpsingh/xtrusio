@@ -2,9 +2,58 @@
 
 **Written:** 2026-05-15
 **Branch:** `plan-2-settings-signup-invites` (cut from `main`)
-**Status:** Plan 2A code-complete (un-smoke-tested). Plan 2B not started.
+**Status:** Plan 2A merged to `main`. Plan 2B in progress: Tasks 1–6 done, Task 7 next.
 
 This document lets a fresh session on any machine resume exactly where we stopped. Read it top to bottom before doing anything.
+
+---
+
+## ⏩ RESUME HERE — updated 2026-05-16
+
+**Plan 2B is CODE-COMPLETE.** All 14 implementation tasks done (each spec + code-quality reviewed), final whole-implementation review = "Ready to finalize" with its findings fixed. Branch `plan-2-settings-signup-invites`, tree clean, NOT pushed; `main` has Plan 2A + CORS + config externalization + sign-in link (`76f175e`).
+
+**Test baseline:** backend **`81 passed`** (`uv run --directory apps/api pytest tests/ -p no:warnings`), frontend **`29 passed`** deterministic (`pnpm --filter @xtrusio/web test`). ruff/tsc/eslint clean; mypy `--strict src` = 1 pre-existing `jose` baseline only. Alembic single head `0004`.
+
+**Plan 2B commits (all done):** `2a38068` mig0004 · `fb3bc37` models · `bbd4345` can_invite · `b8f8f5e` schemas · `de17ad5` platform invites · `97d26f4` tenant invites · `89b3865` /invites/accept · `de6ad42` /me pending_invite · `d8435d3` RLS tests · `b88b78b` integration · `d8b85d2` FE api wrappers · `ec813d2` /accept-invite · `99a3701` /users UI · `9428241`/`af804d0` /clients/$slug/users · `127fc05` final-review fixes.
+
+**Only remaining = USER-DRIVEN manual smokes (cannot be delegated):**
+- **2B-15** invite e2e smoke (see Plan 2B Task 15: super_admin invites editor → email link → /accept-invite → land on /; then incognito self-serve signup → onboard → /clients/<slug>/users invite admin → accept).
+- **Plan 2A Task 18** signup-chain smoke (still never run).
+Both need: real `.env`, `make dev` (OrbStack up), a bootstrapped owner, real email inboxes.
+
+**Commit convention (user pref, 2026-05-16):** NO `Co-Authored-By` trailer — commits use only the user's git identity.
+
+**Known deferred debt:** (a) sign-up-page/onboarding-page still misuse `ApiError.message` → generic error text (see `project_apierror_message_debt` memory); (b) `revoke_platform_invite` best-effort `list_users()` only scans page 1 (orphan unconfirmed auth users on >50-user platforms; suppressed, non-security).
+
+**Next step:** `superpowers:finishing-a-development-branch` — present merge/PR options to the user (do NOT auto-merge; user chose merge+push for the prior batch but must decide again for Plan 2B).
+
+### Plan-2B execution gotchas (the plan file is STALE — apply these every task)
+
+1. **Migration is `0004`** (done) — plan file says 0003; that slot was the RLS fix.
+2. **`mock_supabase_admin` conftest fixture must be extended per service module.** It currently patches `create_client` for `signup`, `platform_invites`, `tenant_invites`. **Task 7's `invite_acceptance` service does NOT call `create_client` (no email send on accept) so no extension needed there — but any future service that does must add its own `monkeypatch.setattr("xtrusio_api.services.<mod>.create_client", _factory)` line.**
+3. **Every route/integration test file:** `pytestmark = pytest.mark.asyncio(loop_scope="session")` (plan uses bare `pytest.mark.asyncio` — wrong, breaks shared asyncpg loop).
+4. **Service Supabase calls:** `except TimeoutError` AND `except Exception` both `await db.rollback()` then raise `EmailProviderUnavailableError`; timeout from `cfg.supabase_timeout_sec` (one `cfg = get_settings()` per fn, NO hardcoded `_SUPABASE_TIMEOUT`).
+5. **`InviteAlreadyAcceptedError` is its own class** (don't reuse `InvitePendingError` for the accepted-guard). Idempotent revoke: missing→204 no-op, already-revoked→204 no-op.
+6. **Response schemas hit by `Model.model_validate(<ORM obj>)` need `model_config = ConfigDict(from_attributes=True)`.** Already added to `PlatformInviteResponse` + `TenantInviteResponse` in `schemas/invite.py`. `AcceptInviteResult` is validated from a **dict**, so it does NOT need it.
+7. **Backend uses the owner DB connection — RLS does NOT constrain it.** Any list/revoke/read endpoint must enforce authz explicitly in the service (see `tenant_invites._require_owner_or_admin`), never "rely on RLS".
+8. **asyncpg rejects multi-statement `text()`** — split semicolon-joined SQL (esp. test cleanup) into separate `db.execute(text(...))` calls.
+9. **Posting `role:"owner"`/`"super_admin"` is NOT a 422** — those are valid enum members; `can_invite()`/DB-CHECK reject them → expect 403 `forbidden_role`.
+10. **DELETE routes:** `@router.delete(..., status_code=204, response_class=Response)` returning `Response(status_code=204)` (FastAPI 204+body assertion). Established convention.
+11. **Accepted lint/type baseline:** ruff clean; mypy = 1 `jose` stub error in `core/auth.py`. Zero NEW. Keep any `# type: ignore` scoped to the exact code (e.g. `[call-arg]` on supabase `data=` kwarg).
+
+### Task 7 specifics (was interrupted mid-prep — DO THIS FIRST when resuming)
+Before dispatching 2B-7, verify these (the dispatch was interrupted at exactly this check):
+- `apps/api/tests/conftest.py` `make_jwt` `_factory`: **HANDOFF gotcha #7 says it already accepts `user_metadata`** — confirm its current signature/payload; if it already injects `user_metadata`, the plan's Step 1 conftest edit is a no-op/duplicate — don't double-add.
+- `apps/api/src/xtrusio_api/core/auth.py` `AuthIdentity` + `require_authenticated`: plan adds a `user_metadata: dict[str,Any]` field. **`grep -rn 'AuthIdentity('` first** — confirm `require_authenticated` is the ONLY constructor (so adding a required field is safe); if anything else constructs it, update those too. `core/auth.py` is shared by every authenticated route (incl. tenant_invites) — a broken `AuthIdentity` breaks the whole suite.
+- Task 7 also needs the test-file gotchas #3 (loop_scope) and #8 (split cleanup SQL); plan's `test_invite_acceptance.py` uses bare `pytest.mark.asyncio` and semicolon-joined cleanup DELETEs — correct both in the dispatch.
+- `AcceptInviteResult.model_validate(result_dict)` is fine without `from_attributes` (dict input).
+
+### Still-open user-driven items (cannot be delegated)
+- **Plan 2A Task 18 manual smoke** — never run. Needs user: restart `make dev` (note: `.env` must exist with the managed-Supabase values + the externalized keys API_HOST/API_PORT/WEB_DEV_PORT/WEB_APP_URL/CORS_ALLOW_ORIGINS/JWKS_*/SUPABASE_TIMEOUT_SEC; see `.env.example`), bootstrap a platform owner (`make create-platform-owner email=… password=…`), then click through.
+- **Plan 2B Task 2B-15 manual smoke** — at the very end.
+
+### Memory note
+A new feedback memory was added: `feedback_no_hardcoded_config.md` ([[feedback-no-hardcoded-config]]) — all env-varying values come from `.env`; no literals/Field-defaults in py/Makefile/vite.
 
 ---
 

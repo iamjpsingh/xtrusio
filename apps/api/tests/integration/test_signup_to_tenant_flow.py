@@ -17,13 +17,13 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 async def test_signup_to_tenant_flow(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     db_session: AsyncSession,
     mock_supabase_admin: MagicMock,
 ) -> None:
     # 1. super_admin enables signups.
-    sa_token = make_jwt(sub=super_admin_user.id)
+    sa_token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.put(
         "/api/platform/settings",
         headers={"Authorization": f"Bearer {sa_token}"},

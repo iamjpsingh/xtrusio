@@ -108,6 +108,7 @@ async def require_super_admin(
 class AuthIdentity:
     user_id: UUID
     email: str
+    user_metadata: dict[str, Any]
 
 
 async def require_authenticated(
@@ -139,4 +140,5 @@ async def require_authenticated(
     ).first()
     if row is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not in auth.users")
-    return AuthIdentity(user_id=user_id, email=row[0])
+    user_metadata = payload.get("user_metadata") or {}
+    return AuthIdentity(user_id=user_id, email=row[0], user_metadata=user_metadata)
