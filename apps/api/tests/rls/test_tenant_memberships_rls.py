@@ -78,10 +78,10 @@ async def test_user_sees_own_membership_not_others(rls_as: RlsAs) -> None:
         await _cleanup(b_id)
 
 
-async def test_super_admin_sees_all(rls_as: RlsAs, super_admin_user: PlatformUser) -> None:
+async def test_super_admin_sees_all(rls_as: RlsAs, existing_super_admin: PlatformUser) -> None:
     a_id, _ = await _seed_tenant_with_owner(uuid4().hex[:8])
     try:
-        async with rls_as(super_admin_user.id) as s:
+        async with rls_as(existing_super_admin.id) as s:
             rows = (await s.execute(text("SELECT user_id FROM tenant_memberships"))).all()
         seen = {str(r[0]) for r in rows}
         assert str(a_id) in seen

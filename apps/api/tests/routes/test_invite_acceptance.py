@@ -46,7 +46,7 @@ async def test_no_invite_in_metadata_returns_403(
 
 
 async def test_accept_platform_invite_happy_path(
-    http_client: AsyncClient, super_admin_user, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()
@@ -60,7 +60,7 @@ async def test_accept_platform_invite_happy_path(
         {
             "id": str(invite_id),
             "email": email,
-            "inv": str(super_admin_user.id),
+            "inv": str(existing_super_admin.id),
             "exp": datetime.now(UTC) + timedelta(days=7),
         },
     )
@@ -102,7 +102,7 @@ async def test_accept_platform_invite_happy_path(
 
 
 async def test_expired_invite_returns_403(
-    http_client: AsyncClient, super_admin_user, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()
@@ -115,7 +115,7 @@ async def test_expired_invite_returns_403(
         {
             "id": str(invite_id),
             "email": email,
-            "inv": str(super_admin_user.id),
+            "inv": str(existing_super_admin.id),
             "exp": datetime.now(UTC) - timedelta(days=1),
         },
     )

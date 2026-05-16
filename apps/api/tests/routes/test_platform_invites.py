@@ -62,12 +62,12 @@ async def test_create_invite_non_super_admin_returns_403(
 
 async def test_create_invite_happy_path(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
     r = await http_client.post(
         "/api/platform/users/invites",
@@ -91,12 +91,12 @@ async def test_create_invite_happy_path(
 
 async def test_create_invite_duplicate_pending_returns_409(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
     body = {"email": "dup@example.com", "role": "admin"}
     r1 = await http_client.post(
@@ -120,12 +120,12 @@ async def test_create_invite_duplicate_pending_returns_409(
 
 async def test_list_invites_returns_created(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
     await http_client.post(
         "/api/platform/users/invites",
@@ -148,12 +148,12 @@ async def test_list_invites_returns_created(
 
 async def test_revoke_invite(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
         user=MagicMock(id=str(uuid4()))
     )
@@ -180,13 +180,13 @@ async def test_revoke_invite(
 
 async def test_create_invite_super_admin_role_rejected_422(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.post(
         "/api/platform/users/invites",
         headers={"Authorization": f"Bearer {token}"},
-        json={"email": "x@example.com", "role": "super_admin"},
+        json={"email": "x@example.com", "role": existing_super_admin.role.value},
     )
     assert r.status_code == 422

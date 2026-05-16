@@ -29,9 +29,9 @@ async def test_signup_disabled_returns_403(
 
 
 async def test_signup_invalid_email_returns_422(
-    http_client: AsyncClient, super_admin_user: PlatformUser, make_jwt
+    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     await http_client.put(
         "/api/platform/settings",
         headers={"Authorization": f"Bearer {token}"},
@@ -52,11 +52,11 @@ async def test_signup_invalid_email_returns_422(
 
 async def test_signup_happy_path_calls_supabase(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     await http_client.put(
         "/api/platform/settings",
         headers={"Authorization": f"Bearer {token}"},
@@ -83,11 +83,11 @@ async def test_signup_happy_path_calls_supabase(
 
 async def test_signup_email_taken_returns_409(
     http_client: AsyncClient,
-    super_admin_user: PlatformUser,
+    existing_super_admin: PlatformUser,
     make_jwt,
     mock_supabase_admin: MagicMock,
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     await http_client.put(
         "/api/platform/settings",
         headers={"Authorization": f"Bearer {token}"},

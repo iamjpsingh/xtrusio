@@ -40,18 +40,39 @@ async def _run(*, email: str, password: str, force: bool) -> None:
     sb = create_client(settings.supabase_url, settings.supabase_service_role_key)
 
     async with SessionLocal() as db:
-        existing = (
-            await db.execute(
-                select(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN)
+        existing_rows = (
+            (
+                await db.execute(
+                    select(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN)
+                )
             )
-        ).scalar_one_or_none()
-        if existing and not force:
+            .scalars()
+            .all()
+        )
+
+        if existing_rows and not force:
+            first = existing_rows[0]
             typer.echo(
-                f"❌ super_admin already exists: {existing.email}. "
-                f"Re-run with --force to override.",
+                f"A super_admin already exists ({first.email}). "
+                f"Re-run with --force to replace it.",
                 err=True,
             )
-            sys.exit(1)
+            raise typer.Exit(code=1)
+
+        if existing_rows and force:
+            existing_ids = [str(row.id) for row in existing_rows]
+            # Delete platform_users first (FK), then auth.users.
+            from sqlalchemy import delete as sa_delete
+
+            await db.execute(
+                sa_delete(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN)
+            )
+            await db.commit()
+            from sqlalchemy import text as sa_text
+
+            for uid in existing_ids:
+                await db.execute(sa_text("DELETE FROM auth.users WHERE id = :id"), {"id": uid})
+            await db.commit()
 
         result = sb.auth.admin.create_user(
             {"email": email, "password": password, "email_confirm": True}

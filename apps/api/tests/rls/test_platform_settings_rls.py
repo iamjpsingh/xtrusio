@@ -15,14 +15,14 @@ from tests.rls.conftest import RlsAs
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def test_authenticated_can_read(rls_as: RlsAs, super_admin_user: PlatformUser) -> None:
-    async with rls_as(super_admin_user.id) as s:
+async def test_authenticated_can_read(rls_as: RlsAs, existing_super_admin: PlatformUser) -> None:
+    async with rls_as(existing_super_admin.id) as s:
         rows = (await s.execute(text("SELECT signups_enabled FROM platform_settings"))).all()
         assert len(rows) == 1
 
 
 async def test_non_super_admin_update_silently_blocked(
-    rls_as: RlsAs, super_admin_user: PlatformUser
+    rls_as: RlsAs, existing_super_admin: PlatformUser
 ) -> None:
     user_id = uuid4()
     async with SessionLocal() as priv:
@@ -51,8 +51,8 @@ async def test_non_super_admin_update_silently_blocked(
             await priv.commit()
 
 
-async def test_super_admin_can_update(rls_as: RlsAs, super_admin_user: PlatformUser) -> None:
-    async with rls_as(super_admin_user.id) as s:
+async def test_super_admin_can_update(rls_as: RlsAs, existing_super_admin: PlatformUser) -> None:
+    async with rls_as(existing_super_admin.id) as s:
         res = cast(
             "CursorResult[object]",
             await s.execute(

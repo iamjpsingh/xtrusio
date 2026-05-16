@@ -6,13 +6,13 @@ import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from sqlalchemy import text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.main import app
@@ -121,32 +121,26 @@ def make_jwt(jwks_keypair: dict[str, Any]) -> Iterator[Callable[..., str]]:
     yield _factory
 
 
-@pytest_asyncio.fixture
-async def super_admin_user() -> AsyncIterator[PlatformUser]:
-    """Insert a super_admin platform user; clean up rows on teardown."""
-    user_id = uuid4()
-    email = f"sa-{user_id.hex[:8]}@example.com"
+@pytest_asyncio.fixture(scope="session")
+async def existing_super_admin() -> AsyncIterator[PlatformUser]:
+    """The ONE super_admin the operator created via `make create-platform-owner`.
+
+    Read-only: tests verify super-admin behaviour against this real row but
+    NEVER create or delete a super_admin. If none exists the dependent tests
+    skip (they never fail and never create one)."""
     async with SessionLocal() as s:
-        await s.execute(
-            text(
-                "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, "
-                "email_confirmed_at, created_at, updated_at) VALUES "
-                "(:id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', "
-                ":email, '', now(), now(), now())"
-            ),
-            {"id": str(user_id), "email": email},
+        row = (
+            await s.execute(
+                select(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN).limit(1)
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        pytest.skip(
+            "No super_admin in the database — run "
+            "`make create-platform-owner email=... password=...` first. "
+            "Tests never create a super_admin."
         )
-        pu = PlatformUser(id=user_id, email=email, role=PlatformRole.SUPER_ADMIN, is_active=True)
-        s.add(pu)
-        await s.commit()
-        await s.refresh(pu)
-    try:
-        yield pu
-    finally:
-        async with SessionLocal() as s:
-            await s.execute(text("DELETE FROM platform_users WHERE id = :id"), {"id": str(user_id)})
-            await s.execute(text("DELETE FROM auth.users WHERE id = :id"), {"id": str(user_id)})
-            await s.commit()
+    yield row
 
 
 @pytest_asyncio.fixture

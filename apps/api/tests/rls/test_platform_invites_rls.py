@@ -15,7 +15,9 @@ from tests.rls.conftest import RlsAs
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def test_non_super_admin_cannot_see(rls_as: RlsAs, super_admin_user: PlatformUser) -> None:
+async def test_non_super_admin_cannot_see(
+    rls_as: RlsAs, existing_super_admin: PlatformUser
+) -> None:
     async with SessionLocal() as priv:
         await priv.execute(
             text(
@@ -24,7 +26,7 @@ async def test_non_super_admin_cannot_see(rls_as: RlsAs, super_admin_user: Platf
             ),
             {
                 "e": "rlscheck@example.com",
-                "inv": str(super_admin_user.id),
+                "inv": str(existing_super_admin.id),
                 "exp": datetime.now(UTC) + timedelta(days=7),
             },
         )
@@ -45,7 +47,7 @@ async def test_non_super_admin_cannot_see(rls_as: RlsAs, super_admin_user: Platf
         async with rls_as(user_id) as s:
             rows = (await s.execute(text("SELECT email FROM platform_invites"))).all()
             assert rows == []
-        async with rls_as(super_admin_user.id) as s:
+        async with rls_as(existing_super_admin.id) as s:
             rows = (await s.execute(text("SELECT email FROM platform_invites"))).all()
             assert ("rlscheck@example.com",) in [tuple(r) for r in rows]
     finally:

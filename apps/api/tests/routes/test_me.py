@@ -20,14 +20,14 @@ async def test_me_unauth_returns_401(http_client: AsyncClient) -> None:
 
 
 async def test_me_super_admin(
-    http_client: AsyncClient, super_admin_user: PlatformUser, make_jwt
+    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt
 ) -> None:
-    token = make_jwt(sub=super_admin_user.id)
+    token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     body = r.json()
-    assert body["email"] == super_admin_user.email
-    assert body["platform"]["role"] == "super_admin"
+    assert body["email"] == existing_super_admin.email
+    assert body["platform"]["role"] == existing_super_admin.role.value
     assert body["tenants"] == []
     assert body["pending_invite"] is None
 
@@ -116,7 +116,7 @@ async def test_me_unprovisioned(
 
 
 async def test_me_with_pending_platform_invite(
-    http_client: AsyncClient, super_admin_user, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()
@@ -129,7 +129,7 @@ async def test_me_with_pending_platform_invite(
         {
             "id": str(invite_id),
             "email": email,
-            "inv": str(super_admin_user.id),
+            "inv": str(existing_super_admin.id),
             "exp": datetime.now(UTC) + timedelta(days=7),
         },
     )
