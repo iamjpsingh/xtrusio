@@ -20,7 +20,10 @@ const pending: MeResponse = {
 
 describe("resolveRoute", () => {
   it("redirects unauth to /sign-in", () => {
-    expect(resolveRoute({ session: null, me: null }, "/")).toEqual({ kind: "redirect", to: "/sign-in" });
+    expect(resolveRoute({ session: null, me: null }, "/")).toEqual({
+      kind: "redirect",
+      to: "/sign-in",
+    });
   });
   it("allows /sign-up when unauth", () => {
     expect(resolveRoute({ session: null, me: null }, "/sign-up")).toEqual({ kind: "render" });
@@ -48,6 +51,11 @@ describe("resolveRoute", () => {
   });
   it("unprovisioned on /onboarding renders", () => {
     expect(resolveRoute({ session: "s", me: unprov }, "/onboarding")).toEqual({
+      kind: "render",
+    });
+  });
+  it("tenant_member can navigate to /clients/$slug/users", () => {
+    expect(resolveRoute({ session: "s", me: tenant }, "/clients/acme/users")).toEqual({
       kind: "render",
     });
   });
