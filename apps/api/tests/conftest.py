@@ -12,7 +12,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.main import app
@@ -29,6 +29,37 @@ async def _purge_test_data_around_session() -> AsyncIterator[None]:
     await purge_test_data()
     yield
     await purge_test_data()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _isolate_platform_settings() -> AsyncIterator[None]:
+    """Snapshot the global platform_settings singleton before each test and
+    restore it after, so tests never persistently mutate the operator's real
+    config. Preserves whatever value the operator set (snapshot is taken live)."""
+    async with SessionLocal() as s:
+        snap = (
+            await s.execute(
+                text("SELECT signups_enabled, updated_by FROM platform_settings WHERE id = 1")
+            )
+        ).first()
+    yield
+    if snap is None:
+        return
+    async with SessionLocal() as s:
+        cur = (
+            await s.execute(
+                text("SELECT signups_enabled, updated_by FROM platform_settings WHERE id = 1")
+            )
+        ).first()
+        if cur is not None and (cur[0], cur[1]) != (snap[0], snap[1]):
+            await s.execute(
+                text(
+                    "UPDATE platform_settings SET signups_enabled = :se, updated_by = :ub "
+                    "WHERE id = 1"
+                ),
+                {"se": snap[0], "ub": snap[1]},
+            )
+            await s.commit()
 
 
 @pytest_asyncio.fixture

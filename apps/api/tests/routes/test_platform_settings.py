@@ -28,9 +28,7 @@ async def test_get_settings_super_admin_returns_default(
     assert r.status_code == 200
     body = r.json()
     assert body["signups_enabled"] is False
-    # updated_by_email may be non-null if settings were previously touched; only
-    # verify the field is present (not its exact value — it depends on run history).
-    assert "updated_by_email" in body
+    assert body["updated_by_email"] is None
 
 
 async def test_put_settings_requires_super_admin(
