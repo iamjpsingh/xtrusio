@@ -75,3 +75,69 @@ export async function putPlatformSettings(signups_enabled: boolean): Promise<{
     body: JSON.stringify({ signups_enabled }),
   });
 }
+
+export type PlatformInvite = {
+  id: string;
+  email: string;
+  role: "admin" | "editor";
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export type TenantInvite = {
+  id: string;
+  tenant_id: string;
+  email: string;
+  role: "admin" | "editor" | "read_only";
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export async function postPlatformInvite(
+  email: string,
+  role: "admin" | "editor",
+): Promise<PlatformInvite> {
+  return apiFetch("/api/platform/users/invites", {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export async function fetchPlatformInvites(): Promise<{ items: PlatformInvite[] }> {
+  return apiFetch("/api/platform/users/invites");
+}
+
+export async function deletePlatformInvite(id: string): Promise<void> {
+  await apiFetch(`/api/platform/users/invites/${id}`, { method: "DELETE" });
+}
+
+export async function postTenantInvite(
+  tenantId: string,
+  email: string,
+  role: "admin" | "editor" | "read_only",
+): Promise<TenantInvite> {
+  return apiFetch(`/api/tenants/${tenantId}/invites`, {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export async function fetchTenantInvites(tenantId: string): Promise<{ items: TenantInvite[] }> {
+  return apiFetch(`/api/tenants/${tenantId}/invites`);
+}
+
+export async function deleteTenantInvite(tenantId: string, id: string): Promise<void> {
+  await apiFetch(`/api/tenants/${tenantId}/invites/${id}`, { method: "DELETE" });
+}
+
+export async function postAcceptInvite(): Promise<{
+  kind: "platform" | "tenant";
+  role: string;
+  tenant_id: string | null;
+}> {
+  return apiFetch("/api/invites/accept", { method: "POST" });
+}
