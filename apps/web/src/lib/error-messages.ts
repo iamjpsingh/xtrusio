@@ -5,13 +5,13 @@ const MESSAGES: Record<string, string> = {
   weak_password: "Password must be at least 8 characters.",
   already_has_membership: "You're already in a workspace.",
   workspace_name_invalid: "Workspace name must be 2-200 characters.",
-  email_provider_unavailable:
-    "Couldn't send the email. Please try again in a moment.",
+  email_provider_unavailable: "Couldn't send the email. Please try again in a moment.",
   no_invite: "We couldn't find an invitation for your account.",
   invite_expired: "This invitation has expired.",
   invite_revoked: "This invitation was revoked.",
   invite_already_accepted: "This invitation has already been accepted.",
   email_mismatch: "This invitation was for a different email address.",
+  already_provisioned: "Your account is already set up.",
 };
 
 export function errorMessage(code: string): string {

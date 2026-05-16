@@ -13,6 +13,15 @@ export class ApiError extends Error {
   ) {
     super(`API ${status}: ${JSON.stringify(body)}`);
   }
+
+  /** The backend error code from a FastAPI `{ "detail": "<code>" }` body, if present. */
+  get code(): string | null {
+    if (typeof this.body === "object" && this.body !== null && "detail" in this.body) {
+      const d = (this.body as Record<string, unknown>).detail;
+      return typeof d === "string" ? d : null;
+    }
+    return null;
+  }
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
