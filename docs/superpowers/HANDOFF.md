@@ -8,27 +8,24 @@ This document lets a fresh session on any machine resume exactly where we stoppe
 
 ---
 
-## ⏩ RESUME HERE — updated 2026-05-15 EOD
+## ⏩ RESUME HERE — updated 2026-05-16
 
-**Branch `plan-2-settings-signup-invites`, working tree clean, 13 commits ahead of its (stale) remote — NOT pushed.** `main` already has Plan 2A + CORS fix + config externalization + the sign-in client-signup link (merged `76f175e`, pushed to `origin/main`).
+**Plan 2B is CODE-COMPLETE.** All 14 implementation tasks done (each spec + code-quality reviewed), final whole-implementation review = "Ready to finalize" with its findings fixed. Branch `plan-2-settings-signup-invites`, tree clean, NOT pushed; `main` has Plan 2A + CORS + config externalization + sign-in link (`76f175e`).
 
-**Test baseline:** backend `72 passed` (`uv run --directory apps/api pytest tests/ -p no:warnings`), frontend `23 passed` (`pnpm --filter @xtrusio/web test`). ruff `All checks passed`; mypy `--strict src` = 1 pre-existing `jose` baseline error only. Alembic head = `0004`.
+**Test baseline:** backend **`81 passed`** (`uv run --directory apps/api pytest tests/ -p no:warnings`), frontend **`29 passed`** deterministic (`pnpm --filter @xtrusio/web test`). ruff/tsc/eslint clean; mypy `--strict src` = 1 pre-existing `jose` baseline only. Alembic single head `0004`.
 
-**Plan 2B progress (executing via `superpowers:subagent-driven-development`, plan file `docs/superpowers/plans/2026-05-14-plan-2b-platform-and-tenant-invites.md`):**
+**Plan 2B commits (all done):** `2a38068` mig0004 · `fb3bc37` models · `bbd4345` can_invite · `b8f8f5e` schemas · `de17ad5` platform invites · `97d26f4` tenant invites · `89b3865` /invites/accept · `de6ad42` /me pending_invite · `d8435d3` RLS tests · `b88b78b` integration · `d8b85d2` FE api wrappers · `ec813d2` /accept-invite · `99a3701` /users UI · `9428241`/`af804d0` /clients/$slug/users · `127fc05` final-review fixes.
 
-| Task | State | Commit |
-|---|---|---|
-| 2B-1 migration 0004 invite tables + RLS | ✅ done | `2a38068` |
-| 2B-2 SQLAlchemy invite models | ✅ done | `fb3bc37` |
-| 2B-3 `can_invite()` rules + TDD | ✅ done | `bbd4345` |
-| 2B-4 invite pydantic schemas | ✅ done | `b8f8f5e` |
-| 2B-5 platform invites service+route | ✅ done | `de17ad5` |
-| 2B-6 tenant invites service+route | ✅ done | `97d26f4` |
-| 2B-7 `/api/invites/accept` endpoint | ⏳ NEXT (not started) | — |
-| 2B-8 … 2B-14 | pending | — |
-| 2B-15 manual e2e smoke (invites) | pending — USER-DRIVEN | — |
+**Only remaining = USER-DRIVEN manual smokes (cannot be delegated):**
+- **2B-15** invite e2e smoke (see Plan 2B Task 15: super_admin invites editor → email link → /accept-invite → land on /; then incognito self-serve signup → onboard → /clients/<slug>/users invite admin → accept).
+- **Plan 2A Task 18** signup-chain smoke (still never run).
+Both need: real `.env`, `make dev` (OrbStack up), a bootstrapped owner, real email inboxes.
 
-**Per-task review loop in force:** implementer subagent → spec-compliance reviewer → code-quality reviewer → fix subagent → accept. Continue this.
+**Commit convention (user pref, 2026-05-16):** NO `Co-Authored-By` trailer — commits use only the user's git identity.
+
+**Known deferred debt:** (a) sign-up-page/onboarding-page still misuse `ApiError.message` → generic error text (see `project_apierror_message_debt` memory); (b) `revoke_platform_invite` best-effort `list_users()` only scans page 1 (orphan unconfirmed auth users on >50-user platforms; suppressed, non-security).
+
+**Next step:** `superpowers:finishing-a-development-branch` — present merge/PR options to the user (do NOT auto-merge; user chose merge+push for the prior batch but must decide again for Plan 2B).
 
 ### Plan-2B execution gotchas (the plan file is STALE — apply these every task)
 
