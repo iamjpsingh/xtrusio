@@ -1,16 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ApiError, postAcceptInvite } from "@/lib/api";
+import { errorCode, postAcceptInvite } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
-
-function errorCode(e: unknown): string {
-  if (e instanceof ApiError) return e.code ?? "";
-  if (e instanceof Error) return e.message;
-  return "";
-}
 
 export function AcceptInvitePage() {
   const navigate = useNavigate();

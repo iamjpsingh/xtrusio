@@ -24,6 +24,13 @@ export class ApiError extends Error {
   }
 }
 
+/** Extract a backend error code from a thrown value (ApiError.detail, else Error.message). */
+export function errorCode(e: unknown): string {
+  if (e instanceof ApiError) return e.code ?? "";
+  if (e instanceof Error) return e.message;
+  return "";
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const {
     data: { session },
