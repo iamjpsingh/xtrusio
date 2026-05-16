@@ -18,17 +18,38 @@ async def test_get_settings_unauthenticated(http_client: AsyncClient) -> None:
     assert r.status_code == 401
 
 
-async def test_get_settings_super_admin_returns_default(
-    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt
+async def test_get_settings_reflects_stored_values(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt,
+    db_session: AsyncSession,
 ) -> None:
+    # Read the live DB row so the assertion is robust to whatever the operator set.
+    db_row = (
+        await db_session.execute(
+            text("SELECT signups_enabled, updated_by FROM platform_settings WHERE id = 1")
+        )
+    ).first()
+    assert db_row is not None, "platform_settings singleton row must exist"
+    db_signups_enabled: bool = db_row[0]
+    db_updated_by = db_row[1]  # UUID or None
+
     token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.get(
         "/api/platform/settings", headers={"Authorization": f"Bearer {token}"}
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["signups_enabled"] is False
-    assert body["updated_by_email"] is None
+    # Shape check.
+    assert "signups_enabled" in body
+    assert "updated_by_email" in body
+    assert "updated_at" in body
+    # Value check: endpoint must faithfully reflect what is stored.
+    assert body["signups_enabled"] == db_signups_enabled
+    if db_updated_by is None:
+        assert body["updated_by_email"] is None
+    else:
+        assert isinstance(body["updated_by_email"], str) and body["updated_by_email"] != ""
 
 
 async def test_put_settings_requires_super_admin(

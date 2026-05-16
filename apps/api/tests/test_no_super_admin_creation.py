@@ -12,15 +12,19 @@ _TESTS_DIR = Path(__file__).parent
 _FORBIDDEN = re.compile(
     r"(PlatformRole\.SUPER_ADMIN|role\s*=\s*['\"]super_admin['\"]|'super_admin'|\"super_admin\")"
 )
-# Files allowed to mention the term (this guard itself + the read-only fixture +
-# the crash-proof purge helper which must remain to keep CI clean).
-_ALLOWED = {"test_no_super_admin_creation.py", "conftest.py", "_cleanup.py"}
+# Files allowed to mention the term — matched by path RELATIVE to _TESTS_DIR so
+# that subdirectory conftests (e.g. rls/conftest.py) are NOT silently exempt.
+_ALLOWED = {
+    Path("test_no_super_admin_creation.py"),
+    Path("conftest.py"),
+    Path("_cleanup.py"),
+}
 
 
 def test_no_test_creates_a_super_admin() -> None:
     offenders: list[str] = []
     for path in _TESTS_DIR.rglob("*.py"):
-        if path.name in _ALLOWED:
+        if path.relative_to(_TESTS_DIR) in _ALLOWED:
             continue
         text = path.read_text(encoding="utf-8")
         for lineno, line in enumerate(text.splitlines(), 1):

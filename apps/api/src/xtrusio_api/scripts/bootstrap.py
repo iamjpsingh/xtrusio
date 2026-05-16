@@ -12,7 +12,9 @@ import sys
 from typing import Annotated
 
 import typer
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
+from sqlalchemy import text as sa_text
 
 from supabase import create_client
 
@@ -61,15 +63,10 @@ async def _run(*, email: str, password: str, force: bool) -> None:
 
         if existing_rows and force:
             existing_ids = [str(row.id) for row in existing_rows]
-            # Delete platform_users first (FK), then auth.users.
-            from sqlalchemy import delete as sa_delete
-
+            # Delete platform_users first (FK), then auth.users — one atomic transaction.
             await db.execute(
                 sa_delete(PlatformUser).where(PlatformUser.role == PlatformRole.SUPER_ADMIN)
             )
-            await db.commit()
-            from sqlalchemy import text as sa_text
-
             for uid in existing_ids:
                 await db.execute(sa_text("DELETE FROM auth.users WHERE id = :id"), {"id": uid})
             await db.commit()
