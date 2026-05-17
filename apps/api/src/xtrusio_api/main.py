@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
+from .core.db import SessionLocal
+from .rbac.reconcile import reconcile_rbac
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
 from .routes import onboarding as onboarding_routes
@@ -15,7 +20,20 @@ from .routes import signup as signup_routes
 from .routes import tenant_invites as tenant_invites_routes
 from .routes import tenants as tenants_routes
 
-app = FastAPI(title="Xtrusio API", version="0.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    try:
+        async with SessionLocal() as _s:
+            await reconcile_rbac(_s)
+    except Exception:  # pragma: no cover - boot must not fail on reconcile
+        import logging
+
+        logging.getLogger(__name__).exception("rbac reconcile on startup failed")
+    yield
+
+
+app = FastAPI(title="Xtrusio API", version="0.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allow_origins,
