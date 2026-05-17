@@ -524,29 +524,30 @@ git add apps/web/src/routes/_app.tsx apps/web/src/components/app-shell-structure
 git commit -m "test(web): real-router shell-boundary guard; drop production test seam from _app"
 ```
 
-**Amendment (post code-review):** real-router tests boot the full tree (~2.6s) and exceed Testing Library's 1000ms default ONLY for the authenticated-`/` heading query. Do NOT add a suite-global `configure({ asyncUtilTimeout })` (it masks regressions across all 33 tests). Instead scope the longer wait to the two slow queries only, and any jsdom stub added to `test-setup.ts` must follow that file's idempotent-conditional convention. This correction is implemented in Task 2c.
+**Amendment (post code-review):** real-router tests boot the full tree (~2.6s) and exceed Testing Library's 1000ms default ONLY for the authenticated-`/` heading query. Do NOT add a suite-global `configure({ asyncUtilTimeout })` (it masks regressions across all 33 tests). Instead scope the longer wait to the two slow queries only; the window.scrollTo stub stays unconditional (jsdom ships it present-but-throwing) with a comment explaining the deliberate divergence. This correction is implemented in Task 2c.
 
 ---
 
 ### Task 2c: Scope the real-router test timeout (revert global, per-query instead)
 
-**Context (code review of Task 2b):** Task 2b added `configure({ asyncUtilTimeout: 3000 })` globally in `test-setup.ts` to deflake real-router tests under parallel load. Measured: only `app-shell-structure` `/` (~2629ms) and `-index.test.tsx` `/` (~2666ms) exceed 1000ms; the other 31 tests are ≤ ~900ms. A global 3× ceiling hides genuine async regressions everywhere and triples failure feedback. Fix: per-`findBy` `{ timeout: 3000 }` on exactly those two heading queries; remove the global; make the `window.scrollTo` stub idempotent like the rest of `test-setup.ts`.
+**Context (code review of Task 2b):** Task 2b added `configure({ asyncUtilTimeout: 3000 })` globally in `test-setup.ts` to deflake real-router tests under parallel load. Measured: only `app-shell-structure` `/` (~2629ms) and `-index.test.tsx` `/` (~2666ms) exceed 1000ms; the other 31 tests are ≤ ~900ms. A global 3× ceiling hides genuine async regressions everywhere and triples failure feedback. Fix: per-`findBy` `{ timeout: 3000 }` on exactly those two heading queries; remove the global; keep window.scrollTo unconditional (present-but-throwing in jsdom) with an explanatory comment.
 
 **Files:**
 - Modify: `apps/web/src/test-setup.ts`
 - Modify: `apps/web/src/components/app-shell-structure.test.tsx`
 - Modify: `apps/web/src/routes/-index.test.tsx`
 
-- [ ] **Step 1: Revert the global timeout, keep scrollTo but idempotent**
+- [ ] **Step 1: Revert the global timeout; keep scrollTo unconditional + documented**
 
-In `apps/web/src/test-setup.ts`: remove the `configure({ asyncUtilTimeout: 3000 })` call AND its `import { configure } from "@testing-library/react"` (or `@testing-library/dom`) line if now unused. Replace the unconditional `window.scrollTo = () => {};` with the file's established idempotent-conditional pattern, inside the existing `if (typeof window !== "undefined")` block:
+In `apps/web/src/test-setup.ts`: remove the `configure({ asyncUtilTimeout: 3000 })` call AND its `import { configure } from …` line if now unused. Keep `window.scrollTo` stubbed **unconditionally** (NOT the `??` idempotent pattern) — empirically: jsdom ships `window.scrollTo` as a *present-but-throwing* `notImplementedMethod`, unlike the genuinely-absent stubs (ResizeObserver/scrollIntoView), so `window.scrollTo ?? (...)` does NOT replace it and the "Not implemented: window.scrollTo" noise (emitted on every TanStack navigation in the real-router tests) returns — defeating the stub's purpose. Add a comment so the deliberate divergence from the file's `??` convention is self-documenting:
 
 ```ts
-  window.HTMLElement.prototype.scrollIntoView =
-    window.HTMLElement.prototype.scrollIntoView ?? (() => {});
-  window.scrollTo = window.scrollTo ?? (() => {});
+  // jsdom's window.scrollTo is present-but-throwing (not absent like the
+  // stubs above), so it must be overwritten unconditionally — TanStack
+  // Router calls scrollTo on every navigation in the real-router tests.
+  window.scrollTo = () => {};
 ```
-(Place the `window.scrollTo` line adjacent to the existing `scrollIntoView` stub, matching surrounding style. Keep all other existing stubs unchanged.)
+Keep all other existing stubs (ResizeObserver, matchMedia, scrollIntoView, hasPointerCapture, releasePointerCapture) exactly as-is with their existing `??`/conditional patterns.
 
 - [ ] **Step 2: Scope the timeout to the two slow queries**
 
@@ -576,7 +577,7 @@ Expected: all 33 green, no flakes (run the suite twice to be sure the two real-r
 
 ```bash
 git add apps/web/src/test-setup.ts apps/web/src/components/app-shell-structure.test.tsx apps/web/src/routes/-index.test.tsx
-git commit -m "test(web): scope real-router wait to the 2 slow queries; idempotent scrollTo stub"
+git commit -m "test(web): scope real-router wait to the 2 slow queries; document unconditional scrollTo stub"
 ```
 
 ---
