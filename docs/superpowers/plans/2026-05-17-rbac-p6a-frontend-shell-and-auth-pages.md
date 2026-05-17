@@ -396,6 +396,136 @@ git commit -m "feat(web): pathless _app shell layout — structural shell-bleed 
 
 ---
 
+### Task 2b: Real-router shell-boundary test; remove production test seam
+
+**Context (code review of Task 2):** `_app.tsx` shipped a `testChildren?: ReactNode` escape hatch + an `AppShellLayout` named export used only by the test — test-only logic in production layout, and the only non-thin-wrapper route file. Also, `app-shell-structure.test.tsx` proves the shell *renders* but does NOT guard the boundary (nothing fails if a future dev re-nests `/sign-in` etc. under `_app`). Fix all three by switching to the repo's real-router test convention (`routes/-index.test.tsx`): drive the actual `routeTree`, assert the sidebar IS present at `/` and is ABSENT at `/sign-in`. Then `_app.tsx` becomes a pure thin wrapper.
+
+**Files:**
+- Modify: `apps/web/src/routes/_app.tsx` (remove `testChildren` + `AppShellLayout` export → pure wrapper)
+- Rewrite: `apps/web/src/components/app-shell-structure.test.tsx` (real-router boundary test)
+
+- [ ] **Step 1: Rewrite the test as a real-router boundary guard**
+
+Replace the ENTIRE contents of `apps/web/src/components/app-shell-structure.test.tsx` with (this mirrors `apps/web/src/routes/-index.test.tsx`'s harness exactly):
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/lib/auth";
+import { routeTree } from "@/routeTree.gen";
+
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: "test", user: { id: "u1", email: "test@example.com" } } },
+      }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@/lib/api", () => ({
+  fetchMe: vi.fn().mockResolvedValue({
+    user_id: "u1",
+    email: "test@example.com",
+    platform: { role: "super_admin", is_active: true },
+    tenants: [],
+    pending_invite: null,
+  }),
+  fetchSignupStatus: vi.fn().mockResolvedValue({ signups_enabled: false }),
+}));
+
+function renderAt(initial: string) {
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [initial] }),
+  });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <ThemeProvider attribute="class" defaultTheme="system">
+        <AuthProvider>
+          <RouterProvider router={router} />
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>,
+  );
+}
+
+const SIDEBAR = '[data-slot="sidebar"]';
+
+describe("app shell boundary", () => {
+  it("renders the dashboard sidebar on an in-app route (/)", async () => {
+    renderAt("/");
+    await screen.findByRole("heading", { name: /welcome to xtrusio/i });
+    expect(document.querySelector(SIDEBAR)).not.toBeNull();
+  });
+
+  it("does NOT render the sidebar on /sign-in (shell-bleed guard)", async () => {
+    renderAt("/sign-in");
+    expect(await screen.findByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
+    expect(document.querySelector(SIDEBAR)).toBeNull();
+  });
+});
+```
+
+If `apps/web/src/components/ui/sidebar.tsx` does NOT render `data-slot="sidebar"`, inspect it and set `SIDEBAR` to the actual sidebar-specific attribute it does render (e.g. `[data-sidebar="sidebar"]`). Do NOT fall back to a generic `nav`/`aside` selector — the guard must key on a sidebar-specific marker so the "absent on /sign-in" assertion is meaningful.
+
+- [ ] **Step 2: Make `_app.tsx` a pure thin wrapper**
+
+Replace the ENTIRE contents of `apps/web/src/routes/_app.tsx` with:
+
+```tsx
+import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppTopbar } from "@/components/app-topbar";
+
+function AppShell() {
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <AppTopbar />
+        <main className="flex-1 p-6">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
+export const Route = createFileRoute("/_app")({
+  component: AppShell,
+});
+```
+
+No `testChildren`, no `AppShellLayout` export — only `Route` is exported (matches every other route file). `routeTree.gen.ts` is unaffected (the route id `/_app` is unchanged) — do NOT regenerate.
+
+- [ ] **Step 3: Run the suite + typecheck + lint**
+
+```bash
+pnpm --filter @xtrusio/web test
+pnpm exec turbo run typecheck
+pnpm --filter @xtrusio/web lint
+```
+Expected: all green. The two boundary tests pass (sidebar present at `/`, absent at `/sign-in`). Total still 14 files (this rewrites the existing test file, replacing 1 test with 2). Zero new type/lint errors; the `_app.tsx` dual-export is gone.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/web/src/routes/_app.tsx apps/web/src/components/app-shell-structure.test.tsx
+git commit -m "test(web): real-router shell-boundary guard; drop production test seam from _app"
+```
+
+---
+
 ### Task 3: `/sign-up` adopts AuthLayout + fixes ApiError.message
 
 **Files:**
