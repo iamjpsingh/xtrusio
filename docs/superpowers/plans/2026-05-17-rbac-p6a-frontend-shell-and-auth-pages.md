@@ -201,6 +201,59 @@ git commit -m "feat(web): shared AuthLayout extracted from sign-in (no behavior 
 
 ---
 
+### Task 1b: Hermetic frontend test env (unblock the suite)
+
+**Context (discovered during execution):** `apps/web/src/lib/supabase.ts` throws at module-import time unless `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` are set. `vite.config.ts` loads these from the **root `.env`** (`envDir=../..`) for the real app, but vitest does NOT inject them into `import.meta.env`, so any test transitively importing `lib/supabase` crashes (`accept-invite-page`, `users-page`, `tenant-users-page` currently fail at import on a machine without web env). This is pre-existing env fragility, not caused by Task 1, but it blocks TDD for Task 5 and the suite gate. Fix = make the unit-test suite hermetic with non-secret placeholder env (tests never make real Supabase calls — they mock `@/lib/api`/`@/lib/auth`; the placeholders only stop the import-time throw). These are test fixtures, NOT app config (they must be fake), so they do not violate the no-hardcoded-config rule.
+
+**Files:**
+- Modify: `apps/web/vitest.config.ts`
+
+- [ ] **Step 1: Capture the failing state**
+
+Run: `pnpm --filter @xtrusio/web test 2>&1 | tail -20`
+Expected (record it): `accept-invite-page.test.tsx`, `users-page.test.tsx`, `tenant-users-page.test.tsx` fail with `VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set in .env` (import-time). auth-layout + sign-in + others green.
+
+- [ ] **Step 2: Add hermetic test env**
+
+Edit `apps/web/vitest.config.ts` to inject placeholder env into the vitest `test` block (merge into the existing `test: { … }` object, do not remove `globals`/`environment`/`setupFiles`):
+
+```ts
+import { defineConfig, mergeConfig } from "vitest/config";
+import viteConfig from "./vite.config";
+
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      globals: true,
+      environment: "jsdom",
+      setupFiles: ["./src/test-setup.ts"],
+      // Hermetic placeholders: unit tests never make real Supabase calls
+      // (api/auth are mocked); these only prevent lib/supabase.ts from
+      // throwing at import. NOT app config — must be fake/deterministic.
+      env: {
+        VITE_SUPABASE_URL: "http://supabase.test.invalid",
+        VITE_SUPABASE_ANON_KEY: "test-anon-key-not-a-secret",
+      },
+    },
+  }),
+);
+```
+
+- [ ] **Step 3: Verify the suite is now hermetic + green**
+
+Run: `pnpm --filter @xtrusio/web test`
+Expected: the 3 previously-crashing test files now run and PASS; full suite green (prior 29 + auth-layout 2 from Task 1). If any of the 3 now-runnable files has a genuine assertion failure (not the env throw), STOP and report — that would be a real pre-existing test bug, not for this task to fix silently. Then `pnpm exec turbo run typecheck` clean.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/web/vitest.config.ts
+git commit -m "test(web): hermetic vitest env (placeholder VITE_SUPABASE_* so suite runs without machine .env)"
+```
+
+---
+
 ### Task 2: Pathless app-shell layout route — structural shell-bleed fix
 
 **Files:**
