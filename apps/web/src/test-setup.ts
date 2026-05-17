@@ -24,7 +24,10 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
-  window.scrollTo = window.scrollTo ?? (() => {});
+  // jsdom's window.scrollTo is present-but-throwing (not absent like the
+  // stubs above), so it must be overwritten unconditionally — TanStack
+  // Router calls scrollTo on every navigation in the real-router tests.
+  window.scrollTo = () => {};
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView ?? (() => {});
   window.HTMLElement.prototype.hasPointerCapture =
