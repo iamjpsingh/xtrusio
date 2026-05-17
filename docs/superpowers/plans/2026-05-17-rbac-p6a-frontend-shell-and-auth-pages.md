@@ -524,6 +524,61 @@ git add apps/web/src/routes/_app.tsx apps/web/src/components/app-shell-structure
 git commit -m "test(web): real-router shell-boundary guard; drop production test seam from _app"
 ```
 
+**Amendment (post code-review):** real-router tests boot the full tree (~2.6s) and exceed Testing Library's 1000ms default ONLY for the authenticated-`/` heading query. Do NOT add a suite-global `configure({ asyncUtilTimeout })` (it masks regressions across all 33 tests). Instead scope the longer wait to the two slow queries only, and any jsdom stub added to `test-setup.ts` must follow that file's idempotent-conditional convention. This correction is implemented in Task 2c.
+
+---
+
+### Task 2c: Scope the real-router test timeout (revert global, per-query instead)
+
+**Context (code review of Task 2b):** Task 2b added `configure({ asyncUtilTimeout: 3000 })` globally in `test-setup.ts` to deflake real-router tests under parallel load. Measured: only `app-shell-structure` `/` (~2629ms) and `-index.test.tsx` `/` (~2666ms) exceed 1000ms; the other 31 tests are ≤ ~900ms. A global 3× ceiling hides genuine async regressions everywhere and triples failure feedback. Fix: per-`findBy` `{ timeout: 3000 }` on exactly those two heading queries; remove the global; make the `window.scrollTo` stub idempotent like the rest of `test-setup.ts`.
+
+**Files:**
+- Modify: `apps/web/src/test-setup.ts`
+- Modify: `apps/web/src/components/app-shell-structure.test.tsx`
+- Modify: `apps/web/src/routes/-index.test.tsx`
+
+- [ ] **Step 1: Revert the global timeout, keep scrollTo but idempotent**
+
+In `apps/web/src/test-setup.ts`: remove the `configure({ asyncUtilTimeout: 3000 })` call AND its `import { configure } from "@testing-library/react"` (or `@testing-library/dom`) line if now unused. Replace the unconditional `window.scrollTo = () => {};` with the file's established idempotent-conditional pattern, inside the existing `if (typeof window !== "undefined")` block:
+
+```ts
+  window.HTMLElement.prototype.scrollIntoView =
+    window.HTMLElement.prototype.scrollIntoView ?? (() => {});
+  window.scrollTo = window.scrollTo ?? (() => {});
+```
+(Place the `window.scrollTo` line adjacent to the existing `scrollIntoView` stub, matching surrounding style. Keep all other existing stubs unchanged.)
+
+- [ ] **Step 2: Scope the timeout to the two slow queries**
+
+In `apps/web/src/components/app-shell-structure.test.tsx`, the `/` test's heading wait becomes:
+```tsx
+    await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 });
+```
+(Leave the `/sign-in` test's `findByRole(... /welcome back/i ...)` at the default — it measured ~987ms, under 1000ms.)
+
+In `apps/web/src/routes/-index.test.tsx`, its dashboard heading wait becomes:
+```tsx
+    expect(
+      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 }),
+    ).toBeInTheDocument();
+```
+
+- [ ] **Step 3: Verify**
+
+```bash
+pnpm --filter @xtrusio/web test
+pnpm exec turbo run typecheck
+pnpm --filter @xtrusio/web lint
+```
+Expected: all 33 green, no flakes (run the suite twice to be sure the two real-router tests are stable with the scoped 3000ms). No global `configure` remains (`grep -rn "asyncUtilTimeout\|configure(" apps/web/src/test-setup.ts` → empty). Zero new type/lint errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/web/src/test-setup.ts apps/web/src/components/app-shell-structure.test.tsx apps/web/src/routes/-index.test.tsx
+git commit -m "test(web): scope real-router wait to the 2 slow queries; idempotent scrollTo stub"
+```
+
 ---
 
 ### Task 3: `/sign-up` adopts AuthLayout + fixes ApiError.message
