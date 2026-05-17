@@ -1,8 +1,13 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 
-// jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView; Radix UI
-// components need them. Provide minimal mocks here so component tests don't
-// crash on layout-effect APIs.
+// Give async queries (findBy*) a longer window so real-router tests that boot
+// a full TanStack Router + jsdom environment don't time out under CI load.
+configure({ asyncUtilTimeout: 3000 });
+
+// jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView / scrollTo;
+// Radix UI and TanStack Router need them. Provide minimal mocks here so
+// component tests don't crash on layout-effect APIs.
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -24,6 +29,7 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
+  window.scrollTo = () => {};
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView ?? (() => {});
   window.HTMLElement.prototype.hasPointerCapture =
