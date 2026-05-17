@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from xtrusio_api.rbac.catalog import (
     CATALOG,
     SYSTEM_ROLE_PERMISSIONS,
@@ -44,8 +45,5 @@ def test_admin_excludes_roles_manage() -> None:
 def test_permission_is_frozen() -> None:
     p = CATALOG[0]
     assert isinstance(p, Permission)
-    try:
+    with pytest.raises(AttributeError):
         p.key = "x"  # type: ignore[misc]
-        raise AssertionError("Permission should be immutable")
-    except (AttributeError, Exception):
-        pass
