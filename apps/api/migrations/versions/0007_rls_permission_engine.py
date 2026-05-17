@@ -102,11 +102,82 @@ def upgrade() -> None:
     op.execute("REVOKE EXECUTE ON FUNCTION can_manage_role(uuid, uuid) FROM public")
     op.execute("GRANT EXECUTE ON FUNCTION can_manage_role(uuid, uuid) TO authenticated")
 
-    # Helpers + policies: Tasks 2 & 3 add BELOW THIS LINE (same upgrade()).
+    # Supersede the 0003 enum helpers by delegating to the resolvers. Same
+    # signatures → every existing 0003/0004 policy that calls them keeps
+    # working unchanged, now sourced from user_roles/role_permissions (live
+    # tables → instant revocation). Behaviour-preserving (see plan mapping).
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_super_admin(uid uuid) RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$ SELECT has_platform_perm(uid, 'platform.roles.manage') $$
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_tenant_owner_or_admin(uid uuid, tid uuid)
+            RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$ SELECT has_workspace_perm(uid, tid, 'workspace.members.manage') $$
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_tenant_member(uid uuid, tid uuid)
+            RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$
+            SELECT EXISTS (
+                SELECT 1 FROM user_roles
+                WHERE auth_user_id = uid AND workspace_id = tid
+            )
+        $$
+        """
+    )
+
+    # Policies: Task 3 adds BELOW THIS LINE (same upgrade()).
 
 
 def downgrade() -> None:
     # Policy/helper restoration: Tasks 2 & 3 add ABOVE the function drops.
+    # Restore the original 0003 enum-reading helper bodies.
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_super_admin(uid uuid) RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$
+            SELECT EXISTS (
+                SELECT 1 FROM platform_users
+                WHERE id = uid AND role = 'super_admin' AND is_active
+            )
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_tenant_owner_or_admin(uid uuid, tid uuid)
+            RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$
+            SELECT EXISTS (
+                SELECT 1 FROM tenant_memberships
+                WHERE user_id = uid AND tenant_id = tid AND role IN ('owner','admin')
+            )
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION is_tenant_member(uid uuid, tid uuid) RETURNS boolean
+        LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
+        AS $$
+            SELECT EXISTS (
+                SELECT 1 FROM tenant_memberships
+                WHERE user_id = uid AND tenant_id = tid
+            )
+        $$
+        """
+    )
     op.execute("DROP FUNCTION IF EXISTS can_manage_role(uuid, uuid)")
     op.execute("DROP FUNCTION IF EXISTS has_workspace_perm(uuid, uuid, text)")
     op.execute("DROP FUNCTION IF EXISTS has_platform_perm(uuid, text)")
