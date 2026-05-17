@@ -50,7 +50,7 @@ describe("/ Dashboard route", () => {
   it("renders the welcome empty state when authenticated", async () => {
     renderAt("/");
     expect(
-      await screen.findByRole("heading", { name: /welcome to xtrusio/i }),
+      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 }),
     ).toBeInTheDocument();
   });
 });

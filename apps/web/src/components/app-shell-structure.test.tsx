@@ -55,7 +55,7 @@ const SIDEBAR = '[data-slot="sidebar"]';
 describe("app shell boundary", () => {
   it("renders the dashboard sidebar on an in-app route (/)", async () => {
     renderAt("/");
-    await screen.findByRole("heading", { name: /welcome to xtrusio/i });
+    await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 });
     expect(document.querySelector(SIDEBAR)).not.toBeNull();
   });
 

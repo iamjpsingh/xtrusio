@@ -1,9 +1,4 @@
 import "@testing-library/jest-dom/vitest";
-import { configure } from "@testing-library/react";
-
-// Give async queries (findBy*) a longer window so real-router tests that boot
-// a full TanStack Router + jsdom environment don't time out under CI load.
-configure({ asyncUtilTimeout: 3000 });
 
 // jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView / scrollTo;
 // Radix UI and TanStack Router need them. Provide minimal mocks here so
@@ -29,7 +24,7 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
-  window.scrollTo = () => {};
+  window.scrollTo = window.scrollTo ?? (() => {});
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView ?? (() => {});
   window.HTMLElement.prototype.hasPointerCapture =
