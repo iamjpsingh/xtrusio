@@ -149,7 +149,95 @@ def upgrade() -> None:
         "TO authenticated"
     )
 
-    # Seeds + backfill: added in Task 4 BELOW THIS LINE (same upgrade()).
+    # --- seed platform system roles ---------------------------------------
+    # super_admin gets the fixed well-known id the 0006 single-super_admin
+    # partial unique index pins to (see upgrade() index comment). admin keeps
+    # a generated id.
+    op.execute(
+        """
+        INSERT INTO roles (id, scope, workspace_id, key, name, description, is_system)
+        VALUES
+            ('00000000-0000-0000-0000-0000000000a1', 'platform', NULL,
+             'super_admin', 'Super Admin',
+             'Owns platform RBAC; bootstrap-only; exactly one', true)
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO roles (scope, workspace_id, key, name, description, is_system)
+        VALUES
+            ('platform', NULL, 'admin', 'Platform Admin',
+             'Operates the platform; cannot manage roles', true)
+        """
+    )
+
+    # --- seed workspace system roles for every existing tenant ------------
+    op.execute(
+        """
+        INSERT INTO roles (scope, workspace_id, key, name, description, is_system)
+        SELECT 'workspace', t.id, v.key, v.name, v.description, true
+        FROM tenants t
+        CROSS JOIN (VALUES
+            ('owner',     'Owner',     'Governs the workspace; manages roles'),
+            ('admin',     'Admin',     'Operates the workspace; cannot manage roles'),
+            ('editor',    'Editor',    'Content write access'),
+            ('read_only', 'Read Only', 'View-only access')
+        ) AS v(key, name, description)
+        """
+    )
+
+    # --- backfill user_roles from platform_users.role --------------------
+    # Only super_admin/admin map to platform system roles; the legacy platform
+    # 'editor' enum has no system role (spec §2.7) and is intentionally dropped.
+    op.execute(
+        """
+        INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by)
+        SELECT pu.id, r.id, NULL, NULL
+        FROM platform_users pu
+        JOIN roles r ON r.scope='platform' AND r.workspace_id IS NULL
+                    AND r.key = pu.role::text
+        WHERE pu.is_active AND pu.role::text IN ('super_admin','admin')
+        ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING
+        """
+    )
+
+    # --- backfill user_roles from tenant_memberships.role ----------------
+    op.execute(
+        """
+        INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by)
+        SELECT m.user_id, r.id, m.tenant_id, NULL
+        FROM tenant_memberships m
+        JOIN roles r ON r.scope='workspace' AND r.workspace_id = m.tenant_id
+                    AND r.key = m.role::text
+        ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING
+        """
+    )
+
+    # --- invite tables: add nullable role_id, backfill, keep enum --------
+    op.execute(
+        "ALTER TABLE platform_invites ADD COLUMN role_id uuid "
+        "REFERENCES roles(id) ON DELETE SET NULL"
+    )
+    op.execute(
+        """
+        UPDATE platform_invites pi SET role_id = r.id
+        FROM roles r
+        WHERE r.scope='platform' AND r.workspace_id IS NULL
+          AND r.key = pi.role::text AND pi.role_id IS NULL
+        """
+    )
+    op.execute(
+        "ALTER TABLE tenant_invites ADD COLUMN role_id uuid "
+        "REFERENCES roles(id) ON DELETE SET NULL"
+    )
+    op.execute(
+        """
+        UPDATE tenant_invites ti SET role_id = r.id
+        FROM roles r
+        WHERE r.scope='workspace' AND r.workspace_id = ti.tenant_id
+          AND r.key = ti.role::text AND ti.role_id IS NULL
+        """
+    )
 
 
 def downgrade() -> None:
