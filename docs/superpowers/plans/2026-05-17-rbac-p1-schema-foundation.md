@@ -1058,29 +1058,36 @@ async def test_workspace_owner_roles_wired_for_every_tenant() -> None:
 
 
 async def test_unknown_db_permission_is_soft_deprecated_not_deleted() -> None:
-    async with SessionLocal() as s:
-        await s.execute(
-            text(
-                "INSERT INTO permissions (scope,key,category,description) "
-                "VALUES ('platform','platform.zzz.legacy','Legacy','x') "
-                "ON CONFLICT (key) DO NOTHING"
-            )
-        )
-        await s.commit()
-        await reconcile_rbac(s)
-        row = (
+    # try/finally: this writes the SHARED managed DB. If the assertion fails
+    # the synthetic non-catalog row MUST still be removed, else every later
+    # reconcile_rbac run perpetually soft-deprecates it and pollutes the
+    # catalog table for other tests.
+    try:
+        async with SessionLocal() as s:
             await s.execute(
                 text(
-                    "SELECT is_deprecated FROM permissions "
-                    "WHERE key='platform.zzz.legacy'"
+                    "INSERT INTO permissions (scope,key,category,description) "
+                    "VALUES ('platform','platform.zzz.legacy','Legacy','x') "
+                    "ON CONFLICT (key) DO NOTHING"
                 )
             )
-        ).scalar_one_or_none()
-    assert row is True
-    # cleanup the synthetic legacy key (not part of the real catalog)
-    async with SessionLocal() as s:
-        await s.execute(text("DELETE FROM permissions WHERE key='platform.zzz.legacy'"))
-        await s.commit()
+            await s.commit()
+            await reconcile_rbac(s)
+            row = (
+                await s.execute(
+                    text(
+                        "SELECT is_deprecated FROM permissions "
+                        "WHERE key='platform.zzz.legacy'"
+                    )
+                )
+            ).scalar_one_or_none()
+        assert row is True
+    finally:
+        async with SessionLocal() as s:
+            await s.execute(
+                text("DELETE FROM permissions WHERE key='platform.zzz.legacy'")
+            )
+            await s.commit()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1101,7 +1108,10 @@ Create `apps/api/src/xtrusio_api/rbac/reconcile.py`:
 - Ensures every is_system role's role_permissions exactly match
   SYSTEM_ROLE_PERMISSIONS (platform roles + per-workspace roles).
 
-Safe to run repeatedly (startup hook + `make rbac-seed` + tests).
+Safe to run repeatedly (startup hook + `make rbac-seed` + tests — both
+added in Task 6). Atomic: every change is staged in one transaction and
+applied by the single `db.commit()` at the end; any mid-run exception
+leaves the DB untouched (all-or-nothing).
 """
 
 from __future__ import annotations
@@ -1122,6 +1132,11 @@ _WORKSPACE_ROLE_MAP = {
 
 
 async def reconcile_rbac(db: AsyncSession) -> None:
+    # All statements below run in ONE transaction committed once at the end
+    # (atomicity intent — do NOT move/split the commit earlier). Under
+    # Postgres READ COMMITTED + MVCC the DELETE+re-INSERT in _sync_role_perms
+    # is invisible to concurrent readers until this commit, so no reader ever
+    # observes an empty permission set for a system role.
     # 1. upsert catalog -> permissions
     for p in CATALOG:
         await db.execute(
@@ -1181,6 +1196,10 @@ async def _sync_role_perms(
         )
     ).scalars().all()
     for rid in role_ids:
+        # Full reset per role: DELETE then re-INSERT the exact target set, so
+        # removing a key from the catalog also drops it from system roles.
+        # `ON CONFLICT DO NOTHING` is belt-and-suspenders (nothing can collide
+        # right after the same-txn DELETE) — kept for safety on re-entrancy.
         await db.execute(
             text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
         )
