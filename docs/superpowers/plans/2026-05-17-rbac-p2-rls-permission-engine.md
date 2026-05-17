@@ -587,7 +587,140 @@ async def test_audit_log_hidden_from_non_auditor(rls_as: RlsAs) -> None:
         async with SessionLocal() as priv:
             await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
             await priv.commit()
+
+
+# --- direct resolver matrix (closes the P2-Task-1 review coverage gap:
+# has_workspace_perm + can_manage_role + cross-scope isolation + a
+# genuinely-deprecated-but-PRESENT permission). Ephemeral graph, finally-torn.
+
+async def _make_workspace_principal() -> tuple[UUID, UUID]:
+    """Ephemeral @example.com user + tenant + its 4 system workspace roles
+    (perms wired via reconcile) + an 'owner' grant. Caller MUST teardown."""
+    uid, tid = uuid4(), uuid4()
+    async with SessionLocal() as priv:
+        await priv.execute(
+            text(
+                "INSERT INTO auth.users (id, instance_id, aud, role, email, "
+                "encrypted_password, email_confirmed_at, created_at, updated_at) VALUES "
+                "(:id,'00000000-0000-0000-0000-000000000000','authenticated',"
+                "'authenticated',:e,'',now(),now(),now())"
+            ),
+            {"id": str(uid), "e": f"x-{uid.hex[:8]}@example.com"},
+        )
+        await priv.execute(
+            text(
+                "INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:id)"
+            ),
+            {"t": str(tid), "s": f"xt-{tid.hex[:8]}", "n": "P2 resolver probe", "id": str(uid)},
+        )
+        await priv.execute(
+            text(
+                "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+                "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+                "('owner'),('admin'),('editor'),('read_only')) AS v(key)"
+            ),
+            {"t": str(tid)},
+        )
+        await priv.commit()
+    from xtrusio_api.rbac.reconcile import reconcile_rbac
+
+    async with SessionLocal() as s:
+        await reconcile_rbac(s)
+    async with SessionLocal() as priv:
+        await priv.execute(
+            text(
+                "INSERT INTO user_roles (auth_user_id, role_id, workspace_id) "
+                "SELECT :u, r.id, :t FROM roles r "
+                "WHERE r.scope='workspace' AND r.workspace_id=:t AND r.key='owner'"
+            ),
+            {"u": str(uid), "t": str(tid)},
+        )
+        await priv.commit()
+    return uid, tid
+
+
+async def _teardown_workspace_principal(uid: UUID, tid: UUID) -> None:
+    async with SessionLocal() as priv:
+        await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
+        await priv.execute(text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)})
+        await priv.execute(text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)})
+        await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
+        await priv.commit()
+
+
+async def test_has_workspace_perm_and_can_manage_role_direct() -> None:
+    uid, tid = await _make_workspace_principal()
+    try:
+        # owner has every workspace perm incl. roles.manage
+        assert await _scalar(
+            "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')", u=str(uid), t=str(tid)
+        ) is True
+        assert await _scalar(
+            "SELECT has_workspace_perm(:u,:t,'workspace.members.read')", u=str(uid), t=str(tid)
+        ) is True
+        # can_manage_role true for that workspace's 'owner' role row
+        rid = await _scalar(
+            "SELECT id FROM roles WHERE scope='workspace' AND workspace_id=:t AND key='owner'",
+            t=str(tid),
+        )
+        assert await _scalar("SELECT can_manage_role(:u,:r)", u=str(uid), r=str(rid)) is True
+    finally:
+        await _teardown_workspace_principal(uid, tid)
+
+
+async def test_cross_scope_isolation(existing_super_admin: PlatformUser) -> None:
+    uid, tid = await _make_workspace_principal()
+    try:
+        # workspace grant must NOT satisfy a platform check...
+        assert await _scalar(
+            "SELECT has_platform_perm(:u,'platform.roles.manage')", u=str(uid)
+        ) is False
+        # ...and the real platform super_admin must NOT satisfy a workspace
+        # check for an unrelated workspace.
+        assert await _scalar(
+            "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')",
+            u=str(existing_super_admin.id), t=str(tid),
+        ) is False
+    finally:
+        await _teardown_workspace_principal(uid, tid)
+
+
+async def test_genuinely_deprecated_present_permission_does_not_grant() -> None:
+    """A permission row that EXISTS but is_deprecated=true, attached to a role
+    the user holds, must NOT grant (covers the `NOT p.is_deprecated` branch —
+    distinct from the unknown-key path in Task 1's test)."""
+    uid, tid = await _make_workspace_principal()
+    dep_key = f"workspace.zz_dep_{uid.hex[:8]}"
+    try:
+        async with SessionLocal() as priv:
+            await priv.execute(
+                text(
+                    "INSERT INTO permissions (scope,key,category,description,is_deprecated) "
+                    "VALUES ('workspace',:k,'Deprecated','x',true)"
+                ),
+                {"k": dep_key},
+            )
+            await priv.execute(
+                text(
+                    "INSERT INTO role_permissions (role_id, permission_id) "
+                    "SELECT r.id, p.id FROM roles r, permissions p "
+                    "WHERE r.scope='workspace' AND r.workspace_id=:t AND r.key='owner' "
+                    "AND p.key=:k"
+                ),
+                {"t": str(tid), "k": dep_key},
+            )
+            await priv.commit()
+        assert await _scalar(
+            "SELECT has_workspace_perm(:u,:t,:k)", u=str(uid), t=str(tid), k=dep_key
+        ) is False
+    finally:
+        async with SessionLocal() as priv:
+            await priv.execute(text("DELETE FROM permissions WHERE key=:k"), {"k": dep_key})
+            await priv.commit()
+        await _teardown_workspace_principal(uid, tid)
 ```
+
+`UUID` is used by the helper signatures above, so Task 3's append re-introduces the `from uuid import UUID, uuid4` form (Task 1 had trimmed `UUID`); update the import line accordingly when appending.
 
 - [ ] **Step 2: Run — expect FAIL** (`0006`'s `USING(true)` still lets the stranger see all `roles`/`user_roles`; `rbac_audit_log` count works differently). Run `-v`; the new tests fail.
 
