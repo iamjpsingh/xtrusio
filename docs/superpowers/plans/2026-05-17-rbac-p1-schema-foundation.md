@@ -1320,6 +1320,98 @@ git commit -m "feat(rbac): reconcile on startup + make rbac-seed target"
 
 ---
 
+### Task 7: Make the `test_no_super_admin_creation` guard RBAC-precise
+
+**Context (discovered during execution):** `apps/api/tests/test_no_super_admin_creation.py` enforces a real rule (spec §11: no test may CREATE a super_admin). Its old `_FORBIDDEN` regex flagged any bare `'super_admin'` / `role='super_admin'` string. RBAC introduces `'super_admin'` as a legitimate **role-catalog key** that read-only RBAC tests reference in SQL/assertions (`WHERE key='super_admin'`, `SYSTEM_ROLE_PERMISSIONS["super_admin"]`, `SELECT … WHERE role='super_admin'`). Those are reads, not creation, so the guard now false-fails on `tests/rbac/*`. Keep the rule; make the detector match only **creation** signals.
+
+**Files:**
+- Modify: `apps/api/tests/test_no_super_admin_creation.py`
+
+- [ ] **Step 1: Replace the guard with a creation-precise version**
+
+Replace the ENTIRE file contents with:
+
+```python
+"""Guard: no test may CREATE a super_admin (platform_users row, user_roles
+grant, or via the PlatformRole.SUPER_ADMIN enum). The single super_admin is
+created only by the operator via `make create-platform-owner`; tests verify
+against the existing one (read-only `existing_super_admin` fixture).
+
+Under the RBAC model `'super_admin'` is also a legitimate role-catalog *key*
+that read-only RBAC tests reference in SQL/assertions. Those references are
+NOT creation and must not trip this guard, so the guard matches only
+super_admin *creation* signals, never bare references."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+_TESTS_DIR = Path(__file__).parent
+
+# The PlatformRole.SUPER_ADMIN enum is only ever used to set a role when
+# constructing/assigning a platform user — never in a read-only test.
+_ENUM = re.compile(r"PlatformRole\.SUPER_ADMIN")
+
+# A write into platform_users/user_roles, or a PlatformUser(...) construction,
+# associated with super_admin — scanned over the whole file (DOTALL, bounded
+# gap) so multi-line raw SQL is still caught. Pure SELECT/WHERE reads and
+# role-key references do not contain these write tokens, so they don't match.
+_WRITE_WITH_SUPER_ADMIN = re.compile(
+    r"(INSERT\s+INTO\s+(?:platform_users|user_roles)|PlatformUser\s*\()"
+    r"(?:.|\n){0,400}?super_admin",
+    re.IGNORECASE,
+)
+
+# Files allowed to mention the term — matched by path RELATIVE to _TESTS_DIR.
+_ALLOWED = {
+    Path("test_no_super_admin_creation.py"),
+    Path("conftest.py"),
+    Path("_cleanup.py"),
+}
+
+
+def test_no_test_creates_a_super_admin() -> None:
+    offenders: list[str] = []
+    for path in _TESTS_DIR.rglob("*.py"):
+        if path.relative_to(_TESTS_DIR) in _ALLOWED:
+            continue
+        content = path.read_text(encoding="utf-8")
+        if _WRITE_WITH_SUPER_ADMIN.search(content):
+            offenders.append(f"{path.relative_to(_TESTS_DIR)}: writes a super_admin row/grant")
+        for lineno, line in enumerate(content.splitlines(), 1):
+            if _ENUM.search(line):
+                offenders.append(f"{path.relative_to(_TESTS_DIR)}:{lineno}: {line.strip()}")
+    assert not offenders, (
+        "Tests must NEVER create a super_admin (platform_users row, user_roles "
+        "grant, or PlatformRole.SUPER_ADMIN). Use the read-only "
+        "`existing_super_admin` fixture instead.\n" + "\n".join(offenders)
+    )
+```
+
+- [ ] **Step 2: Verify the guard passes AND still bites**
+
+```bash
+uv run --directory apps/api pytest tests/test_no_super_admin_creation.py -v   # PASS (no offenders)
+```
+Then a temporary negative check (do NOT commit this): create `apps/api/tests/rbac/_tmp_probe.py` containing the line `q = "INSERT INTO user_roles (auth_user_id, role_id) VALUES (x, y) -- super_admin"` and re-run the guard — it MUST FAIL listing `_tmp_probe.py`. Delete `_tmp_probe.py` and confirm the guard PASSES again. This proves the guard still detects real creation while passing the legitimate read-only `tests/rbac/*`.
+
+- [ ] **Step 3: Full backend suite + lint/type + commit**
+
+```bash
+uv run --directory apps/api pytest tests/ -v
+```
+Expected: `tests/rbac/*` and `test_no_super_admin_creation.py` green. The pre-existing, unrelated `test_signup.py::test_signup_status_default_false` / `::test_signup_disabled_returns_403` failures (caused by the managed DB's `signups_enabled=true` operator state, reproducible on pristine `origin/main`, NOT introduced by this branch) remain out of scope — note them, do not "fix" them.
+
+```bash
+uv run ruff check apps/api/tests/test_no_super_admin_creation.py
+uv run mypy --strict apps/api/src
+git add apps/api/tests/test_no_super_admin_creation.py
+git commit -m "test(hygiene): make no-super_admin guard match creation only, not RBAC role-key reads"
+```
+
+---
+
 ## Self-Review (completed during planning)
 
 **Spec coverage (P1 row + §3/§4/§6/§7):**
