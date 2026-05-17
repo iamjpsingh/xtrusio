@@ -44,6 +44,7 @@ describe("AcceptInvitePage", () => {
     vi.mocked(postAcceptInvite).mockRejectedValue(new ApiError(403, { detail: "invite_expired" }));
     renderPage();
     await waitFor(() => expect(screen.getByText(/this invitation has expired/i)).toBeTruthy());
+    expect(screen.getByText("Xtrusio")).toBeInTheDocument();
   });
 
   it("redirects to / when already provisioned (409)", async () => {

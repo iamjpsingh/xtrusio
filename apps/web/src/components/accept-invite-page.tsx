@@ -35,7 +35,7 @@ export function AcceptInvitePage() {
     return (
       <AuthLayout title="Accepting your invite" subtitle="One moment while we set up your access">
         <div className="space-y-4 text-center">
-          <p role="alert" className="text-muted-foreground">{errorMessage(code ?? "")}</p>
+          <p role="alert" className="text-sm text-destructive">{errorMessage(code ?? "")}</p>
           <Button
             onClick={() => void supabase.auth.signOut().then(() => navigate({ to: "/sign-in" }))}
           >
