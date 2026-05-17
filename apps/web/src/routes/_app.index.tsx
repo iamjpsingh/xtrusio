@@ -3,7 +3,7 @@ import { LayoutDashboard } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_app/")({
   component: DashboardRoute,
 });
 

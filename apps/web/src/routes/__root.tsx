@@ -1,8 +1,5 @@
-import { Outlet, createRootRoute, useRouterState } from "@tanstack/react-router";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppTopbar } from "@/components/app-topbar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
@@ -14,27 +11,12 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
-  const { location } = useRouterState();
-  const isAuthRoute = location.pathname === "/sign-in";
-
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AuthGuard>
-            {isAuthRoute ? (
-              <Outlet />
-            ) : (
-              <SidebarProvider>
-                <AppSidebar />
-                <SidebarInset>
-                  <AppTopbar />
-                  <main className="flex-1 p-6">
-                    <Outlet />
-                  </main>
-                </SidebarInset>
-              </SidebarProvider>
-            )}
+            <Outlet />
             <Toaster richColors closeButton position="bottom-right" />
           </AuthGuard>
         </AuthProvider>
