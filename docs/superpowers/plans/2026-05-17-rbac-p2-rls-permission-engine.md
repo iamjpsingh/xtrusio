@@ -35,15 +35,24 @@ The catalog (`apps/api/src/xtrusio_api/rbac/catalog.py`, merged) + the `0006` sy
 - workspace `admin` = the 6 `workspace.*` keys EXCEPT `workspace.roles.manage` (so it HAS `workspace.members.manage`).
 - workspace `editor` / `read_only` = exactly `workspace.members.read` + `workspace.settings.read`.
 
-Old `0003` helper semantics and the behaviour-preserving delegation:
+Each `0003` helper becomes **`new_resolver OR original_0003_enum_check`** — a true superset
+(spec §5, corrected). Pure delegation (resolver only) is NOT behaviour-preserving in the P2→P3
+window and was proven to break the pre-RBAC `tests/rls/` suite (passes at `0006`, fails under
+pure `0007`) because P1's backfill is a one-time snapshot and enum-era onboarding/invites keep
+creating `tenant_memberships`/`platform_users` rows with no `user_roles` grant until P3:
 
-| `0003` helper (old meaning) | Old truth set | Delegates to | New truth set (identical) |
+| `0003` helper | Old (`0003`) truth set | Transition-safe body (P2) | Result |
 |---|---|---|---|
-| `is_super_admin(uid)` = `platform_users.role='super_admin' AND is_active` | super_admin only | `has_platform_perm(uid,'platform.roles.manage')` | super_admin only (only role with `roles.manage`) |
-| `is_tenant_owner_or_admin(uid,tid)` = `tenant_memberships.role IN ('owner','admin')` | owner + admin | `has_workspace_perm(uid,tid,'workspace.members.manage')` | owner + workspace `admin` (both have `members.manage`; editor/read_only don't) |
-| `is_tenant_member(uid,tid)` = any `tenant_memberships` row for (uid,tid) | any member | `EXISTS user_roles WHERE auth_user_id=uid AND workspace_id=tid` | any workspace grant for (uid,tid) = any member |
+| `is_super_admin(uid)` | `platform_users.role='super_admin' AND is_active` | `has_platform_perm(uid,'platform.roles.manage')` **OR** that exact enum check | ⊒ old; equal where only enum data; + engine path (instant revoke) |
+| `is_tenant_owner_or_admin(uid,tid)` | `tenant_memberships.role IN ('owner','admin')` | `has_workspace_perm(uid,tid,'workspace.members.manage')` **OR** that exact enum check | ⊒ old (owner+admin still pass via enum) |
+| `is_tenant_member(uid,tid)` | any `tenant_memberships` row for (uid,tid) | `EXISTS user_roles(uid,workspace_id=tid)` **OR** any `tenant_memberships` row | ⊒ old (any member still passes via enum) |
 
-`is_tenant_member` delegates to a membership-existence check (not a perm) because "is a member" must stay true even for a custom workspace role that lacks `members.read`. The first two map to perms exactly preserving the old owner/super_admin/admin behaviour (verified against the seeded sets above). This is the spec §5 "rewrite bodies to delegate, minimize blast radius" decision.
+Because each body is a superset that equals the `0003` truth set wherever only enum data exists,
+**every pre-existing `tests/rls/` test passes unchanged** (they grant via fresh `tenant_memberships`
+rows → the enum disjunct keeps them visible) — that suite is the regression guard. RBAC-granted
+principals additionally resolve via the engine (instant revocation). All bodies stay
+`SECURITY DEFINER` so the legacy `EXISTS` subqueries don't recurse (the `0003` technique). **P3
+retires the legacy disjunct** once `user_roles` is authoritative.
 
 ---
 
@@ -392,15 +401,26 @@ async def test_owner_admin_member_helpers_behaviour_preserved(
 - [ ] **Step 3: Extend `upgrade()` — replace the "Helpers + policies: Tasks 2 & 3" line with the helper rewrites:**
 
 ```python
-    # Supersede the 0003 enum helpers by delegating to the resolvers. Same
-    # signatures → every existing 0003/0004 policy that calls them keeps
-    # working unchanged, now sourced from user_roles/role_permissions (live
-    # tables → instant revocation). Behaviour-preserving (see plan mapping).
+    # Supersede the 0003 enum helpers with TRANSITION-SAFE bodies: the new
+    # resolver OR the original 0003 enum check. Same signatures → every
+    # existing 0003/0004 policy keeps working unchanged. The OR-legacy
+    # disjunct is mandatory (spec §5, corrected): pure delegation strands
+    # enum-era memberships until P3 (proven: 0006 passes, pure-0007 fails) and
+    # would lock newly-onboarded owners out — this superset breaks nothing
+    # mid-flight (§7.5) while giving instant-revoke for RBAC-granted access.
+    # SECURITY DEFINER → the legacy EXISTS subqueries don't recurse (0003
+    # technique). P3 retires the legacy disjunct when user_roles is authoritative.
     op.execute(
         """
         CREATE OR REPLACE FUNCTION is_super_admin(uid uuid) RETURNS boolean
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-        AS $$ SELECT has_platform_perm(uid, 'platform.roles.manage') $$
+        AS $$
+            SELECT has_platform_perm(uid, 'platform.roles.manage')
+                OR EXISTS (
+                    SELECT 1 FROM platform_users
+                    WHERE id = uid AND role = 'super_admin' AND is_active
+                )
+        $$
         """
     )
     op.execute(
@@ -408,7 +428,14 @@ async def test_owner_admin_member_helpers_behaviour_preserved(
         CREATE OR REPLACE FUNCTION is_tenant_owner_or_admin(uid uuid, tid uuid)
             RETURNS boolean
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-        AS $$ SELECT has_workspace_perm(uid, tid, 'workspace.members.manage') $$
+        AS $$
+            SELECT has_workspace_perm(uid, tid, 'workspace.members.manage')
+                OR EXISTS (
+                    SELECT 1 FROM tenant_memberships
+                    WHERE user_id = uid AND tenant_id = tid
+                      AND role IN ('owner','admin')
+                )
+        $$
         """
     )
     op.execute(
@@ -418,9 +445,13 @@ async def test_owner_admin_member_helpers_behaviour_preserved(
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
         AS $$
             SELECT EXISTS (
-                SELECT 1 FROM user_roles
-                WHERE auth_user_id = uid AND workspace_id = tid
-            )
+                    SELECT 1 FROM user_roles
+                    WHERE auth_user_id = uid AND workspace_id = tid
+                )
+                OR EXISTS (
+                    SELECT 1 FROM tenant_memberships
+                    WHERE user_id = uid AND tenant_id = tid
+                )
         $$
         """
     )
@@ -890,4 +921,15 @@ Expected: only the accepted pre-existing baseline; single head `0007`.
 
 **Type/name consistency:** resolver names `has_platform_perm(uuid,text)` / `has_workspace_perm(uuid,uuid,text)` / `can_manage_role(uuid,uuid)` consistent across migration + tests; helper signatures unchanged from `0003` (so `0003`/`0004` policy SQL is untouched — verified against the grep of policies referencing them); `_scalar`/`_scalar_all` test helpers defined before use; downgrade ordering (restore 0006 policies → restore 0003 helper bodies → drop resolvers) prevents dangling references.
 
-**Risk note for the spec-compliance reviewer:** the behaviour-preservation claim hinges on the truth-table mapping (is_super_admin↔platform.roles.manage, is_tenant_owner_or_admin↔workspace.members.manage, is_tenant_member↔membership-existence). The regression guarantee is the pre-existing `tests/rls/` suite (test_tenants_rls, test_tenant_memberships_rls, test_platform_invites_rls, test_tenant_invites_rls, test_platform_settings_rls) staying 100% green after the delegation — the reviewer must run it and confirm zero behavioural drift, and confirm `make migrate-down` restores the exact `0006` policy/helper set.
+**Risk note for the spec-compliance reviewer:** behaviour-preservation rests on the
+**transition-safe `resolver OR 0003-enum` superset** (NOT pure delegation — pure delegation was
+proven to break onboarding/the pre-RBAC RLS suite; spec §5 was corrected 2026-05-17). The hard
+acceptance gate: the **entire pre-existing `tests/rls/` suite (test_tenants_rls,
+test_tenant_memberships_rls, test_platform_invites_rls, test_tenant_invites_rls,
+test_platform_settings_rls) must be 100% GREEN at `0007`** — in particular
+`test_tenants_rls::test_member_sees_only_their_tenants` and
+`test_tenant_invites_rls::test_editor_cannot_see_invites`, which a pure-delegation `0007` turns
+red and a correct transition-safe `0007` keeps green (verify by running the full suite, and
+`make migrate-down` → those + everything still green at `0006`, → `make migrate` → still green at
+`0007`). The reviewer must also confirm `make migrate-down` restores the exact `0006`
+policy/helper set and that P3-retires-legacy-disjunct is recorded as a carry-forward.
