@@ -636,14 +636,15 @@ def upgrade() -> None:
     op.execute("CREATE INDEX user_roles_role_id_idx ON user_roles(role_id)")
 
     # Single-super_admin DB invariant: at most one grant of the platform
-    # super_admin system role. Partial unique index over a constant.
+    # super_admin system role. A partial-index predicate must be immutable and
+    # reference only the indexed table (Postgres forbids subqueries in index
+    # predicates), so the super_admin system role is seeded (Task 4) with a
+    # fixed well-known id and the predicate pins to that constant. Mirrors the
+    # `id = 1` singleton pattern in migration 0002 — a structural sentinel,
+    # not env-varying config.
     op.execute(
-        """
-        CREATE UNIQUE INDEX user_roles_one_super_admin ON user_roles ((true))
-        WHERE role_id IN (
-            SELECT id FROM roles WHERE scope='platform' AND key='super_admin'
-        )
-        """
+        "CREATE UNIQUE INDEX user_roles_one_super_admin ON user_roles ((true)) "
+        "WHERE role_id = '00000000-0000-0000-0000-0000000000a1'"
     )
 
     # --- rbac_audit_log ----------------------------------------------------
@@ -837,12 +838,22 @@ In `0006_rbac_foundation.py`, replace the `# Seeds + backfill:` comment line in 
 
 ```python
     # --- seed platform system roles ---------------------------------------
+    # super_admin gets the fixed well-known id the 0006 single-super_admin
+    # partial unique index pins to (see upgrade() index comment). admin keeps
+    # a generated id.
+    op.execute(
+        """
+        INSERT INTO roles (id, scope, workspace_id, key, name, description, is_system)
+        VALUES
+            ('00000000-0000-0000-0000-0000000000a1', 'platform', NULL,
+             'super_admin', 'Super Admin',
+             'Owns platform RBAC; bootstrap-only; exactly one', true)
+        """
+    )
     op.execute(
         """
         INSERT INTO roles (scope, workspace_id, key, name, description, is_system)
         VALUES
-            ('platform', NULL, 'super_admin', 'Super Admin',
-             'Owns platform RBAC; bootstrap-only; exactly one', true),
             ('platform', NULL, 'admin', 'Platform Admin',
              'Operates the platform; cannot manage roles', true)
         """
