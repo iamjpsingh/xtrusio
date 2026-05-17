@@ -97,6 +97,11 @@ async def test_super_admin_role_has_the_fixed_well_known_id() -> None:
 
 async def test_each_existing_tenant_has_4_workspace_system_roles() -> None:
     async with SessionLocal() as s:
+        n_tenants = (
+            await s.execute(text("SELECT count(*) FROM tenants"))
+        ).scalar_one()
+        if n_tenants == 0:
+            pytest.skip("no tenants present; per-tenant seed assertion is vacuous")
         bad = (
             await s.execute(
                 text(
@@ -137,6 +142,11 @@ async def test_existing_super_admin_backfilled_to_user_roles() -> None:
 
 async def test_membership_enum_backfilled_to_user_roles() -> None:
     async with SessionLocal() as s:
+        n_memberships = (
+            await s.execute(text("SELECT count(*) FROM tenant_memberships"))
+        ).scalar_one()
+        if n_memberships == 0:
+            pytest.skip("no tenant_memberships present; backfill assertion is vacuous")
         missing = (
             await s.execute(
                 text(
@@ -153,8 +163,17 @@ async def test_membership_enum_backfilled_to_user_roles() -> None:
 
 
 async def test_invites_have_role_id_backfilled() -> None:
+    # The platform 'editor' enum is deliberately NOT a system role (spec §2.7/§7),
+    # so a legacy platform_invites row with role='editor' correctly keeps
+    # role_id NULL — exclude it from the orphan assertion. Every tenant-invite
+    # role (admin/editor/read_only) maps to a workspace system role, so the
+    # tenant_invites orphan check stays strict.
+    checks = (
+        ("platform_invites", "role IS NOT NULL AND role <> 'editor' AND role_id IS NULL"),
+        ("tenant_invites", "role IS NOT NULL AND role_id IS NULL"),
+    )
     async with SessionLocal() as s:
-        for tbl in ("platform_invites", "tenant_invites"):
+        for tbl, orphan_pred in checks:
             col = (
                 await s.execute(
                     text(
@@ -166,11 +185,9 @@ async def test_invites_have_role_id_backfilled() -> None:
             ).scalar_one_or_none()
             assert col == 1, f"{tbl}.role_id missing"
             orphans = (
-                await s.execute(
-                    text(f"SELECT count(*) FROM {tbl} WHERE role IS NOT NULL AND role_id IS NULL")
-                )
+                await s.execute(text(f"SELECT count(*) FROM {tbl} WHERE {orphan_pred}"))
             ).scalar_one()
-            assert orphans == 0, f"{tbl} has rows with role but no role_id"
+            assert orphans == 0, f"{tbl} has rows with a mappable role but no role_id"
 
 
 async def test_interim_rls_policies_present() -> None:
