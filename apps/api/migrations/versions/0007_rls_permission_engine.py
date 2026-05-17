@@ -157,11 +157,102 @@ def upgrade() -> None:
         """
     )
 
-    # Policies: Task 3 adds BELOW THIS LINE (same upgrade()).
+    # Replace 0006's permissive interim RBAC-table SELECT policies with
+    # resolver-gated ones (removes the cross-tenant user_roles over-read the
+    # P1 review flagged). Writes still go through the owner backend conn
+    # (RLS does not constrain it) — no write policies needed for authenticated.
+    op.execute("DROP POLICY IF EXISTS permissions_authenticated_read ON permissions")
+    op.execute("DROP POLICY IF EXISTS roles_authenticated_read ON roles")
+    op.execute(
+        "DROP POLICY IF EXISTS role_permissions_authenticated_read ON role_permissions"
+    )
+    op.execute("DROP POLICY IF EXISTS user_roles_authenticated_read ON user_roles")
+    op.execute("DROP POLICY IF EXISTS rbac_audit_log_no_read ON rbac_audit_log")
+
+    # permissions: the catalog is non-sensitive key metadata; any authenticated
+    # user may read it (unchanged from 0006 intent).
+    op.execute(
+        "CREATE POLICY permissions_read ON permissions "
+        "FOR SELECT TO authenticated USING (true)"
+    )
+    # roles: visible to whoever may manage roles in that scope/workspace.
+    op.execute(
+        """
+        CREATE POLICY roles_read ON roles
+            FOR SELECT TO authenticated
+            USING (
+                (scope = 'platform'
+                    AND has_platform_perm(auth.uid(), 'platform.roles.manage'))
+             OR (scope = 'workspace'
+                    AND has_workspace_perm(auth.uid(), workspace_id, 'workspace.roles.manage'))
+            )
+        """
+    )
+    # role_permissions: gated via can_manage_role (SECURITY DEFINER → no
+    # roles-RLS recursion in the subquery).
+    op.execute(
+        "CREATE POLICY role_permissions_read ON role_permissions "
+        "FOR SELECT TO authenticated USING (can_manage_role(auth.uid(), role_id))"
+    )
+    # user_roles: a user always sees their OWN grants; RBAC managers see grants
+    # in the scope/workspace they manage. (No blanket read.)
+    op.execute(
+        """
+        CREATE POLICY user_roles_read ON user_roles
+            FOR SELECT TO authenticated
+            USING (
+                auth_user_id = auth.uid()
+             OR (workspace_id IS NULL
+                    AND has_platform_perm(auth.uid(), 'platform.roles.manage'))
+             OR (workspace_id IS NOT NULL
+                    AND has_workspace_perm(auth.uid(), workspace_id, 'workspace.roles.manage'))
+            )
+        """
+    )
+    # rbac_audit_log: scope-appropriate audit-read permission.
+    op.execute(
+        """
+        CREATE POLICY rbac_audit_log_read ON rbac_audit_log
+            FOR SELECT TO authenticated
+            USING (
+                (scope = 'platform'
+                    AND has_platform_perm(auth.uid(), 'platform.audit.read'))
+             OR (scope = 'workspace'
+                    AND has_workspace_perm(auth.uid(), workspace_id, 'workspace.audit.read'))
+            )
+        """
+    )
 
 
 def downgrade() -> None:
     # Policy/helper restoration: Tasks 2 & 3 add ABOVE the function drops.
+    # Restore 0006's interim RBAC-table policies verbatim.
+    op.execute("DROP POLICY IF EXISTS rbac_audit_log_read ON rbac_audit_log")
+    op.execute("DROP POLICY IF EXISTS user_roles_read ON user_roles")
+    op.execute("DROP POLICY IF EXISTS role_permissions_read ON role_permissions")
+    op.execute("DROP POLICY IF EXISTS roles_read ON roles")
+    op.execute("DROP POLICY IF EXISTS permissions_read ON permissions")
+    op.execute(
+        "CREATE POLICY permissions_authenticated_read ON permissions "
+        "FOR SELECT TO authenticated USING (true)"
+    )
+    op.execute(
+        "CREATE POLICY roles_authenticated_read ON roles "
+        "FOR SELECT TO authenticated USING (true)"
+    )
+    op.execute(
+        "CREATE POLICY role_permissions_authenticated_read ON role_permissions "
+        "FOR SELECT TO authenticated USING (true)"
+    )
+    op.execute(
+        "CREATE POLICY user_roles_authenticated_read ON user_roles "
+        "FOR SELECT TO authenticated USING (true)"
+    )
+    op.execute(
+        "CREATE POLICY rbac_audit_log_no_read ON rbac_audit_log "
+        "FOR SELECT TO authenticated USING (false)"
+    )
+
     # Restore the original 0003 enum-reading helper bodies.
     op.execute(
         """
