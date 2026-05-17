@@ -1,184 +1,60 @@
-# HANDOFF — Plan 2 (Settings, Signup, Invites)
+# HANDOFF — RBAC + RLS Re-architecture
 
-**Written:** 2026-05-15
-**Branch:** `plan-2-settings-signup-invites` (cut from `main`)
-**Status:** Plan 2A merged to `main`. Plan 2B in progress: Tasks 1–6 done, Task 7 next.
+**Written:** 2026-05-17 (EOD)
+**Status:** P1 **merged to main**. P6a **open as PR #2**. P2 (RLS engine) **code-complete on branch `rbac-p2-rls-engine`, Tasks 1–3 done + two-stage-reviewed; Task 4 gate + final whole-branch review + finishing NOT yet done.** P3–P5, P6b, P6c not started.
 
-This document lets a fresh session on any machine resume exactly where we stopped. Read it top to bottom before doing anything.
-
----
-
-## ⏩ RESUME HERE — updated 2026-05-16 (EOD) — NEXT: RBAC re-architecture
-
-**Everything is MERGED + PUSHED to `origin/main` at `51ff4ca`.** Local `main == origin/main`, tree clean, nothing pending. The feature branch `plan-2-settings-signup-invites` (tip `8ef1b62`) is fully contained in that merge; **the user will delete it themselves** (`git branch -D plan-2-settings-signup-invites` [+ `git push origin --delete …`]).
-
-`main` now contains: Plan 2A, CORS fix, config externalization, sign-in client-signup link, **Plan 2B (full invites system)**, crash-proof test-data hygiene, single-super_admin bootstrap, scalable platform-invite revoke.
-
-**Test baseline (on `main`):** backend **`82 passed`**, frontend **`29 passed`** (deterministic); ruff/tsc/eslint clean; mypy `--strict src` = 1 pre-existing `jose` baseline only; Alembic single head **`0005`**. Managed DB pristine: exactly 1 `platform_users` row (`admin@xtrusio.com` super_admin), `platform_settings` untouched, zero `@example.com` rows.
-
-### ▶ TOMORROW START HERE: full RBAC re-architecture (user will give the complete plan)
-
-The user is pivoting to a **foundational re-architecture**. Do NOT implement anything yet — the user will deliver the **entire plan tomorrow**. We were mid-`superpowers:brainstorming` (architecture explored, NOT finalized — `i don't need copy [those products] as-is, will discuss later`).
-
-**Confirmed direction (locked decisions so far — but the user's full plan tomorrow is authoritative):**
-- **Platform and Client(workspace) are two separate domains — never mixed.** One shared Supabase `auth.users` login; **two fully separate authz domains** (platform identities/roles vs per-workspace members/roles), in their own tables, never referencing each other beyond the login id; an account belongs to one domain.
-- **Dynamic RBAC** (modeled on Superset/Supabase/Vercel, NOT copied): **code-defined permission catalog** (`scope.resource.action` keys, scope ∈ {platform, workspace}; devs add keys as features ship) + **roles as data** (super_admin manages platform roles; a client owner manages roles **within their own workspace**) + `role_permissions` + `user_roles` (multiple roles, effective = union). Immutable seed/system roles; custom roles on top.
-- **DB-enforced RLS**: `SECURITY DEFINER` `has_platform_perm(uid,key)` / `has_workspace_perm(uid,tid,key)` resolve user→roles→permissions; **RLS policies AND backend call the same fns** (reads tables → instant revocation). This SUPERSEDES the enum `is_super_admin`/`is_tenant_owner_or_admin` helpers and the `platform_users.role`/`tenant_memberships.role` enum columns (migration must seed system roles from existing enum rows → `user_roles`, then retire the enum columns; nothing breaks mid-migration).
-- **Proposed 6-phase decomposition (NOT yet approved):** P1 schema+migration · P2 RLS engine · P3 backend `require_permission()` replaces enum checks (`/me` returns effective perms) · P4 platform role/perm mgmt + platform settings area · P5 per-workspace role/perm mgmt + workspace settings area · P6 frontend: two physically separate shells (platform vs workspace), permission-driven nav.
-- Confirmed nav-visibility matrix (will be permission-driven): unauth/onboarding/pending-invite → standalone pages only; platform super_admin/admin → Dashboard+Platform Users+Clients+Settings; platform editor → Dashboard+Clients; tenant owner/admin → Dashboard+workspace+their client's Users; tenant editor/read_only → Dashboard+workspace (view).
-
-**Folded INTO the RBAC project (deferred until then — do NOT fix piecemeal):**
-- 🐞 **Shell-bleed bug** (real, confirmed): `apps/web/src/routes/__root.tsx` only exempts `/sign-in` from the app shell — so `/sign-up`, `/onboarding`, `/accept-invite` wrongly render inside the dashboard sidebar. Fix = clean route-tree split (a pathless app-shell layout route wrapping ONLY in-app pages; auth/onboarding/accept-invite outside it, no sidebar by structure). Lands in P6.
-- **Signup-status rename** (user-approved scope): move the public status check out of `/api/platform/...` → public `GET /api/signup-status` meaning "is public CLIENT signup open"; relabel `/settings` toggle + disabled message + sign-in link to **"Public client signup"**; keep the super_admin-managed setting at `/api/platform/settings` (semantic = public-client-signup-enabled). NOTE: there is NO "platform signup" concept — platform users are bootstrap/invite only.
-- Auth-page polish: `/sign-up`, `/onboarding`, `/accept-invite` must match the `/sign-in` shadcn dark-card design (shared `AuthLayout`, consistent spacing, shadcn+Tailwind only, no raw CSS).
-
-**Still USER-DRIVEN, never run:** 2B-15 invite e2e smoke + Plan 2A Task 18 signup-chain smoke (need real `.env`, `make dev`/OrbStack, bootstrapped owner, real email inboxes).
-
-**Commit convention (user pref):** NO `Co-Authored-By` trailer — commits use only the user's git identity. See memory `feedback_no_claude_coauthor`, `feedback_test_data_hygiene`, `feedback_no_hardcoded_config`, `project_apierror_message_debt`.
-
-**Known deferred debt:** sign-up-page/onboarding-page still misuse `ApiError.message` → generic error text (memory `project_apierror_message_debt`) — fix when those pages are reworked in P6.
-
-**Next action on resume:** ask the user for their full RBAC plan; reconcile with the locked decisions above; continue `superpowers:brainstorming` → spec → `writing-plans` → phased `subagent-driven-development`. Do NOT start coding before the user delivers the plan and a spec is approved.
-
-### Plan-2B execution gotchas (the plan file is STALE — apply these every task)
-
-1. **Migration is `0004`** (done) — plan file says 0003; that slot was the RLS fix.
-2. **`mock_supabase_admin` conftest fixture must be extended per service module.** It currently patches `create_client` for `signup`, `platform_invites`, `tenant_invites`. **Task 7's `invite_acceptance` service does NOT call `create_client` (no email send on accept) so no extension needed there — but any future service that does must add its own `monkeypatch.setattr("xtrusio_api.services.<mod>.create_client", _factory)` line.**
-3. **Every route/integration test file:** `pytestmark = pytest.mark.asyncio(loop_scope="session")` (plan uses bare `pytest.mark.asyncio` — wrong, breaks shared asyncpg loop).
-4. **Service Supabase calls:** `except TimeoutError` AND `except Exception` both `await db.rollback()` then raise `EmailProviderUnavailableError`; timeout from `cfg.supabase_timeout_sec` (one `cfg = get_settings()` per fn, NO hardcoded `_SUPABASE_TIMEOUT`).
-5. **`InviteAlreadyAcceptedError` is its own class** (don't reuse `InvitePendingError` for the accepted-guard). Idempotent revoke: missing→204 no-op, already-revoked→204 no-op.
-6. **Response schemas hit by `Model.model_validate(<ORM obj>)` need `model_config = ConfigDict(from_attributes=True)`.** Already added to `PlatformInviteResponse` + `TenantInviteResponse` in `schemas/invite.py`. `AcceptInviteResult` is validated from a **dict**, so it does NOT need it.
-7. **Backend uses the owner DB connection — RLS does NOT constrain it.** Any list/revoke/read endpoint must enforce authz explicitly in the service (see `tenant_invites._require_owner_or_admin`), never "rely on RLS".
-8. **asyncpg rejects multi-statement `text()`** — split semicolon-joined SQL (esp. test cleanup) into separate `db.execute(text(...))` calls.
-9. **Posting `role:"owner"`/`"super_admin"` is NOT a 422** — those are valid enum members; `can_invite()`/DB-CHECK reject them → expect 403 `forbidden_role`.
-10. **DELETE routes:** `@router.delete(..., status_code=204, response_class=Response)` returning `Response(status_code=204)` (FastAPI 204+body assertion). Established convention.
-11. **Accepted lint/type baseline:** ruff clean; mypy = 1 `jose` stub error in `core/auth.py`. Zero NEW. Keep any `# type: ignore` scoped to the exact code (e.g. `[call-arg]` on supabase `data=` kwarg).
-
-### Task 7 specifics (was interrupted mid-prep — DO THIS FIRST when resuming)
-Before dispatching 2B-7, verify these (the dispatch was interrupted at exactly this check):
-- `apps/api/tests/conftest.py` `make_jwt` `_factory`: **HANDOFF gotcha #7 says it already accepts `user_metadata`** — confirm its current signature/payload; if it already injects `user_metadata`, the plan's Step 1 conftest edit is a no-op/duplicate — don't double-add.
-- `apps/api/src/xtrusio_api/core/auth.py` `AuthIdentity` + `require_authenticated`: plan adds a `user_metadata: dict[str,Any]` field. **`grep -rn 'AuthIdentity('` first** — confirm `require_authenticated` is the ONLY constructor (so adding a required field is safe); if anything else constructs it, update those too. `core/auth.py` is shared by every authenticated route (incl. tenant_invites) — a broken `AuthIdentity` breaks the whole suite.
-- Task 7 also needs the test-file gotchas #3 (loop_scope) and #8 (split cleanup SQL); plan's `test_invite_acceptance.py` uses bare `pytest.mark.asyncio` and semicolon-joined cleanup DELETEs — correct both in the dispatch.
-- `AcceptInviteResult.model_validate(result_dict)` is fine without `from_attributes` (dict input).
-
-### Still-open user-driven items (cannot be delegated)
-- **Plan 2A Task 18 manual smoke** — never run. Needs user: restart `make dev` (note: `.env` must exist with the managed-Supabase values + the externalized keys API_HOST/API_PORT/WEB_DEV_PORT/WEB_APP_URL/CORS_ALLOW_ORIGINS/JWKS_*/SUPABASE_TIMEOUT_SEC; see `.env.example`), bootstrap a platform owner (`make create-platform-owner email=… password=…`), then click through.
-- **Plan 2B Task 2B-15 manual smoke** — at the very end.
-
-### Memory note
-A new feedback memory was added: `feedback_no_hardcoded_config.md` ([[feedback-no-hardcoded-config]]) — all env-varying values come from `.env`; no literals/Field-defaults in py/Makefile/vite.
+Read top to bottom before doing anything.
 
 ---
 
-## 1. Where we are
+## ⏩ RESUME HERE — 2026-05-17 EOD
 
-| Item | State |
-|---|---|
-| Branch | `plan-2-settings-signup-invites`, 20 commits ahead of `main`, working tree clean |
-| HEAD | `872a2d6 feat(web): /settings — signups_enabled toggle (super_admin)` |
-| Backend tests | 48 passing (`uv run --directory apps/api pytest tests/`) |
-| Frontend tests | 20 passing (`pnpm --filter @xtrusio/web test`) |
-| Alembic head | `0003_fix_rls_recursion_and_grants` |
-| Plan 2A | Tasks 1–17 done. **Task 18 (manual browser smoke) NOT done.** |
-| Plan 2B | Not started (15 tasks). |
+### PR / branch state
 
-The two plan files are the source of truth for the remaining work:
-- `docs/superpowers/plans/2026-05-14-plan-2a-public-signup-chain.md` (Task 18 = manual smoke)
-- `docs/superpowers/plans/2026-05-14-plan-2b-platform-and-tenant-invites.md` (all 15 tasks)
-- Spec: `docs/superpowers/specs/2026-05-14-platform-settings-signup-and-invites-design.md`
+| Branch | Phase | State |
+|---|---|---|
+| `main` @ `6be1e2f` | — | P1 merged here (`gh pr 1` MERGED). P6a/P2 NOT in main. |
+| `p6a-frontend-shell-auth-pages` | **P6a** frontend shell/auth | **PR #2 OPEN** — ready to merge (independent of P1/P2). Body: `docs/superpowers/PR-rbac-p6a-body.md`. |
+| `rbac-p2-rls-engine` (tip `5ec2940`) | **P2** RLS engine | Tasks 1–3 done + reviewed. **NOT yet gated/PR'd.** |
 
-## 2. First thing on the new machine: recreate `.env`
+`gh` is installed **and authenticated** (token has `repo`). PR #1 was merged via `gh pr merge 1 --merge` (the user's earlier "merged PR #1" hadn't actually gone through on GitHub — always verify `gh pr view <n> --json state` before acting on a "merged" claim).
 
-`.env` and `.env.local` are **gitignored — they do NOT travel with the branch.** Nothing works without `.env`. On the new machine:
+### NEXT actions (in order) — tomorrow
 
-```bash
-cp .env.example .env
-# then fill in the 6 real values from the managed Supabase project:
-#   DATABASE_URL              (Direct connection, port 5432, scheme postgresql+asyncpg://)
-#   SUPABASE_URL              (https://<ref>.supabase.co)
-#   SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY
-#   SUPABASE_JWKS_URL         (https://<ref>.supabase.co/auth/v1/.well-known/jwks.json)
-#   VITE_SUPABASE_URL         (= SUPABASE_URL)
-#   VITE_SUPABASE_ANON_KEY    (= SUPABASE_ANON_KEY)
-```
+1. **P2 Task 4 — whole-phase gate** (verification only, NO code; plan `docs/superpowers/plans/2026-05-17-rbac-p2-rls-permission-engine.md` Task 4). Was about to run when we stopped. Run: full reversibility round-trip (`alembic` 0007→0006→0007, single head 0007); `tests/rls/` = **9/9 pre-RBAC at 0006**, **full suite all-green at 0007** incl. the Task-2 canaries `test_member_sees_only_their_tenants` + `test_editor_cannot_see_invites` + all `test_permission_engine_rls.py`; full backend suite green except ONLY the 2 documented env-failures; ruff/mypy baseline only; one Alembic head `0007`.
+2. **Final whole-branch P2 review** (opus, like P1/P6a) → then `superpowers:finishing-a-development-branch` → push + `gh pr create` for `rbac-p2-rls-engine` (independent PR; document the P2→P3 carry-forward + the live-DB reconcile gotcha below).
+3. **Merge P6a (PR #2)** and the P2 PR whenever ready (both independent of each other; P2 depends on merged P1, which is done).
+4. **P3** — write its plan only after P2 merges (P3 builds on merged P2). P3 scope (spec §10): backend `require_permission()` replaces enum checks; `/me` returns effective perms; onboarding/invite-acceptance **write `user_roles`**; audit writes; privilege-escalation guard + single-super_admin invariant enforcement. **P3 MUST also rewrite the 3 `0007` helper bodies from the transition-safe `resolver OR 0003-enum` form to PURE resolver, and only then may drop the enum columns** (spec §5, recorded). Then P4/P5 (RBAC admin APIs+UIs + audit viewers), P6b (pinned `/me` effective-perms TS contract + legacy adapter + permission-driven nav + two shells + workspace switcher), P6c (RBAC admin UIs).
 
-Auth is **asymmetric JWKS, not HS256**. There is no `SUPABASE_JWT_SECRET` anymore.
+Process unchanged: `writing-plans` → `subagent-driven-development` (subagent/task → spec-compliance review → code-quality review → fix loop → commit) → final whole-branch review → `finishing-a-development-branch`. The two-stage review + controller verification caught **a spec-level flaw in P2** (see below) and 8+ other plan/code bugs — keep it; do NOT trust an implementer's "no regression" claim without independently reproducing at the true baseline.
 
-Then:
+### ⚠️ P2 spec correction (important — already applied)
 
-```bash
-make install            # pnpm + uv deps
-make db-up              # local Valkey (OrbStack — no host ports, uses xtrusio-valkey.orb.local DNS)
-make migrate            # applies 0000→0003 to the Supabase project in DATABASE_URL
-make create-platform-owner email=you@x.com password='YourStrong-Pass1'   # if not already bootstrapped
-```
+Spec §5 originally said pure delegation (`is_super_admin → has_platform_perm(...)` alone). That is **NOT behaviour-preserving** in the P2→P3 window: P1's backfill is a one-time snapshot; enum-era onboarding/invite code keeps writing `tenant_memberships`/`platform_users` with no `user_roles` grant until P3, so pure delegation **locks newly-onboarded owners out** (proven: pre-RBAC `tests/rls/` passes at DB `0006`, fails at pure-`0007`). **Corrected (committed in `db2247f`):** each `0003` helper body is now `new_resolver OR original_0003_enum_check` — a true superset, breaks nothing mid-flight (honors spec §7.5), instant-revoke for RBAC-granted access. Spec §5 + the P2 plan document this and the **P3-retires-the-legacy-disjunct** obligation. The pre-RBAC `tests/rls/` suite is the regression guard (must stay green at `0007`).
 
-Requires Docker (OrbStack) running.
+### ⚠️ Live-shared-DB gotcha (operational — from iterating one migration across 3 subagent tasks)
 
-## 3. How to resume the work
+Migration `0007` was extended by Tasks 1→2→3. On the shared managed DB, each `make migrate` after the first was a **no-op** (alembic already had `0007` stamped), so the live DB sat at a "transitional 0007" missing later-added statements until an explicit `migrate-down`→`migrate`. The Task-3 implementer did a **one-time reconcile via the migration's own SQL** (no alembic-state hand-edit); the managed DB is now at the **correct final `0007`** and cycles cleanly both ways (re-verified by spec+code review). **If any other environment/DB is stuck at an intermediate `0007`: `make migrate-down` to `0006` BEFORE pulling this branch's latest, then `make migrate`.** Tomorrow's Task-4 gate re-proves the round-trip from the current (correct) state.
 
-We were executing via the **`superpowers:subagent-driven-development`** skill: one fresh subagent per plan task, then a spec-compliance review subagent, then a code-quality review subagent, fix loop, commit, next task. Continue that pattern.
+### Pre-existing `main` debt (NOT from P1/P6a/P2 — flagged, unchanged)
 
-Immediate next step is the user-driven smoke test (Plan 2A Task 18) — cannot be delegated:
+- Managed DB `platform_settings.signups_enabled=true` (operator/smoke leftover) → `tests/routes/test_signup.py::test_signup_status_default_false` + `::test_signup_disabled_returns_403` fail on `main` itself. Reset the setting or accept as known.
+- 4 ruff `I001` (`scripts/bootstrap.py`, `services/{signup,platform_invites,tenant_invites}.py`); 1 `jose` mypy in `core/auth.py`; 5 frontend `react-refresh` warnings — all byte-identical to `main`. Zero NEW from any phase.
 
-1. `make dev`
-2. http://localhost:5173/sign-in → log in as the bootstrapped super_admin
-3. `/settings` → toggle "Self-serve signups" ON
-4. Incognito → http://localhost:5173/sign-up → sign up with a real email
-5. Click the Supabase confirmation email link
-6. Should redirect to `/onboarding` → enter a workspace name → submit → land on `/`
+### P2 deferred Minors (non-blocking, optional follow-up)
 
-If smoke passes (or user says skip): start Plan 2B Task 1.
+Code review APPROVED Tasks 1–3. Optional: extract an `_ephemeral_auth_user()` test helper (≈30 dup lines in `test_permission_engine_rls.py`); a one-line comment on the `downgrade()` resolver-drop vs helper-revert asymmetry; module-top `reconcile_rbac` import. None block.
 
-## 4. Gotchas discovered during Plan 2A (save hours — read this)
+### Conventions in force
 
-1. **Alembic renumber for Plan 2B.** The plan file says Plan 2B Task 1 creates `0003_platform_and_tenant_invites.py`. That slot is taken (RLS fix). Plan 2B's first migration must be **`0004_platform_and_tenant_invites.py` with `down_revision = "0003"`**.
+`docs/superpowers/ENGINEERING_PRINCIPLES.md`. NO `Co-Authored-By` trailer. Migrations pure raw SQL, reversible, single Alembic head. SECURITY DEFINER resolvers (`has_platform_perm`/`has_workspace_perm`/`can_manage_role`) are the single source of truth — P3 backend `require_permission()` calls the SAME fns. Test-data hygiene: never create/grant a `super_admin` (P1 single-super_admin partial unique index + `test_no_super_admin_creation` guard forbid it); ephemeral `@example.com` + FK-safe `finally` teardown; positive super_admin via the read-only `existing_super_admin` fixture. `make check` is the merge contract (red ONLY due to the pre-existing `signups_enabled` + ruff baseline above).
 
-2. **RLS recursion (already fixed in `0003`).** Plan 1B's `platform_users_super_admin_all` policy was `FOR ALL` with a `USING` clause that selected from `platform_users` → infinite recursion under any non-superuser role. Migration `0003` introduced `SECURITY DEFINER` helpers `is_super_admin(uid)`, `is_tenant_owner_or_admin(uid, tid)`, `is_tenant_member(uid, tid)` and rewrote the policies to call them. **Any new Plan 2B RLS policy that needs a super_admin / owner / member check MUST call these helper functions, never inline an `EXISTS … FROM platform_users/tenant_memberships` (that reintroduces recursion).**
+### Still USER-DRIVEN, never agent-run
 
-3. **`authenticated` role needs explicit DML grants.** Alembic-created tables don't inherit Supabase's auto-grants. Migration `0003` granted SELECT/INSERT/UPDATE/DELETE to `authenticated` on the four existing tables. **Plan 2B's migration must `GRANT … TO authenticated` on `platform_invites` and `tenant_invites` too**, or RLS tests fail with "permission denied for table" before the policy is even evaluated.
+Browser/e2e smokes needing real `.env` + `make dev`/OrbStack + real inboxes.
 
-4. **TanStack Router `autoCodeSplitting: true`** (in `apps/web/vite.config.ts`) strips every non-`Route` export from files in `src/routes/`. Tests can't import a page component from a route file. **Pattern: route file is a thin wrapper (`createFileRoute(...)({ component: X })` importing `X` from `@/components/<name>-page.tsx`); the real component + its test live in `src/components/`.** Established in Tasks 15–17 (`sign-up-page.tsx`, `onboarding-page.tsx`, `settings-page.tsx`). Plan 2B's `/accept-invite`, `/users`, `/clients/$slug/users` must follow it.
+---
 
-5. **pytest asyncio marker.** Use `pytestmark = pytest.mark.asyncio(loop_scope="session")` — asyncpg connections via `SessionLocal` are bound to one event loop across the suite; function-scoped loops raise `InternalClientError: got result for unknown protocol state`.
+## Durable record
 
-6. **Supabase Admin is mocked in tests** via the `mock_supabase_admin` fixture in `apps/api/tests/conftest.py` (monkeypatches `xtrusio_api.services.signup.create_client`). For Plan 2B services that call `create_client` from a *different* module, the fixture's monkeypatch target string must be updated/extended to patch that module's `create_client` too.
-
-7. **JWKS test plumbing.** `apps/api/tests/conftest.py` has a session-scoped RSA keypair, an autouse `_patch_jwks` fixture (clears `_JWKS_CACHE` + monkeypatches `xtrusio_api.core.auth._fetch_jwks`), and `make_jwt(sub=..., user_metadata=...)` minting RS256 tokens. Plan 2B's invite-acceptance tests use `make_jwt(..., user_metadata={"platform_invite_id": ...})` etc. — the kwarg already exists.
-
-8. **Reusable auth dep.** `apps/api/src/xtrusio_api/core/auth.py` exports `AuthIdentity` + `require_authenticated` (JWT-valid but no platform_users row required). Plan 2B `/invites/accept` and tenant-invite routes should use this, not `get_current_user`.
-
-9. **Accepted pre-existing baseline (do NOT try to "fix" these):** mypy reports 2 `python-jose` missing-stub errors (`core/auth.py`, `tests/conftest.py`); ruff reports 1 `I001` in `scripts/bootstrap.py`. All three predate this branch. New code must add zero new mypy/ruff errors on top of that baseline.
-
-10. **Missing shadcn primitives** get installed with `pnpm dlx shadcn@latest add <name>` from `apps/web/` (this is how `switch.tsx` landed in Task 17). Commit the generated `ui/<name>.tsx` alongside the page that needs it.
-
-11. **`PageHeader` prop shape** is `{ title: string; description: string; action?: ReactNode }` — `description` is required.
-
-## 5. Engineering rules still in force
-
-`docs/superpowers/ENGINEERING_PRINCIPLES.md`. TS-only frontend, no hardcoded colors, no demo data, `mypy --strict`, no `any`, 500 LoC/file ceiling, every list endpoint paginated, every tenant-scoped table has RLS + RLS tests, every external call has a timeout, every migration reversible. `make check` is the merge contract.
-
-## 6. Plan 2B task list (15 tasks, see plan file for full code)
-
-1. Migration `0004` — `platform_invites` + `tenant_invites` + RLS (+ grants, see gotcha 3)
-2. SQLAlchemy models for both invite tables
-3. `can_invite()` pure rule helper + TDD
-4. Invite pydantic schemas
-5. Platform invites service + route (super_admin CRUD)
-6. Tenant invites service + route (owner/admin CRUD, role-of-inviter rules)
-7. `/invites/accept` generic acceptance endpoint
-8. `/me` extended to populate `pending_invite` from JWT metadata + DB row
-9. RLS tests for `platform_invites` + `tenant_invites`
-10. Integration test: owner invites admin → accept → `/me` reflects role
-11. Frontend api.ts invite wrappers
-12. `/accept-invite` page (auto-POST on mount)
-13. `/users` expanded — platform invite UI
-14. `/clients/$slug/users` — tenant invite UI
-15. Manual smoke (combined)
-
-After Plan 2B: final whole-branch code review, then `superpowers:finishing-a-development-branch` to merge/PR.
-
-## 7. Memory
-
-Persistent memory lives at `~/.claude/projects/-Users-jpsingh-Developer-Project-xtrusio/memory/` (machine-local, does NOT travel — it's outside the repo). Key entries: project overview, engineering rules. On a new machine the memory dir starts empty; this HANDOFF.md + the spec/plan files are the durable record.
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (§5 corrected). Plans: `docs/superpowers/plans/2026-05-17-rbac-p1-schema-foundation.md`, `…-p6a-frontend-shell-and-auth-pages.md`, `…-p2-rls-permission-engine.md`. PR bodies: `docs/superpowers/PR-rbac-p1-body.md`, `…-p6a-body.md`. Persistent memory at `~/.claude/projects/-Users-jpsingh-Developer-Project-xtrusio/memory/` is machine-local (does NOT travel) — this HANDOFF + spec + plans are the cross-machine record.
