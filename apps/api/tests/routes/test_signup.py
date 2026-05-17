@@ -1,4 +1,4 @@
-"""Tests for /api/signup and /api/platform/signup-status."""
+"""Tests for /api/signup and /api/signup-status."""
 
 from __future__ import annotations
 
