@@ -66,25 +66,33 @@ async def test_workspace_owner_roles_wired_for_every_tenant() -> None:
 
 
 async def test_unknown_db_permission_is_soft_deprecated_not_deleted() -> None:
-    async with SessionLocal() as s:
-        await s.execute(
-            text(
-                "INSERT INTO permissions (scope,key,category,description) "
-                "VALUES ('platform','platform.zzz.legacy','Legacy','x') "
-                "ON CONFLICT (key) DO NOTHING"
-            )
-        )
-        await s.commit()
-        await reconcile_rbac(s)
-        row = (
+    # try/finally: this writes the SHARED managed DB. If the assertion fails
+    # the synthetic non-catalog row MUST still be removed, else every later
+    # reconcile_rbac run perpetually soft-deprecates it and pollutes the
+    # catalog table for other tests.
+    try:
+        async with SessionLocal() as s:
             await s.execute(
                 text(
-                    "SELECT is_deprecated FROM permissions "
-                    "WHERE key='platform.zzz.legacy'"
+                    "INSERT INTO permissions (scope,key,category,description) "
+                    "VALUES ('platform','platform.zzz.legacy','Legacy','x') "
+                    "ON CONFLICT (key) DO NOTHING"
                 )
             )
-        ).scalar_one_or_none()
-    assert row is True
-    async with SessionLocal() as s:
-        await s.execute(text("DELETE FROM permissions WHERE key='platform.zzz.legacy'"))
-        await s.commit()
+            await s.commit()
+            await reconcile_rbac(s)
+            row = (
+                await s.execute(
+                    text(
+                        "SELECT is_deprecated FROM permissions "
+                        "WHERE key='platform.zzz.legacy'"
+                    )
+                )
+            ).scalar_one_or_none()
+        assert row is True
+    finally:
+        async with SessionLocal() as s:
+            await s.execute(
+                text("DELETE FROM permissions WHERE key='platform.zzz.legacy'")
+            )
+            await s.commit()

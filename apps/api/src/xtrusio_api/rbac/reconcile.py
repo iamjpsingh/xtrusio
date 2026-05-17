@@ -6,7 +6,10 @@
 - Ensures every is_system role's role_permissions exactly match
   SYSTEM_ROLE_PERMISSIONS (platform roles + per-workspace roles).
 
-Safe to run repeatedly (startup hook + `make rbac-seed` + tests).
+Safe to run repeatedly (startup hook + `make rbac-seed` + tests — both
+added in Task 6). Atomic: every change is staged in one transaction and
+applied by the single `db.commit()` at the end; any mid-run exception
+leaves the DB untouched (all-or-nothing).
 """
 
 from __future__ import annotations
@@ -27,6 +30,11 @@ _WORKSPACE_ROLE_MAP = {
 
 
 async def reconcile_rbac(db: AsyncSession) -> None:
+    # All statements below run in ONE transaction committed once at the end
+    # (atomicity intent — do NOT move/split the commit earlier). Under
+    # Postgres READ COMMITTED + MVCC the DELETE+re-INSERT in _sync_role_perms
+    # is invisible to concurrent readers until this commit, so no reader ever
+    # observes an empty permission set for a system role.
     # 1. upsert catalog -> permissions
     for p in CATALOG:
         await db.execute(
@@ -86,6 +94,10 @@ async def _sync_role_perms(
         )
     ).scalars().all()
     for rid in role_ids:
+        # Full reset per role: DELETE then re-INSERT the exact target set, so
+        # removing a key from the catalog also drops it from system roles.
+        # `ON CONFLICT DO NOTHING` is belt-and-suspenders (nothing can collide
+        # right after the same-txn DELETE) — kept for safety on re-entrancy.
         await db.execute(
             text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
         )
