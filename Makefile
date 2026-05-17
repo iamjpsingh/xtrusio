@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test test-clean check clean migrate migrate-down create-platform-owner
+.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test test-clean check clean migrate migrate-down rbac-seed create-platform-owner
 
 # API bind host/port come from .env (no hardcoded values in the Makefile).
 # Surgically extract just these two keys; never source the whole .env (its
@@ -22,6 +22,7 @@ help:
 	@echo "  make dev             - bring up Valkey + API + web in parallel"
 	@echo "  make migrate         - apply Alembic migrations to the database in DATABASE_URL"
 	@echo "  make migrate-down    - revert the most recent migration"
+	@echo "  make rbac-seed       - project the permission catalog into the DB"
 	@echo "  make create-platform-owner email=you@x.com password='...' [force=true]"
 	@echo "  make lint            - lint Python + JS"
 	@echo "  make format          - format Python + JS"
@@ -104,6 +105,9 @@ check: lint typecheck test
 
 migrate:
 	uv run --directory apps/api alembic upgrade head
+
+rbac-seed:
+	uv run --directory apps/api python -m xtrusio_api.rbac
 
 migrate-down:
 	uv run --directory apps/api alembic downgrade -1

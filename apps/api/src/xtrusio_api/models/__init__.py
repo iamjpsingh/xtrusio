@@ -3,11 +3,13 @@
 from .platform_invite import PlatformInvite, PlatformInviteOut
 from .platform_settings import PlatformSettings, PlatformSettingsOut
 from .platform_user import PlatformRole, PlatformUser, PlatformUserOut
+from .rbac import Permission, RbacAuditLog, Role, RolePermission, UserRole
 from .tenant import Tenant, TenantIn, TenantOut
 from .tenant_invite import TenantInvite, TenantInviteOut
 from .tenant_membership import TenantMembership, TenantMembershipOut, TenantRole
 
 __all__ = [
+    "Permission",
     "PlatformInvite",
     "PlatformInviteOut",
     "PlatformRole",
@@ -15,6 +17,9 @@ __all__ = [
     "PlatformSettingsOut",
     "PlatformUser",
     "PlatformUserOut",
+    "RbacAuditLog",
+    "Role",
+    "RolePermission",
     "Tenant",
     "TenantIn",
     "TenantInvite",
@@ -23,4 +28,5 @@ __all__ = [
     "TenantMembership",
     "TenantMembershipOut",
     "TenantRole",
+    "UserRole",
 ]
