@@ -54,4 +54,14 @@ describe("AcceptInvitePage", () => {
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/" }));
     expect(screen.queryByText(/couldn.t accept invitation/i)).toBeNull();
   });
+
+  it("renders the accept-invite states inside the shared AuthLayout (Xtrusio wordmark)", async () => {
+    vi.mocked(postAcceptInvite).mockResolvedValue({
+      kind: "platform",
+      role: "admin",
+      tenant_id: null,
+    });
+    renderPage();
+    expect(await screen.findByText("Xtrusio")).toBeInTheDocument();
+  });
 });

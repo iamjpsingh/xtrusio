@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { errorCode, postAcceptInvite } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
+import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 
@@ -32,24 +33,21 @@ export function AcceptInvitePage() {
   const code = m.error ? errorCode(m.error) : null;
   if (m.error && code !== "already_provisioned") {
     return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md space-y-4 text-center">
-          <h1 className="text-2xl font-semibold text-foreground">
-            Couldn&rsquo;t accept invitation
-          </h1>
-          <p className="text-muted-foreground">{errorMessage(code ?? "")}</p>
+      <AuthLayout title="Accepting your invite" subtitle="One moment while we set up your access">
+        <div className="space-y-4 text-center">
+          <p role="alert" className="text-muted-foreground">{errorMessage(code ?? "")}</p>
           <Button
             onClick={() => void supabase.auth.signOut().then(() => navigate({ to: "/sign-in" }))}
           >
             Sign out
           </Button>
         </div>
-      </main>
+      </AuthLayout>
     );
   }
   return (
-    <main className="grid min-h-screen place-items-center text-muted-foreground">
-      Completing your invitation…
-    </main>
+    <AuthLayout title="Accepting your invite" subtitle="One moment while we set up your access">
+      <p className="text-center text-muted-foreground">Completing your invitation…</p>
+    </AuthLayout>
   );
 }
