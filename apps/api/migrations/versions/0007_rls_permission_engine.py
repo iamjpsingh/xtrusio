@@ -102,15 +102,26 @@ def upgrade() -> None:
     op.execute("REVOKE EXECUTE ON FUNCTION can_manage_role(uuid, uuid) FROM public")
     op.execute("GRANT EXECUTE ON FUNCTION can_manage_role(uuid, uuid) TO authenticated")
 
-    # Supersede the 0003 enum helpers by delegating to the resolvers. Same
-    # signatures → every existing 0003/0004 policy that calls them keeps
-    # working unchanged, now sourced from user_roles/role_permissions (live
-    # tables → instant revocation). Behaviour-preserving (see plan mapping).
+    # Supersede the 0003 enum helpers with TRANSITION-SAFE bodies: the new
+    # resolver OR the original 0003 enum check. Same signatures → every
+    # existing 0003/0004 policy keeps working unchanged. The OR-legacy
+    # disjunct is mandatory (spec §5, corrected): pure delegation strands
+    # enum-era memberships until P3 (proven: 0006 passes, pure-0007 fails) and
+    # would lock newly-onboarded owners out — this superset breaks nothing
+    # mid-flight (§7.5) while giving instant-revoke for RBAC-granted access.
+    # SECURITY DEFINER → the legacy EXISTS subqueries don't recurse (0003
+    # technique). P3 retires the legacy disjunct when user_roles is authoritative.
     op.execute(
         """
         CREATE OR REPLACE FUNCTION is_super_admin(uid uuid) RETURNS boolean
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-        AS $$ SELECT has_platform_perm(uid, 'platform.roles.manage') $$
+        AS $$
+            SELECT has_platform_perm(uid, 'platform.roles.manage')
+                OR EXISTS (
+                    SELECT 1 FROM platform_users
+                    WHERE id = uid AND role = 'super_admin' AND is_active
+                )
+        $$
         """
     )
     op.execute(
@@ -118,7 +129,14 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION is_tenant_owner_or_admin(uid uuid, tid uuid)
             RETURNS boolean
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
-        AS $$ SELECT has_workspace_perm(uid, tid, 'workspace.members.manage') $$
+        AS $$
+            SELECT has_workspace_perm(uid, tid, 'workspace.members.manage')
+                OR EXISTS (
+                    SELECT 1 FROM tenant_memberships
+                    WHERE user_id = uid AND tenant_id = tid
+                      AND role IN ('owner','admin')
+                )
+        $$
         """
     )
     op.execute(
@@ -128,9 +146,13 @@ def upgrade() -> None:
         LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public
         AS $$
             SELECT EXISTS (
-                SELECT 1 FROM user_roles
-                WHERE auth_user_id = uid AND workspace_id = tid
-            )
+                    SELECT 1 FROM user_roles
+                    WHERE auth_user_id = uid AND workspace_id = tid
+                )
+                OR EXISTS (
+                    SELECT 1 FROM tenant_memberships
+                    WHERE user_id = uid AND tenant_id = tid
+                )
         $$
         """
     )
