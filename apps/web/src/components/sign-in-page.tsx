@@ -43,7 +43,7 @@ export function SignInPage() {
           <>
             New organization?{" "}
             <Link to="/sign-up" className="font-medium text-foreground underline-offset-4 hover:underline">
-              Client sign up
+              Public client signup
             </Link>
           </>
         ) : undefined

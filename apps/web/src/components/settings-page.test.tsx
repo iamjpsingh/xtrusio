@@ -36,6 +36,12 @@ describe("SettingsPage", () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => screen.getByRole("switch"));
+    expect(screen.getByText("Public client signup")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Allow anyone to create a new client workspace via the public sign-up page.",
+      ),
+    ).toBeTruthy();
     await user.click(screen.getByRole("switch"));
     await waitFor(() =>
       expect(putPlatformSettings).toHaveBeenCalledWith(true),
