@@ -875,6 +875,79 @@ git commit -m "feat(db): 0007 perm-aware RBAC-table RLS policies (replace 0006 i
 
 ---
 
+### Task 3b: Supersede the stale P1 interim-policy test
+
+**Context (found by the Task-4 gate):** P1 added `tests/rbac/test_migration_0006.py::test_interim_rls_policies_present` asserting the 5 *interim* policy names (`permissions_authenticated_read`, `roles_authenticated_read`, `role_permissions_authenticated_read`, `user_roles_authenticated_read`, `rbac_audit_log_no_read`) exist. P2 Task 3 **deliberately drops those and creates perm-aware replacements** (`permissions_read`, `roles_read`, `role_permissions_read`, `user_roles_read`, `rbac_audit_log_read`). So at head `0007` that P1 test fails — it guards a posture P2 intentionally retired. Fix: remove the obsolete assertion from the P1 migration-0006 test file and add a stronger forward assertion to P2's own test file (this is not "deleting a failing test" — the asserted state no longer exists by design, and we add better coverage for the new reality).
+
+**Files:**
+- Modify: `apps/api/tests/rbac/test_migration_0006.py` (remove `test_interim_rls_policies_present`)
+- Modify: `apps/api/tests/rls/test_permission_engine_rls.py` (add `test_rbac_table_perm_aware_policies_present`)
+
+- [ ] **Step 1: Remove the obsolete test**
+
+Delete the entire `async def test_interim_rls_policies_present() -> None:` function (and its docstring/body) from `apps/api/tests/rbac/test_migration_0006.py`. Remove any import that becomes unused as a result (only if genuinely unused — `SessionLocal`/`text` are used by other tests in that file, so likely no import change).
+
+- [ ] **Step 2: Add the forward assertion to P2's test file**
+
+Append to `apps/api/tests/rls/test_permission_engine_rls.py`:
+
+```python
+async def test_rbac_table_perm_aware_policies_present() -> None:
+    """P2 replaced 0006's interim `*_authenticated_read`/`rbac_audit_log_no_read`
+    policies with perm-aware ones. Assert the new posture and that the interim
+    names are gone (the inverse of the retired P1 hardening test)."""
+    new_names = {
+        "permissions_read",
+        "roles_read",
+        "role_permissions_read",
+        "user_roles_read",
+        "rbac_audit_log_read",
+    }
+    old_names = {
+        "permissions_authenticated_read",
+        "roles_authenticated_read",
+        "role_permissions_authenticated_read",
+        "user_roles_authenticated_read",
+        "rbac_audit_log_no_read",
+    }
+    async with SessionLocal() as s:
+        rows = dict(
+            (
+                await s.execute(
+                    text(
+                        "SELECT policyname, qual FROM pg_policies "
+                        "WHERE schemaname='public' AND tablename IN "
+                        "('permissions','roles','role_permissions','user_roles',"
+                        "'rbac_audit_log')"
+                    )
+                )
+            ).all()
+        )
+    present = set(rows)
+    assert new_names <= present, f"missing perm-aware policies: {new_names - present}"
+    assert not (old_names & present), f"interim policies not retired: {old_names & present}"
+    # audit-log is now permission-gated, NOT a blanket USING(false).
+    aud = (rows.get("rbac_audit_log_read") or "").lower()
+    assert "audit.read" in aud and "false" != aud.strip()
+```
+
+- [ ] **Step 3: Verify**
+
+```bash
+uv run --directory apps/api pytest tests/rls/test_permission_engine_rls.py tests/rbac/test_migration_0006.py -v
+uv run --directory apps/api pytest tests/ -q
+```
+Expected: `test_rbac_table_perm_aware_policies_present` passes; `test_migration_0006.py` green (its other 0006-durable assertions unaffected by 0007); FULL backend suite green EXCEPT only the 2 documented `test_signup` env-failures (zero others — in particular the previously-failing `test_interim_rls_policies_present` is gone). `uv run ruff check apps/api` + `uv run mypy --strict apps/api/src` zero new vs baseline.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/api/tests/rbac/test_migration_0006.py apps/api/tests/rls/test_permission_engine_rls.py
+git commit -m "test(rbac): supersede stale P1 interim-policy test with P2 perm-aware-policy assertion"
+```
+
+---
+
 ### Task 4: Whole-phase gate
 
 **Files:** none (verification only)
