@@ -14,6 +14,8 @@ leaves the DB untouched (all-or-nothing).
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +100,42 @@ async def _sync_role_perms(
         # removing a key from the catalog also drops it from system roles.
         # `ON CONFLICT DO NOTHING` is belt-and-suspenders (nothing can collide
         # right after the same-txn DELETE) — kept for safety on re-entrancy.
+        await db.execute(
+            text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
+        )
+        for pid in perm_ids:
+            await db.execute(
+                text(
+                    "INSERT INTO role_permissions (role_id,permission_id) "
+                    "VALUES (:rid,:pid) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": rid, "pid": pid},
+            )
+
+
+async def wire_workspace_role_perms(db: AsyncSession, *, workspace_id: UUID) -> None:
+    """Set role_permissions for ONE workspace's 4 is_system roles to match
+    SYSTEM_ROLE_PERMISSIONS. SCOPED to this workspace (no all-tenants sweep)
+    and does NOT commit — the caller owns the transaction. Idempotent
+    (DELETE+re-INSERT for just this workspace's role ids)."""
+    for role_key, map_key in _WORKSPACE_ROLE_MAP.items():
+        rid = (
+            await db.execute(
+                text(
+                    "SELECT id FROM roles WHERE scope='workspace' "
+                    "AND workspace_id=:w AND key=:k AND is_system"
+                ),
+                {"w": workspace_id, "k": role_key},
+            )
+        ).scalar_one_or_none()
+        if rid is None:
+            continue
+        perm_ids = (
+            await db.execute(
+                text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
+                {"keys": list(SYSTEM_ROLE_PERMISSIONS[map_key])},
+            )
+        ).scalars().all()
         await db.execute(
             text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
         )

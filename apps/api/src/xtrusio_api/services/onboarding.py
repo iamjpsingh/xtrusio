@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.tenant import Tenant
 from ..models.tenant_membership import TenantMembership, TenantRole
 from ..rbac.grants import grant_role
-from ..rbac.reconcile import reconcile_rbac
+from ..rbac.reconcile import wire_workspace_role_perms
 from .slug import slugify, unique_slug_from_taken
 
 
@@ -42,28 +42,30 @@ async def create_tenant_with_owner(
 
     db.add(TenantMembership(tenant_id=tenant.id, user_id=user_id, role=TenantRole.OWNER))
     await db.flush()
-    # Seed this brand-new workspace's 4 system roles (migration 0006 only seeded
-    # tenants existing at migrate time, so this tenant has no `roles` rows yet).
-    # reconcile_rbac only wires role_permissions for EXISTING role rows, so the
-    # role rows must be inserted first; reconcile_rbac then wires their perms.
+    # 0006 only seeded workspace system roles for tenants existing at migrate
+    # time; a brand-new tenant has none. Seed its 4 system roles (0006-friendly
+    # name/description), wire ONLY this workspace's role_permissions, grant the
+    # owner — all in the SINGLE commit below (atomic: no partial-failure window,
+    # no global all-tenants reconcile on the request path).
     await db.execute(
         text(
             "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
-            "SELECT 'workspace', :tid, v.key, v.key, '', true FROM (VALUES "
-            "('owner'),('admin'),('editor'),('read_only')) AS v(key) "
-            "ON CONFLICT DO NOTHING"
+            "SELECT 'workspace', :tid, v.key, v.name, v.description, true FROM (VALUES "
+            "('owner','Owner','Governs the workspace; manages roles'),"
+            "('admin','Admin','Operates the workspace; cannot manage roles'),"
+            "('editor','Editor','Content write access'),"
+            "('read_only','Read Only','View-only access')"
+            ") AS v(key, name, description) ON CONFLICT DO NOTHING"
         ),
         {"tid": tenant.id},
     )
     await db.flush()
-    # reconcile_rbac commits once at its end — this single commit atomically
-    # persists the tenant, the OWNER membership, and the new role rows together
-    # (tenant + membership stay inseparable). It is idempotent and re-wires
-    # role_permissions for every workspace system role, including these new ones.
-    await reconcile_rbac(db)
-    # Now the 'owner' role row exists with its perms; grant it to the owner.
+    await wire_workspace_role_perms(db, workspace_id=tenant.id)
     await grant_role(
-        db, auth_user_id=user_id, scope="workspace", key="owner",
+        db,
+        auth_user_id=user_id,
+        scope="workspace",
+        key="owner",
         workspace_id=tenant.id,
     )
     await db.commit()
