@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from typing import Annotated
+from uuid import UUID
 
 import typer
 from sqlalchemy import delete as sa_delete
@@ -21,6 +22,7 @@ from supabase import create_client
 from ..core.config import get_settings
 from ..core.db import SessionLocal
 from ..models.platform_user import PlatformRole, PlatformUser
+from ..rbac.grants import grant_role
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -69,6 +71,15 @@ async def _run(*, email: str, password: str, force: bool) -> None:
             )
             for uid in existing_ids:
                 await db.execute(sa_text("DELETE FROM auth.users WHERE id = :id"), {"id": uid})
+            # Also clear the stale user_roles grant — the partial unique index
+            # user_roles_one_super_admin permits at most ONE row with the fixed
+            # super_admin role id, so the new grant would otherwise collide.
+            await db.execute(
+                sa_text(
+                    "DELETE FROM user_roles "
+                    "WHERE role_id='00000000-0000-0000-0000-0000000000a1'"
+                )
+            )
             await db.commit()
 
         result = sb.auth.admin.create_user(
@@ -85,6 +96,18 @@ async def _run(*, email: str, password: str, force: bool) -> None:
                 role=PlatformRole.SUPER_ADMIN,
                 is_active=True,
             )
+        )
+        await db.commit()
+
+        # Also write the equivalent user_roles grant so the super_admin
+        # resolves via has_*_perm. Committed AFTER the platform_users row
+        # exists; ON CONFLICT DO NOTHING + the force-path delete above keep
+        # this idempotent and within the single-super_admin invariant.
+        await grant_role(
+            db,
+            auth_user_id=UUID(str(result.user.id)),
+            scope="platform",
+            key="super_admin",
         )
         await db.commit()
 
