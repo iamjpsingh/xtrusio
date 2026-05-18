@@ -517,12 +517,44 @@ git commit -m "feat(bootstrap): also grant platform super_admin user_role; force
 
 ```python
 async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
-    """Idempotently project enum-era principals into user_roles (the same
-    mapping migration 0006 did, repeatable for rows created since). Platform:
-    active super_admin/admin → platform system role. Workspace: every
-    tenant_memberships row → that workspace's matching system role. ON CONFLICT
-    DO NOTHING (the UNIQUE(auth_user_id, role_id, workspace_id)). One commit.
+    """Idempotently make every enum-era principal resolvable via the resolvers.
+
+    Step A — close the role-ROW gap: any tenant onboarded AFTER 0006 but
+    BEFORE P3a-Task-2 deployed has no workspace system role rows (the global
+    reconcile_rbac only wires perms for EXISTING role rows, never creates per-
+    tenant rows). Seed the 4 workspace system roles for EVERY tenant (0006
+    shape + friendly name/desc, ON CONFLICT DO NOTHING) and wire each such
+    workspace's role_permissions via the scoped wire_workspace_role_perms.
+    Step B — project enum principals → user_roles (the 0006 mapping, repeatable
+    for rows created since): active platform super_admin/admin → platform
+    system role; every tenant_memberships row → that workspace's matching
+    system role. ON CONFLICT DO NOTHING (UNIQUE(auth_user_id,role_id,
+    workspace_id)). Without Step A the Step-B workspace JOIN would silently
+    skip such tenants (and live _accept_tenant would LookupError). This runs
+    at startup / `make rbac-seed` only (NOT a request path), so the per-tenant
+    wiring loop's O(tenants) cost is acceptable. One commit.
     """
+    # Step A: seed any missing per-tenant workspace system role ROWS.
+    await db.execute(
+        text(
+            "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+            "SELECT 'workspace', t.id, v.key, v.name, v.description, true "
+            "FROM tenants t CROSS JOIN (VALUES "
+            "('owner','Owner','Governs the workspace; manages roles'),"
+            "('admin','Admin','Operates the workspace; cannot manage roles'),"
+            "('editor','Editor','Content write access'),"
+            "('read_only','Read Only','View-only access')"
+            ") AS v(key, name, description) ON CONFLICT DO NOTHING"
+        )
+    )
+    # raw db.execute() runs on the connection immediately within this txn, so
+    # the seeded rows are visible to the following SELECT — no flush needed.
+    tenant_ids = (
+        await db.execute(text("SELECT id FROM tenants"))
+    ).scalars().all()
+    for tid in tenant_ids:
+        await wire_workspace_role_perms(db, workspace_id=tid)
+    # Step B: project enum principals → user_roles.
     await db.execute(
         text(
             "INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by) "
@@ -544,7 +576,9 @@ async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
     )
     await db.commit()
 ```
-(Use the existing `from sqlalchemy import text` import already in the file.)
+(`text` is already imported; `wire_workspace_role_perms` is defined in this same file by Task 2. Step A's role-seed runs before the wiring loop and the Step-B JOINs, so a post-0006/pre-Task-2 tenant is fully healed — closing the `_accept_tenant` `LookupError` gap the Task-3 review surfaced.)
+
+Add to the Task-5 test (`test_reconcile_user_roles.py`): a case that creates an ephemeral tenant with a `tenant_memberships(role='admin')` row but NO workspace `roles` rows (simulating post-0006/pre-Task-2), calls `reconcile_user_roles_from_enums`, and asserts (a) the tenant now has its 4 workspace system roles, (b) a `user_roles` workspace `admin` grant exists for that member, (c) idempotent on a 2nd call. FK-safe `finally`; no super_admin.
 
 - [ ] **Step 5: Wire startup + Make.** In `apps/api/src/xtrusio_api/main.py`, in the existing startup hook that calls `reconcile_rbac`, add a call to `reconcile_user_roles_from_enums` immediately after (same best-effort try/except that wraps the existing reconcile — boot must not fail). In `Makefile`, extend the existing `rbac-seed` recipe to also run the enum→user_roles reconcile (e.g. a second `python -m` line or extend the reconcile entrypoint to call both). Match the existing `rbac-seed`/`python -m xtrusio_api.rbac` mechanism — read the Makefile + `apps/api/src/xtrusio_api/rbac/__main__.py` and have `__main__` call both `reconcile_rbac` and `reconcile_user_roles_from_enums`.
 
