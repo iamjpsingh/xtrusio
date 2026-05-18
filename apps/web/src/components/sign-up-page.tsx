@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { fetchSignupStatus, postSignup } from "@/lib/api";
+import { errorCode, fetchSignupStatus, postSignup } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
+import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,23 +23,20 @@ export function SignUpPage() {
   if (isLoading) return null;
   if (status && !status.signups_enabled) {
     return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md text-center text-muted-foreground">
-          Signups are currently disabled. Contact your administrator for an invitation.
-        </div>
-      </main>
+      <AuthLayout title="Sign-up unavailable" subtitle="Public client signup is currently turned off">
+        <p className="text-center text-sm text-muted-foreground">
+          Contact your administrator for an invitation.
+        </p>
+      </AuthLayout>
     );
   }
   if (submitted) {
     return (
-      <main className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-md text-center">
-          <h1 className="text-2xl font-semibold">Check your email</h1>
-          <p className="mt-2 text-muted-foreground">
-            We&rsquo;ve sent a confirmation link to <strong>{email}</strong>.
-          </p>
-        </div>
-      </main>
+      <AuthLayout title="Check your email" subtitle={`We've sent a confirmation link to ${email}`}>
+        <p className="text-center text-sm text-muted-foreground">
+          Check your inbox and click the link to complete sign-up.
+        </p>
+      </AuthLayout>
     );
   }
   const onSubmit = (e: FormEvent) => {
@@ -46,9 +44,8 @@ export function SignUpPage() {
     m.mutate();
   };
   return (
-    <main className="grid min-h-screen place-items-center px-6">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-semibold">Create your account</h1>
+    <AuthLayout title="Create your account" subtitle="Start a new client workspace">
+      <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <Label htmlFor="email">Email</Label>
           <Input
@@ -71,14 +68,14 @@ export function SignUpPage() {
           />
         </div>
         {m.error ? (
-          <p className="text-sm text-destructive">
-            {errorMessage((m.error as Error).message)}
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(errorCode(m.error))}
           </p>
         ) : null}
         <Button type="submit" className="w-full" disabled={m.isPending}>
           {m.isPending ? "Submitting…" : "Sign up"}
         </Button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

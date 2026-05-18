@@ -1,8 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 
-// jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView; Radix UI
-// components need them. Provide minimal mocks here so component tests don't
-// crash on layout-effect APIs.
+// jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView / scrollTo;
+// Radix UI and TanStack Router need them. Provide minimal mocks here so
+// component tests don't crash on layout-effect APIs.
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -24,6 +24,10 @@ if (typeof window !== "undefined") {
       dispatchEvent: () => false,
     });
   }
+  // jsdom's window.scrollTo is present-but-throwing (not absent like the
+  // stubs above), so it must be overwritten unconditionally — TanStack
+  // Router calls scrollTo on every navigation in the real-router tests.
+  window.scrollTo = () => {};
   window.HTMLElement.prototype.scrollIntoView =
     window.HTMLElement.prototype.scrollIntoView ?? (() => {});
   window.HTMLElement.prototype.hasPointerCapture =

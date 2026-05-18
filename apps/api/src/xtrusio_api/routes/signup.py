@@ -1,4 +1,4 @@
-"""POST /api/signup and GET /api/platform/signup-status."""
+"""POST /api/signup and GET /api/signup-status."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ..services.signup import (
 router = APIRouter(prefix="/api", tags=["signup"])
 
 
-@router.get("/platform/signup-status", response_model=SignupStatus)
+@router.get("/signup-status", response_model=SignupStatus)
 async def signup_status(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SignupStatus:

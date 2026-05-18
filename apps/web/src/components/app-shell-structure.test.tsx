@@ -27,6 +27,7 @@ vi.mock("@/lib/api", () => ({
     tenants: [],
     pending_invite: null,
   }),
+  fetchSignupStatus: vi.fn().mockResolvedValue({ signups_enabled: false }),
 }));
 
 function renderAt(initial: string) {
@@ -46,11 +47,21 @@ function renderAt(initial: string) {
   );
 }
 
-describe("/ Dashboard route", () => {
-  it("renders the welcome empty state when authenticated", async () => {
+// data-slot="sidebar" is set on the rendered <div> by the Sidebar component
+// in apps/web/src/components/ui/sidebar.tsx (line 207 for desktop, line 163
+// for collapsible=none). It is sidebar-specific and absent from all auth pages.
+const SIDEBAR = '[data-slot="sidebar"]';
+
+describe("app shell boundary", () => {
+  it("renders the dashboard sidebar on an in-app route (/)", async () => {
     renderAt("/");
-    expect(
-      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 }),
-    ).toBeInTheDocument();
+    await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 });
+    expect(document.querySelector(SIDEBAR)).not.toBeNull();
+  });
+
+  it("does NOT render the sidebar on /sign-in (shell-bleed guard)", async () => {
+    renderAt("/sign-in");
+    expect(await screen.findByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
+    expect(document.querySelector(SIDEBAR)).toBeNull();
   });
 });

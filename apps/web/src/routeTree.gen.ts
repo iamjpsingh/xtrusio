@@ -9,21 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UsersRouteImport } from './routes/users'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as ClientsRouteImport } from './routes/clients'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as ClientsSlugUsersRouteImport } from './routes/clients.$slug.users'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppUsersRouteImport } from './routes/_app.users'
+import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppClientsRouteImport } from './routes/_app.clients'
+import { Route as AppClientsSlugUsersRouteImport } from './routes/_app.clients.$slug.users'
 
-const UsersRoute = UsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
@@ -34,19 +30,9 @@ const SignInRoute = SignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClientsRoute = ClientsRouteImport.update({
-  id: '/clients',
-  path: '/clients',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AcceptInviteRoute = AcceptInviteRouteImport.update({
@@ -54,107 +40,118 @@ const AcceptInviteRoute = AcceptInviteRouteImport.update({
   path: '/accept-invite',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ClientsSlugUsersRoute = ClientsSlugUsersRouteImport.update({
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUsersRoute = AppUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppClientsRoute = AppClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppClientsSlugUsersRoute = AppClientsSlugUsersRouteImport.update({
   id: '/$slug/users',
   path: '/$slug/users',
-  getParentRoute: () => ClientsRoute,
+  getParentRoute: () => AppClientsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
   '/accept-invite': typeof AcceptInviteRoute
-  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/users': typeof UsersRoute
-  '/clients/$slug/users': typeof ClientsSlugUsersRoute
+  '/clients': typeof AppClientsRouteWithChildren
+  '/settings': typeof AppSettingsRoute
+  '/users': typeof AppUsersRoute
+  '/clients/$slug/users': typeof AppClientsSlugUsersRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
-  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/users': typeof UsersRoute
-  '/clients/$slug/users': typeof ClientsSlugUsersRoute
+  '/clients': typeof AppClientsRouteWithChildren
+  '/settings': typeof AppSettingsRoute
+  '/users': typeof AppUsersRoute
+  '/': typeof AppIndexRoute
+  '/clients/$slug/users': typeof AppClientsSlugUsersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
-  '/clients': typeof ClientsRouteWithChildren
   '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/users': typeof UsersRoute
-  '/clients/$slug/users': typeof ClientsSlugUsersRoute
+  '/_app/clients': typeof AppClientsRouteWithChildren
+  '/_app/settings': typeof AppSettingsRoute
+  '/_app/users': typeof AppUsersRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/clients/$slug/users': typeof AppClientsSlugUsersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/accept-invite'
-    | '/clients'
     | '/onboarding'
-    | '/settings'
     | '/sign-in'
     | '/sign-up'
+    | '/clients'
+    | '/settings'
     | '/users'
     | '/clients/$slug/users'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/accept-invite'
-    | '/clients'
     | '/onboarding'
-    | '/settings'
     | '/sign-in'
     | '/sign-up'
+    | '/clients'
+    | '/settings'
     | '/users'
+    | '/'
     | '/clients/$slug/users'
   id:
     | '__root__'
-    | '/'
+    | '/_app'
     | '/accept-invite'
-    | '/clients'
     | '/onboarding'
-    | '/settings'
     | '/sign-in'
     | '/sign-up'
-    | '/users'
-    | '/clients/$slug/users'
+    | '/_app/clients'
+    | '/_app/settings'
+    | '/_app/users'
+    | '/_app/'
+    | '/_app/clients/$slug/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
   AcceptInviteRoute: typeof AcceptInviteRoute
-  ClientsRoute: typeof ClientsRouteWithChildren
   OnboardingRoute: typeof OnboardingRoute
-  SettingsRoute: typeof SettingsRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
-  UsersRoute: typeof UsersRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/users': {
-      id: '/users'
-      path: '/users'
-      fullPath: '/users'
-      preLoaderRoute: typeof UsersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sign-up': {
       id: '/sign-up'
       path: '/sign-up'
@@ -169,25 +166,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/clients': {
-      id: '/clients'
-      path: '/clients'
-      fullPath: '/clients'
-      preLoaderRoute: typeof ClientsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/accept-invite': {
@@ -197,43 +180,85 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AcceptInviteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/clients/$slug/users': {
-      id: '/clients/$slug/users'
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/users': {
+      id: '/_app/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AppUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/clients': {
+      id: '/_app/clients'
+      path: '/clients'
+      fullPath: '/clients'
+      preLoaderRoute: typeof AppClientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/clients/$slug/users': {
+      id: '/_app/clients/$slug/users'
       path: '/$slug/users'
       fullPath: '/clients/$slug/users'
-      preLoaderRoute: typeof ClientsSlugUsersRouteImport
-      parentRoute: typeof ClientsRoute
+      preLoaderRoute: typeof AppClientsSlugUsersRouteImport
+      parentRoute: typeof AppClientsRoute
     }
   }
 }
 
-interface ClientsRouteChildren {
-  ClientsSlugUsersRoute: typeof ClientsSlugUsersRoute
+interface AppClientsRouteChildren {
+  AppClientsSlugUsersRoute: typeof AppClientsSlugUsersRoute
 }
 
-const ClientsRouteChildren: ClientsRouteChildren = {
-  ClientsSlugUsersRoute: ClientsSlugUsersRoute,
+const AppClientsRouteChildren: AppClientsRouteChildren = {
+  AppClientsSlugUsersRoute: AppClientsSlugUsersRoute,
 }
 
-const ClientsRouteWithChildren =
-  ClientsRoute._addFileChildren(ClientsRouteChildren)
+const AppClientsRouteWithChildren = AppClientsRoute._addFileChildren(
+  AppClientsRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppClientsRoute: typeof AppClientsRouteWithChildren
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppUsersRoute: typeof AppUsersRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppClientsRoute: AppClientsRouteWithChildren,
+  AppSettingsRoute: AppSettingsRoute,
+  AppUsersRoute: AppUsersRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
   AcceptInviteRoute: AcceptInviteRoute,
-  ClientsRoute: ClientsRouteWithChildren,
   OnboardingRoute: OnboardingRoute,
-  SettingsRoute: SettingsRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
-  UsersRoute: UsersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

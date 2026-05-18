@@ -33,7 +33,7 @@ describe("SignInPage", () => {
   it("shows the client sign-up link when signups are enabled", async () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: true });
     renderPage();
-    const link = await screen.findByRole("link", { name: /client sign up/i });
+    const link = await screen.findByRole("link", { name: /public client signup/i });
     expect(link).toHaveAttribute("href", "/sign-up");
   });
 
@@ -41,13 +41,13 @@ describe("SignInPage", () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: false });
     renderPage();
     await waitFor(() => expect(fetchSignupStatus).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: /client sign up/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /public client signup/i })).toBeNull();
   });
 
   it("hides the link when the status query errors (fail-closed)", async () => {
     vi.mocked(fetchSignupStatus).mockRejectedValue(new Error("network"));
     renderPage();
     await waitFor(() => expect(fetchSignupStatus).toHaveBeenCalled());
-    expect(screen.queryByRole("link", { name: /client sign up/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /public client signup/i })).toBeNull();
   });
 });
