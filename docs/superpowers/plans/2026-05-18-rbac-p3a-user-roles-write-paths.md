@@ -30,8 +30,8 @@
 | File | Responsibility |
 |---|---|
 | `apps/api/src/xtrusio_api/rbac/grants.py` | NEW. `grant_role(db, *, auth_user_id, scope, key, workspace_id=None, granted_by=None)` — resolve the `roles` row and INSERT an idempotent `user_roles` grant. The single reusable unit every write path + reconciler uses. |
-| `apps/api/src/xtrusio_api/rbac/reconcile.py` | MODIFY. Add `reconcile_user_roles_from_enums(db)` (idempotent enum→`user_roles` backfill, same mapping as `0006`). |
-| `apps/api/src/xtrusio_api/services/onboarding.py` | MODIFY (`create_tenant_with_owner`, ~line 41) — also grant the per-workspace `owner` role. |
+| `apps/api/src/xtrusio_api/rbac/reconcile.py` | MODIFY. Add `wire_workspace_role_perms(db, *, workspace_id)` (SCOPED, no-commit, sets one workspace's 4 system roles' `role_permissions` per `SYSTEM_ROLE_PERMISSIONS`/`_WORKSPACE_ROLE_MAP`) + `reconcile_user_roles_from_enums(db)` (idempotent enum→`user_roles` backfill, same mapping as `0006`). |
+| `apps/api/src/xtrusio_api/services/onboarding.py` | MODIFY (`create_tenant_with_owner`) — seed the new tenant's 4 workspace system roles (0006-friendly name/description), wire ONLY that workspace's `role_permissions` via the scoped helper, grant the `owner` role, all in ONE atomic `db.commit()` (NO global `reconcile_rbac` on the request path — see Task 2 rationale). |
 | `apps/api/src/xtrusio_api/services/invite_acceptance.py` | MODIFY (`_accept_platform` ~line 60; `_accept_tenant` ~line 87) — also grant the mapped platform/workspace role. |
 | `apps/api/src/xtrusio_api/scripts/bootstrap.py` | MODIFY (`_run`, after the `platform_users` insert ~line 597; force path ~lines 584-591) — also grant the platform `super_admin` role; force path clears its `user_roles` grant too. |
 | `apps/api/src/xtrusio_api/main.py` | MODIFY — the existing startup reconcile hook also calls `reconcile_user_roles_from_enums`. |
@@ -291,29 +291,78 @@ async def test_onboarding_grants_owner_user_role() -> None:
 
 - [ ] **Step 3: Run — expect FAIL** (`g == 0`): `uv run --directory apps/api pytest tests/services/test_onboarding_grants.py -v`
 
-- [ ] **Step 4: Implement.** In `create_tenant_with_owner`, after `db.add(TenantMembership(...role=TenantRole.OWNER))` and BEFORE `await db.commit()`: seed this tenant's workspace system roles then grant `owner`. Add imports `from ..rbac.grants import grant_role` and `from ..rbac.reconcile import reconcile_rbac` (or the per-workspace seed — per Step 1 finding). Concretely (using the verified seed approach):
+- [ ] **Step 4a: Add the scoped no-commit helper** to `apps/api/src/xtrusio_api/rbac/reconcile.py` (it already imports `text`, `AsyncSession`, `SYSTEM_ROLE_PERMISSIONS`, and defines `_WORKSPACE_ROLE_MAP = {"owner":"owner","admin":"workspace_admin","editor":"editor","read_only":"read_only"}`). Append:
+
+```python
+async def wire_workspace_role_perms(db: AsyncSession, *, workspace_id) -> None:
+    """Set role_permissions for ONE workspace's 4 is_system roles to match
+    SYSTEM_ROLE_PERMISSIONS. SCOPED to this workspace (no all-tenants sweep)
+    and does NOT commit — the caller owns the transaction. Idempotent
+    (DELETE+re-INSERT for just this workspace's role ids)."""
+    for role_key, map_key in _WORKSPACE_ROLE_MAP.items():
+        rid = (
+            await db.execute(
+                text(
+                    "SELECT id FROM roles WHERE scope='workspace' "
+                    "AND workspace_id=:w AND key=:k AND is_system"
+                ),
+                {"w": workspace_id, "k": role_key},
+            )
+        ).scalar_one_or_none()
+        if rid is None:
+            continue
+        perm_ids = (
+            await db.execute(
+                text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
+                {"keys": list(SYSTEM_ROLE_PERMISSIONS[map_key])},
+            )
+        ).scalars().all()
+        await db.execute(
+            text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
+        )
+        for pid in perm_ids:
+            await db.execute(
+                text(
+                    "INSERT INTO role_permissions (role_id,permission_id) "
+                    "VALUES (:rid,:pid) ON CONFLICT DO NOTHING"
+                ),
+                {"rid": rid, "pid": pid},
+            )
+```
+
+- [ ] **Step 4b: Implement onboarding** — in `create_tenant_with_owner`, replace the existing single `await db.commit()` with the block below (keep slug/`AlreadyHasMembershipError`/`Tenant`/`TenantMembership(...OWNER)` lines byte-unchanged ABOVE it). Add imports `from ..rbac.grants import grant_role` and `from ..rbac.reconcile import wire_workspace_role_perms`. ONE atomic commit — NO `reconcile_rbac` on the request path (it self-commits mid-op → partial-failure window + O(all-tenants) churn; the scoped helper has neither). Use 0006's friendly `(key,name,description)` tuples so new-tenant role rows match migrate-time ones:
 
 ```python
     db.add(TenantMembership(tenant_id=tenant.id, user_id=user_id, role=TenantRole.OWNER))
     await db.flush()
-    # Seed this brand-new workspace's 4 system roles + perms (0006 only seeded
-    # tenants existing at migrate time), then grant the owner the 'owner' role.
+    # 0006 only seeded workspace system roles for tenants existing at migrate
+    # time; a brand-new tenant has none. Seed its 4 system roles (0006-friendly
+    # name/description), wire ONLY this workspace's role_permissions, grant the
+    # owner — all in the SINGLE commit below (atomic: no partial-failure window,
+    # no global all-tenants reconcile on the request path).
     await db.execute(
         text(
             "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
-            "SELECT 'workspace', :tid, v.key, v.key, '', true FROM (VALUES "
-            "('owner'),('admin'),('editor'),('read_only')) AS v(key) "
-            "ON CONFLICT DO NOTHING"
+            "SELECT 'workspace', :tid, v.key, v.name, v.description, true FROM (VALUES "
+            "('owner','Owner','Governs the workspace; manages roles'),"
+            "('admin','Admin','Operates the workspace; cannot manage roles'),"
+            "('editor','Editor','Content write access'),"
+            "('read_only','Read Only','View-only access')"
+            ") AS v(key, name, description) ON CONFLICT DO NOTHING"
         ),
         {"tid": tenant.id},
     )
     await db.flush()
-    await reconcile_rbac(db)  # wires role_permissions for the new workspace roles (idempotent)
-    await grant_role(db, auth_user_id=user_id, scope="workspace", key="owner",
-                     workspace_id=tenant.id)
+    await wire_workspace_role_perms(db, workspace_id=tenant.id)
+    await grant_role(
+        db, auth_user_id=user_id, scope="workspace", key="owner",
+        workspace_id=tenant.id,
+    )
     await db.commit()
+    await db.refresh(tenant)
+    return tenant
 ```
-If `reconcile_rbac` itself commits (it does — single commit at its end per P1/P2), call it on a separate `SessionLocal()` AFTER the tenant+roles are committed, then `grant_role` in a final session; restructure so ordering is: commit tenant+membership+role-rows → `reconcile_rbac` (own txn) → `grant_role` + commit. Choose the structure that keeps the existing `AlreadyHasMembershipError`/slug logic intact and the tenant-create atomic; verify by the test.
+(Adjust to the file's exact tail — preserve whatever `db.refresh`/`return` the original had; the point is: ONE commit, scoped wiring, no `reconcile_rbac` call. Verify by the Task-2 test + the pre-existing onboarding/integration suite staying green.)
 
 - [ ] **Step 5: Run — expect PASS**; then `uv run --directory apps/api pytest tests/routes/test_onboarding.py tests/integration/test_signup_to_tenant_flow.py -v` (pre-existing onboarding/integration tests STILL green — behaviour unchanged). `ruff`/`mypy` clean.
 
