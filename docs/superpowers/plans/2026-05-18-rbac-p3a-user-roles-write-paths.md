@@ -555,6 +555,15 @@ async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
     for tid in tenant_ids:
         await wire_workspace_role_perms(db, workspace_id=tid)
     # Step B: project enum principals → user_roles.
+    # The platform INSERT needs an explicit NOT EXISTS guard (not just
+    # ON CONFLICT): the single-super_admin index `user_roles_one_super_admin`
+    # is an EXPRESSION partial index `ON user_roles ((true)) WHERE
+    # role_id='…00a1'`, which `ON CONFLICT (auth_user_id,role_id,workspace_id)`
+    # cannot use as an arbiter — so re-running this in any env that already
+    # has the super_admin grant would raise IntegrityError. The NOT EXISTS
+    # makes it add ONLY genuinely-missing grants (idempotent for admin AND
+    # super_admin); a genuinely-inconsistent cross-identity …00a1 state still
+    # (correctly) fails loud rather than being masked.
     await db.execute(
         text(
             "INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by) "
@@ -562,6 +571,11 @@ async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
             "JOIN roles r ON r.scope='platform' AND r.workspace_id IS NULL "
             "  AND r.key = pu.role::text AND r.is_system "
             "WHERE pu.is_active AND pu.role::text IN ('super_admin','admin') "
+            "  AND NOT EXISTS ("
+            "    SELECT 1 FROM user_roles ux "
+            "    WHERE ux.auth_user_id = pu.id AND ux.role_id = r.id "
+            "      AND ux.workspace_id IS NULL"
+            "  ) "
             "ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING"
         )
     )
