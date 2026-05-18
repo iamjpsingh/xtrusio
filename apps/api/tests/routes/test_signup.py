@@ -1,4 +1,4 @@
-"""Tests for /api/signup and /api/platform/signup-status."""
+"""Tests for /api/signup and /api/signup-status."""
 
 from __future__ import annotations
 
@@ -12,9 +12,20 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
 async def test_signup_status_default_false(http_client: AsyncClient) -> None:
-    r = await http_client.get("/api/platform/signup-status")
+    r = await http_client.get("/api/signup-status")
     assert r.status_code == 200
     assert r.json() == {"signups_enabled": False}
+
+
+async def test_signup_status_served_at_public_path(http_client: AsyncClient) -> None:
+    r = await http_client.get("/api/signup-status")
+    assert r.status_code == 200
+    assert "signups_enabled" in r.json()
+
+
+async def test_old_platform_signup_status_path_is_gone(http_client: AsyncClient) -> None:
+    r = await http_client.get("/api/platform/signup-status")
+    assert r.status_code == 404
 
 
 async def test_signup_disabled_returns_403(

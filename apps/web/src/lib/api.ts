@@ -56,7 +56,7 @@ export async function fetchMe(): Promise<MeResponse> {
 }
 
 export async function fetchSignupStatus(): Promise<{ signups_enabled: boolean }> {
-  return apiFetch("/api/platform/signup-status");
+  return apiFetch("/api/signup-status");
 }
 
 export async function postSignup(email: string, password: string): Promise<void> {

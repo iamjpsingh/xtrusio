@@ -44,6 +44,7 @@ describe("AcceptInvitePage", () => {
     vi.mocked(postAcceptInvite).mockRejectedValue(new ApiError(403, { detail: "invite_expired" }));
     renderPage();
     await waitFor(() => expect(screen.getByText(/this invitation has expired/i)).toBeTruthy());
+    expect(screen.getByText("Xtrusio")).toBeInTheDocument();
   });
 
   it("redirects to / when already provisioned (409)", async () => {
@@ -53,5 +54,15 @@ describe("AcceptInvitePage", () => {
     renderPage();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/" }));
     expect(screen.queryByText(/couldn.t accept invitation/i)).toBeNull();
+  });
+
+  it("renders the accept-invite states inside the shared AuthLayout (Xtrusio wordmark)", async () => {
+    vi.mocked(postAcceptInvite).mockResolvedValue({
+      kind: "platform",
+      role: "admin",
+      tenant_id: null,
+    });
+    renderPage();
+    expect(await screen.findByText("Xtrusio")).toBeInTheDocument();
   });
 });

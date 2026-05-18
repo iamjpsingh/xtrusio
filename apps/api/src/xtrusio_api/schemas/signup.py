@@ -1,4 +1,4 @@
-"""Request/response schemas for /api/signup and /api/platform/signup-status."""
+"""Request/response schemas for /api/signup and /api/signup-status."""
 
 from __future__ import annotations
 

@@ -4,12 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { SignUpPage } from "./sign-up-page";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
   fetchSignupStatus: vi.fn(),
   postSignup: vi.fn(),
 }));
 
-import { fetchSignupStatus, postSignup } from "@/lib/api";
+import { ApiError, fetchSignupStatus, postSignup } from "@/lib/api";
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -30,7 +31,7 @@ describe("SignUpPage", () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: false });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByText(/signups are currently disabled/i)).toBeTruthy(),
+      expect(screen.getByText(/sign-up unavailable/i)).toBeTruthy(),
     );
   });
 
@@ -45,5 +46,25 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: /sign up/i }));
     await waitFor(() => expect(screen.getByText(/check your email/i)).toBeTruthy());
     expect(postSignup).toHaveBeenCalledWith("alice@example.com", "Password1!");
+  });
+
+  it("renders inside the shared AuthLayout (Xtrusio wordmark)", async () => {
+    vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: true });
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Xtrusio")).toBeInTheDocument());
+  });
+
+  it("maps a known API error code to its friendly message", async () => {
+    vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: true });
+    vi.mocked(postSignup).mockRejectedValue(new ApiError(403, { detail: "signups_disabled" }));
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => screen.getByLabelText(/email/i));
+    await user.type(screen.getByLabelText(/email/i), "bob@example.com");
+    await user.type(screen.getByLabelText(/password/i), "Password1!");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Signups are currently disabled.")).toBeInTheDocument(),
+    );
   });
 });

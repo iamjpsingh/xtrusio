@@ -1,8 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { postOnboarding } from "@/lib/api";
+import { errorCode, postOnboarding } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
+import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,12 +24,8 @@ export function OnboardingPage() {
     m.mutate();
   };
   return (
-    <main className="grid min-h-screen place-items-center px-6">
-      <form onSubmit={onSubmit} className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-semibold">Create your workspace</h1>
-        <p className="text-sm text-muted-foreground">
-          A workspace is where you and your team will work. You can rename it later.
-        </p>
+    <AuthLayout title="Create your workspace" subtitle="Name your organization to get started">
+      <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <Label htmlFor="ws">Workspace name</Label>
           <Input
@@ -41,14 +38,14 @@ export function OnboardingPage() {
           />
         </div>
         {m.error ? (
-          <p className="text-sm text-destructive">
-            {errorMessage((m.error as Error).message)}
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage(errorCode(m.error))}
           </p>
         ) : null}
         <Button type="submit" className="w-full" disabled={m.isPending}>
           {m.isPending ? "Creating…" : "Continue"}
         </Button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

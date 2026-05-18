@@ -24,10 +24,10 @@ export function SettingsPage() {
         <div className="flex items-center justify-between gap-6">
           <div>
             <Label htmlFor="signups" className="text-base font-medium">
-              Self-serve signups
+              Public client signup
             </Label>
             <p className="text-sm text-muted-foreground">
-              When enabled, anyone can create an account at <code>/sign-up</code> and bootstrap their own workspace.
+              Allow anyone to create a new client workspace via the public sign-up page.
             </p>
           </div>
           <Switch
