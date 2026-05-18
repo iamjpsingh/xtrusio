@@ -147,3 +147,76 @@ async def wire_workspace_role_perms(db: AsyncSession, *, workspace_id: UUID) -> 
                 ),
                 {"rid": rid, "pid": pid},
             )
+
+
+async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
+    """Idempotently make every enum-era principal resolvable via the resolvers.
+
+    Step A — close the role-ROW gap: any tenant onboarded AFTER 0006 but
+    BEFORE P3a-Task-2 deployed has no workspace system role rows (the global
+    reconcile_rbac only wires perms for EXISTING role rows, never creates per-
+    tenant rows). Seed the 4 workspace system roles for EVERY tenant (0006
+    shape + friendly name/desc, ON CONFLICT DO NOTHING) and wire each such
+    workspace's role_permissions via the scoped wire_workspace_role_perms.
+    Step B — project enum principals -> user_roles (the 0006 mapping, repeatable
+    for rows created since): active platform super_admin/admin -> platform
+    system role; every tenant_memberships row -> that workspace's matching
+    system role. ON CONFLICT DO NOTHING (UNIQUE(auth_user_id,role_id,
+    workspace_id)). Without Step A the Step-B workspace JOIN would silently
+    skip such tenants (and live _accept_tenant would LookupError). This runs
+    at startup / `make rbac-seed` only (NOT a request path), so the per-tenant
+    wiring loop's O(tenants) cost is acceptable. One commit.
+    """
+    # Step A: seed any missing per-tenant workspace system role ROWS.
+    await db.execute(
+        text(
+            "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+            "SELECT 'workspace', t.id, v.key, v.name, v.description, true "
+            "FROM tenants t CROSS JOIN (VALUES "
+            "('owner','Owner','Governs the workspace; manages roles'),"
+            "('admin','Admin','Operates the workspace; cannot manage roles'),"
+            "('editor','Editor','Content write access'),"
+            "('read_only','Read Only','View-only access')"
+            ") AS v(key, name, description) ON CONFLICT DO NOTHING"
+        )
+    )
+    # raw db.execute() runs on the connection immediately within this txn, so
+    # the seeded rows are visible to the following SELECT — no flush needed.
+    tenant_ids = (
+        await db.execute(text("SELECT id FROM tenants"))
+    ).scalars().all()
+    for tid in tenant_ids:
+        await wire_workspace_role_perms(db, workspace_id=tid)
+    # Step B: project enum principals -> user_roles.
+    # NOT EXISTS (not just ON CONFLICT): the single-super_admin partial unique
+    # index `user_roles_one_super_admin ON user_roles ((true)) WHERE role_id =
+    # '...00a1'` is an EXPRESSION index, so it can never be an ON CONFLICT
+    # arbiter for (auth_user_id, role_id, workspace_id). Re-attempting the
+    # already-granted operator super_admin row (P1's 0006 backfill seeded it)
+    # would therefore raise IntegrityError instead of no-op'ing, breaking
+    # repeatability. The NOT EXISTS guard makes the projection idempotent for
+    # BOTH admin and super_admin while keeping the 0006 mapping byte-identical
+    # (it only ever ADDS a missing grant — zero authz-decision change).
+    await db.execute(
+        text(
+            "INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by) "
+            "SELECT pu.id, r.id, NULL, NULL FROM platform_users pu "
+            "JOIN roles r ON r.scope='platform' AND r.workspace_id IS NULL "
+            "  AND r.key = pu.role::text AND r.is_system "
+            "WHERE pu.is_active AND pu.role::text IN ('super_admin','admin') "
+            "  AND NOT EXISTS (SELECT 1 FROM user_roles ux "
+            "    WHERE ux.auth_user_id = pu.id AND ux.role_id = r.id "
+            "    AND ux.workspace_id IS NULL) "
+            "ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING"
+        )
+    )
+    await db.execute(
+        text(
+            "INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by) "
+            "SELECT m.user_id, r.id, m.tenant_id, NULL FROM tenant_memberships m "
+            "JOIN roles r ON r.scope='workspace' AND r.workspace_id = m.tenant_id "
+            "  AND r.key = m.role::text AND r.is_system "
+            "ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING"
+        )
+    )
+    await db.commit()

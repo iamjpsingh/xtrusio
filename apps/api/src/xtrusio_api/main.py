@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.config import get_settings
 from .core.db import SessionLocal
-from .rbac.reconcile import reconcile_rbac
+from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
 from .routes import onboarding as onboarding_routes
@@ -26,6 +26,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         async with SessionLocal() as _s:
             await reconcile_rbac(_s)
+        async with SessionLocal() as _s:
+            await reconcile_user_roles_from_enums(_s)
     except Exception:  # pragma: no cover - boot must not fail on reconcile
         import logging
 
