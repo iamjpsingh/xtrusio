@@ -355,3 +355,41 @@ async def test_genuinely_deprecated_present_permission_does_not_grant() -> None:
             await priv.execute(text("DELETE FROM permissions WHERE key=:k"), {"k": dep_key})
             await priv.commit()
         await _teardown_workspace_principal(uid, tid)
+
+
+async def test_rbac_table_perm_aware_policies_present() -> None:
+    """P2 replaced 0006's interim `*_authenticated_read`/`rbac_audit_log_no_read`
+    policies with perm-aware ones. Assert the new posture and that the interim
+    names are gone (the inverse of the retired P1 hardening test)."""
+    new_names = {
+        "permissions_read",
+        "roles_read",
+        "role_permissions_read",
+        "user_roles_read",
+        "rbac_audit_log_read",
+    }
+    old_names = {
+        "permissions_authenticated_read",
+        "roles_authenticated_read",
+        "role_permissions_authenticated_read",
+        "user_roles_authenticated_read",
+        "rbac_audit_log_no_read",
+    }
+    async with SessionLocal() as s:
+        rows = dict(
+            (
+                await s.execute(
+                    text(
+                        "SELECT policyname, qual FROM pg_policies "
+                        "WHERE schemaname='public' AND tablename IN "
+                        "('permissions','roles','role_permissions','user_roles',"
+                        "'rbac_audit_log')"
+                    )
+                )
+            ).all()
+        )
+    present = set(rows)
+    assert new_names <= present, f"missing perm-aware policies: {new_names - present}"
+    assert not (old_names & present), f"interim policies not retired: {old_names & present}"
+    aud = (rows.get("rbac_audit_log_read") or "").lower()
+    assert "audit.read" in aud and aud.strip() != "false"

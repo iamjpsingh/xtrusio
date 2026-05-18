@@ -188,29 +188,3 @@ async def test_invites_have_role_id_backfilled() -> None:
                 await s.execute(text(f"SELECT count(*) FROM {tbl} WHERE {orphan_pred}"))
             ).scalar_one()
             assert orphans == 0, f"{tbl} has rows with a mappable role but no role_id"
-
-
-async def test_interim_rls_policies_present() -> None:
-    """Hardening (code-review Minor): assert the P1-interim policy posture."""
-    async with SessionLocal() as s:
-        rows = dict(
-            (
-                await s.execute(
-                    text(
-                        "SELECT policyname, qual FROM pg_policies "
-                        "WHERE schemaname='public' AND policyname IN "
-                        "('permissions_authenticated_read','roles_authenticated_read',"
-                        "'role_permissions_authenticated_read','user_roles_authenticated_read',"
-                        "'rbac_audit_log_no_read')"
-                    )
-                )
-            ).all()
-        )
-    assert set(rows) == {
-        "permissions_authenticated_read",
-        "roles_authenticated_read",
-        "role_permissions_authenticated_read",
-        "user_roles_authenticated_read",
-        "rbac_audit_log_no_read",
-    }
-    assert "false" in (rows["rbac_audit_log_no_read"] or "").lower()
