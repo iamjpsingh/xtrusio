@@ -136,10 +136,32 @@ Because resolution reads live tables (nothing baked into the JWT), revoking a ro
 the **next request** — instant revocation.
 
 The migration-`0003` helpers `is_super_admin` / `is_tenant_owner_or_admin` / `is_tenant_member` are
-**superseded by rewriting their bodies to delegate to the new resolvers** (e.g.
-`is_super_admin(uid)` → `has_platform_perm(uid, 'platform.roles.manage')`). Rewriting bodies rather
-than dropping them keeps every existing RLS policy's SQL untouched, minimizes blast radius, keeps a
-single Alembic head, and stays reversible. New/updated policies call the resolvers directly.
+**superseded by rewriting their bodies (P2) to a transition-safe disjunction: the new resolver
+OR the original `0003` enum check.** Rewriting bodies (not dropping them) keeps every existing RLS
+policy's SQL untouched, minimizes blast radius, single Alembic head, reversible.
+
+**Why the OR-legacy disjunct is mandatory (corrected 2026-05-17):** a *pure* delegation
+(`is_super_admin(uid)` → `has_platform_perm(uid,'platform.roles.manage')` alone) is **not**
+behaviour-preserving in the **P2→P3 window** and contradicts §7.5 ("enum columns kept — nothing
+breaks mid-flight"). P1's backfill is a one-time snapshot; until P3 makes `user_roles` the write
+path, onboarding/invite-acceptance keep creating `tenant_memberships`/`platform_users` rows with
+**no** `user_roles` grant — pure delegation would lock a newly onboarded owner out of their own
+workspace by RLS (proven: the pre-RBAC `tests/rls/` suite passes at `0006`, fails under pure
+delegation at `0007`). The transition-safe bodies are a true superset (equal wherever only enum
+data exists, plus the engine path for RBAC-granted access with instant revocation):
+
+- `is_super_admin(uid)` = `has_platform_perm(uid,'platform.roles.manage')` **OR**
+  `EXISTS(platform_users WHERE id=uid AND role='super_admin' AND is_active)`
+- `is_tenant_owner_or_admin(uid,tid)` = `has_workspace_perm(uid,tid,'workspace.members.manage')`
+  **OR** `EXISTS(tenant_memberships WHERE user_id=uid AND tenant_id=tid AND role IN ('owner','admin'))`
+- `is_tenant_member(uid,tid)` = `EXISTS(user_roles WHERE auth_user_id=uid AND workspace_id=tid)`
+  **OR** `EXISTS(tenant_memberships WHERE user_id=uid AND tenant_id=tid)`
+
+(All remain `SECURITY DEFINER` so the legacy `EXISTS` subqueries do not recurse — the `0003`
+technique.) **P3 retires the legacy disjunct**: once P3 makes `user_roles` authoritative
+(onboarding/invite-acceptance write `user_roles`; existing `tenant_memberships`/`platform_users`
+fully reconciled), P3 rewrites these helper bodies again to the pure-resolver form and may then
+drop the enum columns. New/updated policies call the resolvers directly.
 
 ---
 
