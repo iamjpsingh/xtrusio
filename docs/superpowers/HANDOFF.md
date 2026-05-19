@@ -1,7 +1,7 @@
 # HANDOFF — RBAC + RLS Re-architecture
 
 **Written:** 2026-05-19
-**Status:** **P1, P6a, P2 merged to `main`.** **P3a code-complete + every task two-stage-reviewed + gate green on branch `rbac-p3-backend-enforcement` — NOT yet final-whole-branch-reviewed, NOT yet PR'd.** P3b, P3c, P4/P5, P6b/P6c not started.
+**Status:** **Backend RBAC re-architecture COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a all in `main` (`5ddb413`). The enum→resolver authorization cutover is finished. Remaining: P4/P5 (RBAC admin APIs+UIs + the deferred P3c governance items), P6b/P6c (frontend permission-driven nav/shells + RBAC admin UIs), and the now-unblocked parked review-fix backlog.
 
 Read top to bottom before doing anything.
 
@@ -9,56 +9,38 @@ Read top to bottom before doing anything.
 
 ## ⏩ RESUME HERE — 2026-05-19
 
-### PR / branch state
+### Done & merged (all PRs #1–#6 MERGED; `main` @ `5ddb413`; single Alembic head `0008`; 0 open PRs)
 
-| PR | Phase | State |
-|---|---|---|
-| #1 | P1 schema foundation | MERGED |
-| #2 | P6a frontend shell/auth | MERGED |
-| #3 | P2 RLS permission engine | MERGED |
-| — | **P3a `user_roles` write-paths & reconciliation** | branch `rbac-p3-backend-enforcement` @ `5af0408`, **pushed? NO — push it (see step 0)**. 0 open PRs. |
+| Phase | What |
+|---|---|
+| P1 (#1) | RBAC schema: `permissions/roles/role_permissions/user_roles/rbac_audit_log`, code catalog, reconciler, system-role seeds, single-super_admin index, enum backfill |
+| P2 (#3) | `0007` SECURITY DEFINER resolvers `has_platform_perm`/`has_workspace_perm`/`can_manage_role`; `0003` helpers → transition-safe `resolver OR 0003-enum` |
+| P3a (#4) | `grant_role`; onboarding/invite-accept/bootstrap write `user_roles`; `reconcile_user_roles_from_enums` (+ startup/`make rbac-seed` wiring) — every principal resolver-visible |
+| P3b (#5) | `core/permissions.py` (`require_permission` calling the resolvers); all 10 routes + tenant-invite service authz converted enum→resolver; `/me` additive effective-perm keys |
+| P3c (#6) | `0008`: helpers → **pure resolver** (enum disjunct retired, reversible); pre-RBAC rls canaries reframed to grants. **Cutover complete.** |
+| P6a (#2) | Frontend: pathless `_app` shell (shell-bleed fixed), shared `AuthLayout`, auth-page polish, public `/api/signup-status` rename |
 
-`main` @ `48e1470` = P1+P6a+P2. `gh` authenticated. Always `gh pr view <n> --json state` before trusting a "merged" claim.
+Backend authorization is now **fully resolver/permission-driven** and consistent with RLS (same `0007` fns). Verified: full suite green from a CLEAN DB (0 failed; 2 documented vacuous skips; env-flaky `test_signup` state-dependent), `0007↔0008` reversible.
 
-### NEXT actions (in order)
+### NEXT (gated: each phase planned/executed only after the prior MERGED)
 
-0. **Push the branch** (it has 6 task commits + plan/handoff, not yet on origin): `git push -u origin rbac-p3-backend-enforcement`.
-1. **Final whole-branch P3a review** (opus, like P1/P6a/P2 — this was the next step when we stopped; it was NOT run). It must be SERIALIZED (sole DB user) and `uv run --directory apps/api python -m tests._cleanup` BEFORE any full-suite run (see clean-DB rule below). Assess: behaviour-preservation invariant (zero authz/migration diff vs main), end-to-end idempotency/atomicity, the NOT EXISTS guard, test hygiene, merge-readiness, P3b-precondition satisfied. (A ready-to-use final-review dispatch prompt is in this session's history — the tool call the user interrupted; re-issue it.)
-2. **`superpowers:finishing-a-development-branch`** → push (done in step 0) + `gh pr create` for P3a (independent PR; document the deferred Minors + the clean-DB-before-gate rule + that P3a is behaviour-preserving and satisfies the P3b precondition). Then **merge it** (verify via `gh pr view`).
-3. **P3b — gated on P3a merge.** After P3a merges: sync `main`, cut `rbac-p3b-…`, `writing-plans` against merged code, `subagent-driven-development`. P3b scope: `core/permissions.py` (`require_permission`/`require_workspace_permission` calling the `0007` resolvers — single source of truth), convert ALL 10 routes + the 3 `tenant_invites` service authz checks from enum→resolver, `/me` returns effective permission keys (platform set + per-workspace map). The P3b precondition (every enum principal has a resolver-visible `user_roles` grant) is **satisfied by P3a** (gate proved `memberships_without_grant 0`, `active_platform_without_grant 0`).
-4. **P3c** (after P3b): audit-log writes on RBAC mutations; privilege-escalation guard (service + DB trigger); single-super_admin Python enforcement; migration `0008` retiring the transition-safe `OR 0003-enum` disjunct → pure resolver. **🔒 CRITICAL ORDER:** the enum columns may be dropped ONLY after (a) P3a write-paths + reconcile populate `user_roles` for all principals [done], (b) P3b makes the backend resolver-authoritative, (c) P3c rewrites the `0007` helper bodies to pure-resolver. Dropping enum columns earlier breaks access (spec §5).
-5. Then P4/P5 (platform & workspace RBAC admin APIs+UIs + audit viewers), P6b (pinned `/me` effective-perms TS contract + legacy adapter + permission-driven nav + two Platform/Workspace shells + workspace switcher), P6c (RBAC admin UIs).
+1. **P4 — Platform RBAC admin** (own branch off `main`, lean plan, lean execution): platform role/permission management API + UI for `super_admin` (`platform.roles.manage`) — create/edit/delete platform custom roles, attach catalog permissions, assign roles to platform users; platform audit-log viewer. Calls the `0007` resolvers / `require_permission` (P3b primitive) — reuse, don't re-invent. Spec §4/§9.
+2. **P5 — Workspace RBAC admin**: per-workspace role/permission management API + UI for workspace `owner` (`workspace.roles.manage`), scope-isolated; workspace audit-log viewer; permission category grouping UI.
+3. **Deferred-from-P3c, bundle with P4/P5** (they're only meaningful once human role/permission-mutation endpoints exist): **audit-log writes** on every RBAC mutation (the `rbac_audit_log` table exists since P1, still unwritten); **privilege-escalation guard** (service + DB trigger — actor can't grant perms they lack); **single-super_admin service-layer enforcement** (DB partial-unique index already enforces it; add the friendly service check). Use the existing `grant_role`/`require_permission`/resolvers.
+4. **P6b** — pinned `/me` effective-perms TS contract + legacy-compat adapter + permission-driven nav + two physically-separate Platform/Workspace shells + workspace switcher. (P3b already returns the effective-perm keys additively; the enum `platform.role`/`tenants[].role` fields stay until P6b removes the frontend's enum consumption.)
+5. **P6c** — RBAC admin UIs (consume P4/P5 APIs).
+6. **🔒 LATE cleanup (only after P6b removes frontend enum consumption AND every backend enum read is gone):** drop `platform_users.role` / `tenant_memberships.role` columns + the `platform_role`/`tenant_role` enum types. Do NOT do this earlier — `/me` (P3b additive), onboarding/invite-accept/bootstrap still legitimately write the enum rows; `0008` downgrade restores the enum-reading OR-form so the enum columns must exist while `0008` is reversible.
+7. **Parked review-fix backlog NOW UNBLOCKED:** memory `deferred-review-fixes-pending-p3` said "parked until RBAC P3 fully merges" — **P3 is now fully merged**, so those (CI, pagination, signup, JWKS, etc.) are eligible. Triage them into a phase when ready.
 
-### What P3a delivered (branch `rbac-p3-backend-enforcement`, behaviour-preserving — ZERO authz decision changed; enum still authoritative)
+### Execution model (MANDATORY — memories `feedback_lean_review_workflow`, `feedback_model_selection`)
 
-- `rbac/grants.py::grant_role()` — idempotent resolve-role + `user_roles` INSERT ON CONFLICT DO NOTHING, NULL-safe, raises `LookupError`, no internal commit.
-- `rbac/reconcile.py` += `wire_workspace_role_perms(db,*,workspace_id)` (scoped, no-commit, one workspace's role_permissions) and `reconcile_user_roles_from_enums(db)` (Step A: idempotently seed missing per-tenant workspace role ROWS for ALL tenants + per-tenant wire; Step B: platform backfill WITH a `NOT EXISTS` guard [Postgres NULL-distinctness makes `ON CONFLICT(composite)` inert for workspace_id-NULL platform rows; the single-super_admin index is an expression partial index ON CONFLICT can't arbitrate], then tenant_memberships backfill; ONE commit). `reconcile_rbac`/`_sync_role_perms` byte-unchanged.
-- onboarding: ONE atomic commit — seed new tenant's 4 system roles (0006-friendly tuples) → scoped `wire_workspace_role_perms` → `grant_role(owner)`; NO global reconcile on the request path (fixed in commit `3ee7723`).
-- invite-acceptance (`_accept_platform` admin-only; `_accept_tenant` all roles): `grant_role` in the SAME txn as the enum write, before the existing `IntegrityError→AlreadyProvisionedError` commit (idempotent re-accept preserved).
-- bootstrap: grants platform `super_admin`; `--force` clears the stale `user_roles …00a1` grant before recreating (single-super_admin global-singleton invariant upheld across force/non-force/crash/re-run).
-- startup hook (`main.py`) + `__main__.py`/`make rbac-seed` run BOTH reconcilers (best-effort, boot-safe).
-- 6 task commits: `739cd03` (grant_role), `3ef8d12`+`3ee7723` (onboarding+fix), `1429269` (invites), `cfb0217` (bootstrap), `3dd01fe` (reconcile). Gate: **clean-DB full suite 130 passed / 2 documented vacuous skips / 0 failed**; `git diff main...HEAD` for routes/core/auth.py/tenant_invites authz = EMPTY; no migration; single head `0007`.
+Build the whole phase/slice in a few coherent steps, clean/reusable/scalable code BY DESIGN. **ONE** full-suite run at the END of the slice via command, **run by the controller, not a subagent**, `make test-clean` first; the end-of-slice controller check MUST include `make check`-equivalent gates — **`ruff format --check` (not just `ruff check`) + `mypy --strict`** (a slice can be lint-clean but format-dirty — happened in P3c). Then **ONE** final code-quality review (Opus). Migrations/RLS/auth slices → ONE targeted mid-build check (controller, not full suite). Code/plan/migration subagents = **Opus**; Sonnet only for read-only exploration. Phases gated on prior-phase MERGE; never trust an implementer "no regression" without reproducing at the true baseline; serialized DB access + `_cleanup` before any suite run; code-quality bar unchanged (clean, reusable, scalable, mypy --strict, no demo data, RLS defense-in-depth). PRs: write a `docs/superpowers/PR-rbac-<phase>-body.md`, `gh pr create`, then `gh pr merge` (verify `gh pr view <n> --json state` = MERGED).
 
-### ⚠️ Clean-DB-before-gate rule (firmly established)
+### Pre-existing `main` debt (unchanged, not from any phase)
 
-The shared managed DB has a known fragility: a test failing before its `finally` mid-run orphans ephemeral rows → false failures in later count-based tests. **Always `uv run --directory apps/api python -m tests._cleanup` before any full-suite gate/review run, and run suites serialized (one DB-touching agent at a time).** A clean purge cascade-cleans ephemeral RBAC rows via the tenant/auth.users `ON DELETE CASCADE`. Verified: from a clean DB the P3a suite is 0-failed; the only "failures" ever seen were transient mid-run pollution, not real.
-
-### Accepted deferred P3a Minors (non-blocking; address opportunistically or in P3b/P3c)
-
-- `scripts/bootstrap.py` call-site: add a one-line comment that a crash before the grant commit is self-healed by the Task-5 reconcile.
-- `rbac/reconcile.py` docstring: "byte-identical to 0006 mapping" → "semantically equivalent (adds defensive `is_system`; result set unchanged)".
-- New rbac tests: optional teardown-via-`ON DELETE CASCADE` simplification (delete the ephemeral tenant/auth.users; let cascade drive the rest).
-- `reconcile_user_roles_from_enums` O(tenants) per-tenant wire loop on every boot/`make rbac-seed` — fine for the P3a horizon; future optimization watch-item.
-
-### Pre-existing `main` debt (NOT from any phase — flagged, unchanged)
-
-- Managed DB `platform_settings.signups_enabled` live state → `tests/routes/test_signup.py::{test_signup_status_default_false,test_signup_disabled_returns_403}` env-flaky (pass or fail by state; reproduce on main).
-- 4 ruff `I001` (`scripts/bootstrap.py`, `services/{signup,platform_invites,tenant_invites}.py`); 1 `jose` mypy in `core/auth.py`; frontend `react-refresh` warnings — byte-identical to main, zero NEW from any phase.
-- Memory `deferred-review-fixes-pending-p3` — a parked backlog (CI, pagination, signup, JWKS, etc.) gated until RBAC P3 fully merges; do NOT start those early.
-
-### Conventions in force
-
-`docs/superpowers/ENGINEERING_PRINCIPLES.md`. NO `Co-Authored-By`. Migrations pure raw SQL, reversible, single Alembic head. The `0007` SECURITY DEFINER resolvers are the single source of truth — P3b `require_permission()` calls the SAME fns. Test-data hygiene: never create/grant a `super_admin` (P1 single-super_admin partial unique index + `tests/test_no_super_admin_creation.py` guard which greps test files); ephemeral `@example.com` + FK-safe `finally` teardown; positive super_admin via the read-only `existing_super_admin` fixture. **Execution model (LEAN — user-mandated 2026-05-19, see memory `feedback_lean_review_workflow`):** build the whole phase/slice in a few coherent steps with clean/reusable/scalable code BY DESIGN; do NOT test per-file or per-subagent; run the full suite **ONCE at the end of the slice via the command, executed by the controller directly (not a subagent)**, `make test-clean` first; fix; re-run; then **ONE** final code-quality review pass over the whole slice; then finish/PR. EXCEPTION — for migrations / RLS policies / auth-permission gates only, run ONE targeted mid-build sanity command (controller, not full suite, not subagent) — this is the cheap check that caught the P2 spec flaw + the non-idempotent migration. **Model policy (memory `feedback_model_selection`):** Opus 4.7 / high effort for ALL code-writing + plan/spec/migration authoring (implementer & fix & deep-correctness-review subagents → `model: opus`); Sonnet ONLY for read-only exploration/search (Explore agents). Still in force: phases gated on the prior phase being MERGED before the next is planned/executed; never trust an implementer "no regression" claim without reproducing at the true baseline; serialized DB access + `_cleanup` before any suite run; code-quality bar unchanged (clean, reusable, scalable, mypy --strict).
+- Managed DB `platform_settings.signups_enabled` live state → `tests/routes/test_signup.py::{test_signup_status_default_false,test_signup_disabled_returns_403}` env-flaky (pass/fail by state; reproduce on main).
+- 4 ruff `I001` (`scripts/bootstrap.py`, `services/{signup,platform_invites,tenant_invites}.py`); 1 `jose` mypy; frontend `react-refresh` warnings — byte-identical to main, zero NEW from any phase.
+- Shared-DB mid-run pollution fragility → ALWAYS `make test-clean` before a gate run; serialized DB access. (Bigger optional accelerator never adopted: a local Postgres test DB instead of remote managed Supabase.)
 
 ### Still USER-DRIVEN, never agent-run
 
@@ -68,4 +50,4 @@ Browser/e2e smokes needing real `.env` + `make dev`/OrbStack + real inboxes.
 
 ## Durable record
 
-Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (§5 corrected). Plans: `docs/superpowers/plans/2026-05-17-rbac-{p1,p6a,p2}-*.md`, `docs/superpowers/plans/2026-05-18-rbac-p3a-user-roles-write-paths.md` (amended). PR bodies: `docs/superpowers/PR-rbac-{p1,p6a,p2}-body.md` (write a P3a one at finishing). Persistent memory at `~/.claude/projects/-Users-jpsingh-Developer-Project-xtrusio/memory/` is machine-local (does NOT travel) — this HANDOFF + spec + plans are the cross-machine record.
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (§5 corrected for transition-safe→pure-resolver). Plans: `docs/superpowers/plans/2026-05-1{7,8,9}-rbac-*.md` (P1, P6a, P2, P3a, P3b, P3c). PR bodies: `docs/superpowers/PR-rbac-{p1,p6a,p2,p3a,p3b}-body.md` (+ P3c PR body inline in PR #6). Persistent memory at `~/.claude/projects/-Users-jpsingh-Developer-Project-xtrusio/memory/` is machine-local (does NOT travel) — this HANDOFF + spec + plans are the cross-machine record.
