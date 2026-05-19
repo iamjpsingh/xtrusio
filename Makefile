@@ -22,7 +22,7 @@ help:
 	@echo "  make dev             - bring up Valkey + API + web in parallel"
 	@echo "  make migrate         - apply Alembic migrations to the database in DATABASE_URL"
 	@echo "  make migrate-down    - revert the most recent migration"
-	@echo "  make rbac-seed       - project the permission catalog into the DB"
+	@echo "  make rbac-seed       - project the permission catalog + backfill enum->user_roles"
 	@echo "  make create-platform-owner email=you@x.com password='...' [force=true]"
 	@echo "  make lint            - lint Python + JS"
 	@echo "  make format          - format Python + JS"

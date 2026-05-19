@@ -14,6 +14,7 @@ from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformUser
 from ..models.tenant_invite import TenantInvite
 from ..models.tenant_membership import TenantMembership
+from ..rbac.grants import grant_role
 
 
 class NoInviteError(Exception):
@@ -58,6 +59,14 @@ async def _accept_platform(
         raise EmailMismatchError()
 
     db.add(PlatformUser(id=user_id, email=email, role=invite.role, is_active=True))
+    # Also write the mapped user_roles grant in the SAME transaction as the
+    # enum row (before the single commit below) so IntegrityError ->
+    # AlreadyProvisionedError still applies and a re-accept stays idempotent
+    # (grant_role is ON CONFLICT DO NOTHING). Only 'admin' has a platform
+    # system role; legacy 'editor' has none (spec §2.7) so is intentionally
+    # skipped (no raise); 'super_admin' can't reach here (schema rejects it).
+    if invite.role.value == "admin":
+        await grant_role(db, auth_user_id=user_id, scope="platform", key="admin")
     invite.accepted_at = datetime.now(UTC)
     try:
         await db.commit()
@@ -85,6 +94,18 @@ async def _accept_tenant(
         raise EmailMismatchError()
 
     db.add(TenantMembership(tenant_id=invite.tenant_id, user_id=user_id, role=invite.role))
+    # Also write the mapped workspace user_roles grant in the SAME transaction
+    # as the membership row (before the single commit below) so IntegrityError
+    # -> AlreadyProvisionedError still applies and a re-accept stays idempotent
+    # (grant_role is ON CONFLICT DO NOTHING). That tenant's 4 workspace system
+    # roles already exist (tenant pre-existed at 0006 or was onboarded).
+    await grant_role(
+        db,
+        auth_user_id=user_id,
+        scope="workspace",
+        key=invite.role.value,
+        workspace_id=invite.tenant_id,
+    )
     invite.accepted_at = datetime.now(UTC)
     try:
         await db.commit()

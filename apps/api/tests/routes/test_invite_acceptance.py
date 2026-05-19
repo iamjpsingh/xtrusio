@@ -157,6 +157,18 @@ async def test_accept_tenant_invite_happy_path(
     tid = (
         await db_session.execute(text("SELECT id FROM tenants WHERE slug = :s"), {"s": slug})
     ).scalar_one()
+    # This synthetic tenant is created outside onboarding, so seed its 4
+    # workspace system roles — the precondition every real tenant satisfies
+    # (onboarded via Task 2, or pre-existed at 0006). _accept_tenant now also
+    # writes the mapped workspace user_roles grant against these roles.
+    await db_session.execute(
+        text(
+            "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+            "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+            "('owner'),('admin'),('editor'),('read_only')) AS v(key)"
+        ),
+        {"t": str(tid)},
+    )
     await db_session.execute(
         text(
             "INSERT INTO tenant_invites "
@@ -204,14 +216,21 @@ async def test_accept_tenant_invite_happy_path(
         assert acc is not None
     finally:
         for stmt in (
+            "DELETE FROM user_roles WHERE auth_user_id = :uid",
             "DELETE FROM tenant_memberships WHERE user_id = :uid",
             "DELETE FROM tenant_invites WHERE id = :iid",
+            "DELETE FROM roles WHERE workspace_id = :tid",
             "DELETE FROM tenants WHERE created_by = :inv",
             "DELETE FROM auth.users WHERE id = :uid",
             "DELETE FROM auth.users WHERE id = :inv",
         ):
             await db_session.execute(
                 text(stmt),
-                {"uid": str(user_id), "iid": str(invite_id), "inv": str(inviter_id)},
+                {
+                    "uid": str(user_id),
+                    "iid": str(invite_id),
+                    "tid": str(tid),
+                    "inv": str(inviter_id),
+                },
             )
         await db_session.commit()

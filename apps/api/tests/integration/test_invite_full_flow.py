@@ -42,6 +42,17 @@ async def test_owner_invites_admin_full_flow(
             {"s": f"t-{owner_id.hex[:8]}"},
         )
     ).scalar_one()
+    # Synthetic tenant created outside onboarding: seed its 4 workspace system
+    # roles — the precondition every real tenant satisfies. Invite-acceptance
+    # now also writes the mapped workspace user_roles grant against these.
+    await db_session.execute(
+        text(
+            "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+            "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+            "('owner'),('admin'),('editor'),('read_only')) AS v(key)"
+        ),
+        {"t": str(tid)},
+    )
     await db_session.execute(
         text(
             "INSERT INTO tenant_memberships (tenant_id, user_id, role) "
@@ -100,8 +111,10 @@ async def test_owner_invites_admin_full_flow(
         assert body["tenants"][0]["role"] == "admin"
     finally:
         for stmt in (
+            "DELETE FROM user_roles WHERE auth_user_id IN (:o, :i)",
             "DELETE FROM tenant_invites WHERE id = :iid",
             "DELETE FROM tenant_memberships WHERE tenant_id = :tid",
+            "DELETE FROM roles WHERE workspace_id = :tid",
             "DELETE FROM tenants WHERE id = :tid",
             "DELETE FROM auth.users WHERE id = :o",
             "DELETE FROM auth.users WHERE id = :i",
