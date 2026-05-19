@@ -8,6 +8,8 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 from xtrusio_api.core.db import SessionLocal
+from xtrusio_api.rbac.grants import grant_role
+from xtrusio_api.rbac.reconcile import wire_workspace_role_perms
 
 from tests.rls.conftest import RlsAs
 
@@ -45,6 +47,26 @@ async def test_editor_cannot_see_invites(rls_as: RlsAs) -> None:
             ),
             {"tid": str(tid), "owner": str(owner_id), "editor": str(editor_id)},
         )
+        # P3c: the enum fallback is retired. The positive principal (owner)
+        # is now visible to is_tenant_owner_or_admin only via a resolver-side
+        # user_roles grant — seed the tenant's workspace system roles + wire
+        # role_permissions, then grant the `owner` workspace role (P3a/P3b
+        # ephemeral pattern). The editor stays grant-less: the pure resolver
+        # correctly denies it, exactly the negative case under test. RLS
+        # POLICY under test is unchanged.
+        await priv.execute(
+            text(
+                "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+                "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+                "('owner'),('admin'),('editor'),('read_only')) AS v(key) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"t": str(tid)},
+        )
+        await wire_workspace_role_perms(priv, workspace_id=tid)
+        await grant_role(
+            priv, auth_user_id=owner_id, scope="workspace", key="owner", workspace_id=tid
+        )
         await priv.execute(
             text(
                 "INSERT INTO tenant_invites (tenant_id, email, role, invited_by, expires_at) "
@@ -67,9 +89,16 @@ async def test_editor_cannot_see_invites(rls_as: RlsAs) -> None:
             assert len(rows) == 1
     finally:
         async with SessionLocal() as priv:
+            # FK-safe order: invites, grants & memberships first, then the
+            # tenant (its workspace roles + role_permissions cascade via
+            # roles.workspace_id ON DELETE CASCADE), then the auth users.
             await priv.execute(
                 text("DELETE FROM tenant_invites WHERE tenant_id = :tid"),
                 {"tid": str(tid)},
+            )
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id IN (:o, :e)"),
+                {"o": str(owner_id), "e": str(editor_id)},
             )
             await priv.execute(
                 text("DELETE FROM tenant_memberships WHERE tenant_id = :tid"),

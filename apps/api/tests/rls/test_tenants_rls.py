@@ -8,6 +8,8 @@ import pytest
 from sqlalchemy import text
 from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.models.platform_user import PlatformUser
+from xtrusio_api.rbac.grants import grant_role
+from xtrusio_api.rbac.reconcile import wire_workspace_role_perms
 
 from tests.rls.conftest import RlsAs
 
@@ -44,6 +46,24 @@ async def test_member_sees_only_their_tenants(rls_as: RlsAs) -> None:
             ),
             {"tid": str(tid), "uid": str(a_id)},
         )
+        # P3c: the enum fallback is retired — the principal is now visible to
+        # is_tenant_member only via a resolver-side user_roles grant. Seed the
+        # tenant's workspace system roles + wire role_permissions, then grant
+        # the matching `owner` workspace role (same shape as the P3a/P3b
+        # ephemeral pattern). RLS POLICY under test is unchanged.
+        await s.execute(
+            text(
+                "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+                "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+                "('owner'),('admin'),('editor'),('read_only')) AS v(key) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {"t": str(tid)},
+        )
+        await wire_workspace_role_perms(s, workspace_id=tid)
+        await grant_role(
+            s, auth_user_id=a_id, scope="workspace", key="owner", workspace_id=tid
+        )
         await s.execute(
             text("INSERT INTO tenants (slug, name, created_by) VALUES (:slug, :name, :uid)"),
             {"slug": f"decoy-{a_id.hex[:8]}", "name": "Decoy", "uid": str(a_id)},
@@ -57,6 +77,13 @@ async def test_member_sees_only_their_tenants(rls_as: RlsAs) -> None:
         assert f"decoy-{a_id.hex[:8]}" not in slugs
     finally:
         async with SessionLocal() as priv:
+            # FK-safe order: user_roles & memberships first, then tenants
+            # (the tenant's workspace roles + their role_permissions cascade
+            # via roles.workspace_id ON DELETE CASCADE), then the auth user.
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id = :id"),
+                {"id": str(a_id)},
+            )
             await priv.execute(
                 text("DELETE FROM tenant_memberships WHERE user_id = :id"),
                 {"id": str(a_id)},
