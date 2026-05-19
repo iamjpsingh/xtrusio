@@ -61,9 +61,7 @@ async def test_member_sees_only_their_tenants(rls_as: RlsAs) -> None:
             {"t": str(tid)},
         )
         await wire_workspace_role_perms(s, workspace_id=tid)
-        await grant_role(
-            s, auth_user_id=a_id, scope="workspace", key="owner", workspace_id=tid
-        )
+        await grant_role(s, auth_user_id=a_id, scope="workspace", key="owner", workspace_id=tid)
         await s.execute(
             text("INSERT INTO tenants (slug, name, created_by) VALUES (:slug, :name, :uid)"),
             {"slug": f"decoy-{a_id.hex[:8]}", "name": "Decoy", "uid": str(a_id)},
