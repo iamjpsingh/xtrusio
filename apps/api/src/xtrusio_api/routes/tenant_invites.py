@@ -21,7 +21,6 @@ from ..services.tenant_invites import (
     InviteAlreadyAcceptedError,
     InvitePendingError,
     NotAMemberError,
-    NotOwnerOrAdminError,
     UserAlreadyMemberError,
     create_tenant_invite,
     list_tenant_invites,
@@ -48,8 +47,6 @@ async def create(
         )
     except NotAMemberError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
-    except NotOwnerOrAdminError as e:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_owner_or_admin") from e
     except ForbiddenRoleError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "forbidden_role") from e
     except UserAlreadyMemberError as e:
@@ -71,8 +68,6 @@ async def list_invites(
         rows = await list_tenant_invites(db, tenant_id=tenant_id, requester_id=identity.user_id)
     except NotAMemberError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
-    except NotOwnerOrAdminError as e:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_owner_or_admin") from e
     # next_cursor: pagination not yet implemented (single page, newest first)
     return TenantInvitesPage(
         items=[TenantInviteResponse.model_validate(r) for r in rows], next_cursor=None
@@ -92,8 +87,6 @@ async def revoke(
         )
     except NotAMemberError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
-    except NotOwnerOrAdminError as e:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "not_owner_or_admin") from e
     except InviteAlreadyAcceptedError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, "invite_already_accepted") from e
     return Response(status_code=status.HTTP_204_NO_CONTENT)

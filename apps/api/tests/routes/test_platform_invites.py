@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -21,15 +21,17 @@ async def test_create_invite_unauth_returns_401(http_client: AsyncClient) -> Non
     assert r.status_code == 401
 
 
-async def test_create_invite_non_super_admin_returns_403(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
-) -> None:
+async def _seed_platform_user(db: AsyncSession, *, role_key: str | None) -> UUID:
+    """Ephemeral auth.users + platform_users row; if `role_key` is given, also a
+    resolver-visible platform `user_roles` grant (the P3b authz source). No
+    super_admin is ever created (use the `existing_super_admin` fixture)."""
     from xtrusio_api.models.platform_user import PlatformRole
     from xtrusio_api.models.platform_user import PlatformUser as PlatformUserModel
+    from xtrusio_api.rbac.grants import grant_role
 
     user_id = uuid4()
-    email = f"editor-{user_id.hex[:8]}@example.com"
-    await db_session.execute(
+    email = f"pu-{user_id.hex[:8]}@example.com"
+    await db.execute(
         text(
             "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, "
             "email_confirmed_at, created_at, updated_at) VALUES "
@@ -38,10 +40,26 @@ async def test_create_invite_non_super_admin_returns_403(
         ),
         {"id": str(user_id), "email": email},
     )
-    db_session.add(
-        PlatformUserModel(id=user_id, email=email, role=PlatformRole.EDITOR, is_active=True)
-    )
-    await db_session.commit()
+    db.add(PlatformUserModel(id=user_id, email=email, role=PlatformRole.EDITOR, is_active=True))
+    if role_key is not None:
+        await grant_role(db, auth_user_id=user_id, scope="platform", key=role_key)
+    await db.commit()
+    return user_id
+
+
+async def _drop_platform_user(db: AsyncSession, user_id: UUID) -> None:
+    await db.execute(text("DELETE FROM user_roles WHERE auth_user_id = :id"), {"id": str(user_id)})
+    await db.execute(text("DELETE FROM platform_users WHERE id = :id"), {"id": str(user_id)})
+    await db.execute(text("DELETE FROM auth.users WHERE id = :id"), {"id": str(user_id)})
+    await db.commit()
+
+
+async def test_create_invite_unprivileged_returns_403_permission_denied(
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+) -> None:
+    # P3b authz model: a principal without `platform.users.invite` (no platform
+    # role grant) is denied with the unified permission_denied contract.
+    user_id = await _seed_platform_user(db_session, role_key=None)
     try:
         token = make_jwt(sub=user_id)
         r = await http_client.post(
@@ -50,14 +68,37 @@ async def test_create_invite_non_super_admin_returns_403(
             json={"email": "x@x.com", "role": "admin"},
         )
         assert r.status_code == 403
+        assert r.json()["detail"] == "permission_denied"
     finally:
-        await db_session.execute(
-            text("DELETE FROM platform_users WHERE id = :id"), {"id": str(user_id)}
+        await _drop_platform_user(db_session, user_id)
+
+
+async def test_create_invite_platform_admin_succeeds(
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt,
+    mock_supabase_admin: MagicMock,
+) -> None:
+    # P3b intentionally CHANGES authz: platform `admin` now holds
+    # `platform.users.invite` (spec matrix) and may create invites.
+    user_id = await _seed_platform_user(db_session, role_key="admin")
+    try:
+        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
+        token = make_jwt(sub=user_id)
+        r = await http_client.post(
+            "/api/platform/users/invites",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"email": "admin-invited@example.com", "role": "editor"},
         )
+        assert r.status_code == 201
+        assert r.json()["email"] == "admin-invited@example.com"
         await db_session.execute(
-            text("DELETE FROM auth.users WHERE id = :id"), {"id": str(user_id)}
+            text("DELETE FROM platform_invites WHERE email = :e"),
+            {"e": "admin-invited@example.com"},
         )
         await db_session.commit()
+    finally:
+        await _drop_platform_user(db_session, user_id)
 
 
 async def test_create_invite_happy_path(

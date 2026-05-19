@@ -43,8 +43,13 @@ async def test_owner_invites_admin_full_flow(
         )
     ).scalar_one()
     # Synthetic tenant created outside onboarding: seed its 4 workspace system
-    # roles — the precondition every real tenant satisfies. Invite-acceptance
-    # now also writes the mapped workspace user_roles grant against these.
+    # roles + wire their role_permissions (the precondition every real tenant
+    # satisfies via the reconciler). Under P3b the owner's authz to create an
+    # invite is resolver-driven, so the owner also needs the workspace `owner`
+    # user_roles grant. Invite-acceptance writes the invitee's grant.
+    from xtrusio_api.rbac.grants import grant_role
+    from xtrusio_api.rbac.reconcile import wire_workspace_role_perms
+
     await db_session.execute(
         text(
             "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
@@ -53,12 +58,16 @@ async def test_owner_invites_admin_full_flow(
         ),
         {"t": str(tid)},
     )
+    await wire_workspace_role_perms(db_session, workspace_id=tid)
     await db_session.execute(
         text(
             "INSERT INTO tenant_memberships (tenant_id, user_id, role) "
             "VALUES (:tid, :uid, 'owner')"
         ),
         {"tid": str(tid), "uid": str(owner_id)},
+    )
+    await grant_role(
+        db_session, auth_user_id=owner_id, scope="workspace", key="owner", workspace_id=tid
     )
     await db_session.commit()
 
