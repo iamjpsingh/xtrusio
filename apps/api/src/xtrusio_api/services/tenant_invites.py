@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from supabase import create_client
 
 from ..core.config import get_settings
+from ..core.permissions import require_permission
 from ..models.tenant_invite import TenantInvite
 from ..models.tenant_membership import TenantMembership, TenantRole
 from .invite_rules import can_invite
@@ -21,10 +22,6 @@ _TTL_DAYS = 7
 
 
 class NotAMemberError(Exception):
-    pass
-
-
-class NotOwnerOrAdminError(Exception):
     pass
 
 
@@ -48,9 +45,16 @@ class EmailProviderUnavailableError(Exception):
     pass
 
 
-async def _require_owner_or_admin(
+async def _load_membership(
     db: AsyncSession, *, tenant_id: UUID, user_id: UUID
 ) -> TenantMembership:
+    """Load the requester's membership (needed by `can_invite`).
+
+    Authorization is the resolver's job (`require_permission`), NOT the enum
+    role on this row. We still require a membership to exist so the established
+    `not_a_member` (403) route contract is preserved and `can_invite` has the
+    inviter's role to evaluate its business rule.
+    """
     membership = (
         await db.execute(
             select(TenantMembership).where(
@@ -63,8 +67,6 @@ async def _require_owner_or_admin(
     ).scalar_one_or_none()
     if membership is None:
         raise NotAMemberError()
-    if membership.role not in (TenantRole.OWNER, TenantRole.ADMIN):
-        raise NotOwnerOrAdminError()
     return membership
 
 
@@ -76,7 +78,10 @@ async def create_tenant_invite(
     email: str,
     role: TenantRole,
 ) -> TenantInvite:
-    membership = await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=inviter_id)
+    membership = await _load_membership(db, tenant_id=tenant_id, user_id=inviter_id)
+    await require_permission(
+        db, inviter_id, "workspace.members.invite", workspace_id=tenant_id
+    )
 
     if not can_invite(inviter=membership.role, target=role):
         raise ForbiddenRoleError()
@@ -154,7 +159,10 @@ async def create_tenant_invite(
 async def list_tenant_invites(
     db: AsyncSession, *, tenant_id: UUID, requester_id: UUID
 ) -> list[TenantInvite]:
-    await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=requester_id)
+    await _load_membership(db, tenant_id=tenant_id, user_id=requester_id)
+    await require_permission(
+        db, requester_id, "workspace.members.manage", workspace_id=tenant_id
+    )
     rows = (
         (
             await db.execute(
@@ -173,7 +181,10 @@ async def list_tenant_invites(
 async def revoke_tenant_invite(
     db: AsyncSession, *, tenant_id: UUID, invite_id: UUID, requester_id: UUID
 ) -> None:
-    await _require_owner_or_admin(db, tenant_id=tenant_id, user_id=requester_id)
+    await _load_membership(db, tenant_id=tenant_id, user_id=requester_id)
+    await require_permission(
+        db, requester_id, "workspace.members.manage", workspace_id=tenant_id
+    )
     invite = (
         await db.execute(
             select(TenantInvite).where(

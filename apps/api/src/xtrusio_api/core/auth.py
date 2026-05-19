@@ -96,14 +96,6 @@ async def get_current_user(
     return CurrentUser(user_id=row.id, email=row.email, role=row.role, is_active=row.is_active)
 
 
-async def require_super_admin(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
-) -> CurrentUser:
-    if user.role != PlatformRole.SUPER_ADMIN:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "super_admin required")
-    return user
-
-
 @dataclass
 class AuthIdentity:
     user_id: UUID

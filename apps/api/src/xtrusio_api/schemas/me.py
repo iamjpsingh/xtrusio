@@ -21,6 +21,9 @@ class TenantContext(BaseModel):
     slug: str
     name: str
     role: TenantRole
+    # Resolver-derived effective workspace permission keys for this tenant.
+    # Additive: `role` is kept until the frontend migrates (P6b).
+    permissions: list[str]
 
 
 class PendingInvite(BaseModel):
@@ -34,5 +37,8 @@ class MeResponse(BaseModel):
     user_id: UUID
     email: EmailStr
     platform: PlatformContext | None
+    # Resolver-derived effective platform permission keys (empty if none).
+    # Additive: `platform.role` is kept until the frontend migrates (P6b).
+    platform_permissions: list[str]
     tenants: list[TenantContext]
     pending_invite: PendingInvite | None

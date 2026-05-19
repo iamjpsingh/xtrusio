@@ -25,6 +25,46 @@ async def _insert_auth_user(db: AsyncSession, user_id, email: str) -> None:
     )
 
 
+async def _seed_workspace_roles(db: AsyncSession, tid) -> None:
+    """Seed the 4 workspace system roles for `tid` and wire their
+    role_permissions to the catalog (the P3b authz precondition that the
+    startup reconciler provides for real tenants; tests create tenants
+    mid-run, so we do it explicitly — same shape as P3a grant tests)."""
+    from xtrusio_api.rbac.reconcile import wire_workspace_role_perms
+
+    await db.execute(
+        text(
+            "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+            "SELECT 'workspace', :t, v.key, v.key, '', true FROM (VALUES "
+            "('owner'),('admin'),('editor'),('read_only')) AS v(key) "
+            "ON CONFLICT DO NOTHING"
+        ),
+        {"t": str(tid)},
+    )
+    await wire_workspace_role_perms(db, workspace_id=tid)
+
+
+async def _seed_member_with_grant(
+    db: AsyncSession, *, tid, user_id, enum_role: str, grant_key: str | None
+) -> None:
+    """Insert a tenant_memberships row (the enum, kept for can_invite) and,
+    when `grant_key` is given, a resolver-visible workspace `user_roles` grant
+    (the P3b authz source)."""
+    from xtrusio_api.rbac.grants import grant_role
+
+    await db.execute(
+        text(
+            "INSERT INTO tenant_memberships (tenant_id, user_id, role) "
+            "VALUES (:tid, :uid, :r)"
+        ),
+        {"tid": str(tid), "uid": str(user_id), "r": enum_role},
+    )
+    if grant_key is not None:
+        await grant_role(
+            db, auth_user_id=user_id, scope="workspace", key=grant_key, workspace_id=tid
+        )
+
+
 async def _seed_owner(db: AsyncSession) -> tuple:
     user_id = uuid4()
     email = f"o-{user_id.hex[:8]}@example.com"
@@ -37,19 +77,22 @@ async def _seed_owner(db: AsyncSession) -> tuple:
     tid = (
         await db.execute(text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": slug})
     ).scalar_one()
-    await db.execute(
-        text(
-            "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES (:tid, :uid, 'owner')"
-        ),
-        {"tid": str(tid), "uid": str(user_id)},
+    await _seed_workspace_roles(db, tid)
+    await _seed_member_with_grant(
+        db, tid=tid, user_id=user_id, enum_role="owner", grant_key="owner"
     )
     await db.commit()
     return user_id, tid
 
 
 async def _cleanup(db: AsyncSession, user_id) -> None:
+    # FK-safe order: invites & grants & memberships first, then the tenant
+    # (its workspace roles cascade via roles.workspace_id ON DELETE CASCADE),
+    # then the auth user. user_roles for the tenant's workspace roles are
+    # removed by the roles cascade; the owner's grant is dropped explicitly.
     for stmt in (
         "DELETE FROM tenant_invites WHERE invited_by = :id",
+        "DELETE FROM user_roles WHERE auth_user_id = :id",
         "DELETE FROM tenant_memberships WHERE user_id = :id",
         "DELETE FROM tenants WHERE created_by = :id",
         "DELETE FROM auth.users WHERE id = :id",
@@ -90,15 +133,14 @@ async def test_owner_invites_admin(
 async def test_admin_cannot_invite_admin(
     http_client: AsyncClient, db_session: AsyncSession, make_jwt
 ) -> None:
+    # The admin HAS workspace.members.invite (P3b authz passes); the
+    # can_invite() BUSINESS rule still rejects admin->admin (preserved).
     owner_id, tid = await _seed_owner(db_session)
     admin_id = uuid4()
     email = f"adm-{admin_id.hex[:8]}@example.com"
     await _insert_auth_user(db_session, admin_id, email)
-    await db_session.execute(
-        text(
-            "INSERT INTO tenant_memberships (tenant_id, user_id, role) VALUES (:tid, :uid, 'admin')"
-        ),
-        {"tid": str(tid), "uid": str(admin_id)},
+    await _seed_member_with_grant(
+        db_session, tid=tid, user_id=admin_id, enum_role="admin", grant_key="admin"
     )
     await db_session.commit()
     try:
@@ -112,6 +154,7 @@ async def test_admin_cannot_invite_admin(
         assert r.json()["detail"] == "forbidden_role"
     finally:
         for stmt in (
+            "DELETE FROM user_roles WHERE auth_user_id = :id",
             "DELETE FROM tenant_memberships WHERE user_id = :id",
             "DELETE FROM auth.users WHERE id = :id",
         ):
@@ -221,5 +264,37 @@ async def test_non_member_cannot_list(
         await db_session.execute(
             text("DELETE FROM auth.users WHERE id = :id"), {"id": str(outsider_id)}
         )
+        await db_session.commit()
+        await _cleanup(db_session, owner_id)
+
+
+async def test_member_without_manage_perm_cannot_list_permission_denied(
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+) -> None:
+    # P3b authz model: a workspace member who is NOT owner/admin (editor enum +
+    # editor grant -> no workspace.members.manage) IS a member (so NOT the
+    # not_a_member contract) but is denied with the unified permission_denied.
+    owner_id, tid = await _seed_owner(db_session)
+    editor_id = uuid4()
+    await _insert_auth_user(db_session, editor_id, f"ed-{editor_id.hex[:8]}@example.com")
+    await _seed_member_with_grant(
+        db_session, tid=tid, user_id=editor_id, enum_role="editor", grant_key="editor"
+    )
+    await db_session.commit()
+    try:
+        token = make_jwt(sub=editor_id)
+        r = await http_client.get(
+            f"/api/tenants/{tid}/invites",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 403
+        assert r.json()["detail"] == "permission_denied"
+    finally:
+        for stmt in (
+            "DELETE FROM user_roles WHERE auth_user_id = :id",
+            "DELETE FROM tenant_memberships WHERE user_id = :id",
+            "DELETE FROM auth.users WHERE id = :id",
+        ):
+            await db_session.execute(text(stmt), {"id": str(editor_id)})
         await db_session.commit()
         await _cleanup(db_session, owner_id)

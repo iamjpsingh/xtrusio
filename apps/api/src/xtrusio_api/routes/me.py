@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
+from ..core.permissions import effective_platform_perms, effective_workspace_perms
 from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformUser
 from ..models.tenant import Tenant
@@ -34,6 +35,8 @@ async def me(
     if pu is not None and pu.is_active:
         platform = PlatformContext(role=pu.role, is_active=pu.is_active)
 
+    platform_permissions = await effective_platform_perms(db, identity.user_id)
+
     rows = (
         await db.execute(
             select(TenantMembership, Tenant)
@@ -42,7 +45,16 @@ async def me(
             .order_by(Tenant.created_at.desc())
         )
     ).all()
-    tenants = [TenantContext(id=t.id, slug=t.slug, name=t.name, role=m.role) for m, t in rows]
+    tenants = [
+        TenantContext(
+            id=t.id,
+            slug=t.slug,
+            name=t.name,
+            role=m.role,
+            permissions=await effective_workspace_perms(db, identity.user_id, t.id),
+        )
+        for m, t in rows
+    ]
 
     pending_invite = None
     md = identity.user_metadata
@@ -90,6 +102,7 @@ async def me(
         user_id=identity.user_id,
         email=identity.email,
         platform=platform,
+        platform_permissions=platform_permissions,
         tenants=tenants,
         pending_invite=pending_invite,
     )

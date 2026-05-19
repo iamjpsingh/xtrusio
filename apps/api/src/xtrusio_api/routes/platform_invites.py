@@ -8,8 +8,9 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, require_super_admin
+from ..core.auth import CurrentUser, get_current_user
 from ..core.db import get_db
+from ..core.permissions import require_permission
 from ..schemas.invite import (
     CreatePlatformInviteRequest,
     PlatformInviteResponse,
@@ -31,9 +32,10 @@ router = APIRouter(prefix="/api/platform/users/invites", tags=["platform-invites
 @router.post("", response_model=PlatformInviteResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     body: CreatePlatformInviteRequest,
-    user: Annotated[CurrentUser, Depends(require_super_admin)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformInviteResponse:
+    await require_permission(db, user.user_id, "platform.users.invite")
     try:
         invite = await create_platform_invite(
             db, email=body.email, role=body.role, invited_by=user.user_id
@@ -49,9 +51,10 @@ async def create(
 
 @router.get("", response_model=PlatformInvitesPage)
 async def list_invites(
-    user: Annotated[CurrentUser, Depends(require_super_admin)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformInvitesPage:
+    await require_permission(db, user.user_id, "platform.users.invite")
     rows = await list_platform_invites(db)
     # next_cursor: pagination not yet implemented (single page, newest 50)
     return PlatformInvitesPage(
@@ -62,9 +65,10 @@ async def list_invites(
 @router.delete("/{invite_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def revoke(
     invite_id: UUID,
-    user: Annotated[CurrentUser, Depends(require_super_admin)],
+    user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
+    await require_permission(db, user.user_id, "platform.users.manage")
     try:
         await revoke_platform_invite(db, invite_id=invite_id)
     except InviteAlreadyAcceptedError as e:
