@@ -30,6 +30,10 @@ jobs:
       CORS_ALLOW_ORIGINS: "http://localhost:5173"
       XTRUSIO_PROCESS_ROLE: "api"
       STARTUP_RECONCILE_TOLERANT: "false"
+      LOG_LEVEL: "INFO"
+      WEB_APP_URL: "http://localhost:5173"
+      # CI does not run Valkey; the URL only needs to satisfy Settings validation.
+      VALKEY_URL: "redis://localhost:6379/0"
 
     steps:
       - uses: actions/checkout@v4
