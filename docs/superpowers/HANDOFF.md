@@ -1,15 +1,15 @@
 # HANDOFF — RBAC + RLS Re-architecture
 
-**Written:** 2026-05-19
-**Status:** **Backend RBAC re-architecture COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a all in `main` (`5ddb413`). The enum→resolver authorization cutover is finished. Remaining: P4/P5 (RBAC admin APIs+UIs + the deferred P3c governance items), P6b/P6c (frontend permission-driven nav/shells + RBAC admin UIs), and the now-unblocked parked review-fix backlog.
+**Written:** 2026-05-19, updated 2026-05-20 (P3.5 merged)
+**Status:** **Backend RBAC re-architecture COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5 all in `main` (`e315dc5`). The enum→resolver authorization cutover is finished and the parked review-fix backlog is now drained except for surfaced follow-ups (see below). Remaining: P4/P5 (RBAC admin APIs+UIs + the deferred P3c governance items), P6b/P6c (frontend permission-driven nav/shells + RBAC admin UIs).
 
 Read top to bottom before doing anything.
 
 ---
 
-## ⏩ RESUME HERE — 2026-05-19
+## ⏩ RESUME HERE — 2026-05-20
 
-### Done & merged (all PRs #1–#6 MERGED; `main` @ `5ddb413`; single Alembic head `0008`; 0 open PRs)
+### Done & merged (PRs #1–#6, #8 MERGED; `main` @ `e315dc5`; single Alembic head `0008`; 0 open PRs)
 
 | Phase | What |
 |---|---|
@@ -19,6 +19,7 @@ Read top to bottom before doing anything.
 | P3b (#5) | `core/permissions.py` (`require_permission` calling the resolvers); all 10 routes + tenant-invite service authz converted enum→resolver; `/me` additive effective-perm keys |
 | P3c (#6) | `0008`: helpers → **pure resolver** (enum disjunct retired, reversible); pre-RBAC rls canaries reframed to grants. **Cutover complete.** |
 | P6a (#2) | Frontend: pathless `_app` shell (shell-bleed fixed), shared `AuthLayout`, auth-page polish, public `/api/signup-status` rename |
+| P3.5 (#8) | Review-fix backlog: CI workflow (`.github/workflows/ci.yml`), cursor pagination on 3 list endpoints + structural invariant test, JWKS coalescing lock, signup duplicate-email by `AuthApiError` class, lifespan fail-fast (`STARTUP_RECONCILE_TOLERANT` escape hatch), AuthGuard duplicate-staleTime cleanup. Principles §8 amended to permit managed-Supabase test project. Plan + PR body in `docs/superpowers/`. |
 
 Backend authorization is now **fully resolver/permission-driven** and consistent with RLS (same `0007` fns). Verified: full suite green from a CLEAN DB (0 failed; 2 documented vacuous skips; env-flaky `test_signup` state-dependent), `0007↔0008` reversible.
 
@@ -30,7 +31,17 @@ Backend authorization is now **fully resolver/permission-driven** and consistent
 4. **P6b** — pinned `/me` effective-perms TS contract + legacy-compat adapter + permission-driven nav + two physically-separate Platform/Workspace shells + workspace switcher. (P3b already returns the effective-perm keys additively; the enum `platform.role`/`tenants[].role` fields stay until P6b removes the frontend's enum consumption.)
 5. **P6c** — RBAC admin UIs (consume P4/P5 APIs).
 6. **🔒 LATE cleanup (only after P6b removes frontend enum consumption AND every backend enum read is gone):** drop `platform_users.role` / `tenant_memberships.role` columns + the `platform_role`/`tenant_role` enum types. Do NOT do this earlier — `/me` (P3b additive), onboarding/invite-accept/bootstrap still legitimately write the enum rows; `0008` downgrade restores the enum-reading OR-form so the enum columns must exist while `0008` is reversible.
-7. **Parked review-fix backlog NOW UNBLOCKED:** memory `deferred-review-fixes-pending-p3` said "parked until RBAC P3 fully merges" — **P3 is now fully merged**, so those (CI, pagination, signup, JWKS, etc.) are eligible. Triage them into a phase when ready.
+7. ~~**Parked review-fix backlog NOW UNBLOCKED**~~ — **DRAINED by P3.5 (#8, merged 2026-05-20)**. Remaining surfaced follow-ups (not in P3.5 scope, captured for a future phase):
+   - **Pre-existing test-file typecheck debt:** `uv run mypy apps/api` reports ~49 `no-untyped-def` errors in P3a/P3b-era test files (test_onboarding, test_me, test_signup, test_platform_settings, test_invite_acceptance, test_tenants, test_platform_invites, test_tenant_invites, test_signup_to_tenant_flow, test_invite_full_flow, test_permission_engine_rls). P3.5 contributed zero new mypy errors; every new source/test in #8 is fully typed. Propose a small "type the tests" phase before P4, OR absorb into P4 prep.
+   - **`gotrue` → `supabase_auth` migration:** supabase-py 2.x emits a `DeprecationWarning` saying `gotrue` is being replaced by `supabase_auth`. Migrate imports in a future phase.
+   - **Pre-existing broad `except Exception` in invite services:** `services/platform_invites.py:90` and `services/tenant_invites.py:146` swallow every exception class into `EmailProviderUnavailableError`. Narrow to specific (`httpx.HTTPError`, `AuthApiError`, `AuthRetryableError`, etc.) in a follow-up audit.
+
+### P3.5 (#8) operator artifacts
+
+After P3.5 you MUST have these in place for local dev:
+
+- `.env` includes `STARTUP_RECONCILE_TOLERANT=false` (required Settings field, no `Field` default per `feedback_no_hardcoded_config`). Without it, every `make dev`/`make test`/`make api` fails Settings validation at boot.
+- GitHub Actions secrets configured for the `xtrusio-ci` managed Supabase project: `CI_DATABASE_URL`, `CI_SUPABASE_URL`, `CI_SUPABASE_ANON_KEY`, `CI_SUPABASE_SERVICE_ROLE_KEY`, `CI_SUPABASE_JWKS_URL`. Until set, the workflow on every PR will go red at the `Migrate test DB` step — expected and benign for merging (CI gates are advisory not blocking until secrets land).
 
 ### Execution model (MANDATORY — memories `feedback_lean_review_workflow`, `feedback_model_selection`)
 
@@ -39,7 +50,7 @@ Build the whole phase/slice in a few coherent steps, clean/reusable/scalable cod
 ### Pre-existing `main` debt (unchanged, not from any phase)
 
 - Managed DB `platform_settings.signups_enabled` live state → `tests/routes/test_signup.py::{test_signup_status_default_false,test_signup_disabled_returns_403}` env-flaky (pass/fail by state; reproduce on main).
-- 4 ruff `I001` (`scripts/bootstrap.py`, `services/{signup,platform_invites,tenant_invites}.py`); 1 `jose` mypy; frontend `react-refresh` warnings — byte-identical to main, zero NEW from any phase.
+- Test-file typecheck debt: ~49 `no-untyped-def` mypy errors in P3a/P3b-era test files — see "P3.5 surfaced follow-ups" above. Previously under-counted as "1 jose mypy"; the real number was already in the test tree pre-P3.5.
 - Shared-DB mid-run pollution fragility → ALWAYS `make test-clean` before a gate run; serialized DB access. (Bigger optional accelerator never adopted: a local Postgres test DB instead of remote managed Supabase.)
 
 ### Still USER-DRIVEN, never agent-run
