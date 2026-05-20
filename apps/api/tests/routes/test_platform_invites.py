@@ -58,7 +58,7 @@ async def _drop_platform_user(db: AsyncSession, user_id: UUID) -> None:
 
 
 async def test_create_invite_unprivileged_returns_403_permission_denied(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     # P3b authz model: a principal without `platform.users.invite` (no platform
     # role grant) is denied with the unified permission_denied contract.
@@ -79,7 +79,7 @@ async def test_create_invite_unprivileged_returns_403_permission_denied(
 async def test_create_invite_platform_admin_succeeds(
     http_client: AsyncClient,
     db_session: AsyncSession,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     # P3b intentionally CHANGES authz: platform `admin` now holds
@@ -107,7 +107,7 @@ async def test_create_invite_platform_admin_succeeds(
 async def test_create_invite_happy_path(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
@@ -136,7 +136,7 @@ async def test_create_invite_happy_path(
 async def test_create_invite_duplicate_pending_returns_409(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
@@ -165,7 +165,7 @@ async def test_create_invite_duplicate_pending_returns_409(
 async def test_list_invites_returns_created(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
@@ -193,7 +193,7 @@ async def test_list_invites_returns_created(
 async def test_revoke_invite(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
@@ -229,7 +229,7 @@ async def test_revoke_invite(
 async def test_create_invite_super_admin_role_rejected_422(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
 ) -> None:
     token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.post(
