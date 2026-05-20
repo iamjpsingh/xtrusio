@@ -21,6 +21,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .catalog import CATALOG, SYSTEM_ROLE_PERMISSIONS, catalog_keys
 
+# Three functions below — reconcile_rbac, reconcile_user_roles_from_enums,
+# wire_workspace_role_perms — all set the transaction-local GUC
+# `app.bypass_priv_escalation = 'on'` (third arg = is_local = true → auto-reset
+# at commit/rollback). This is REQUIRED because the 0009 triggers
+# `enforce_priv_escalation` (on user_roles INSERT) and
+# `reject_system_role_perm_change` (on role_permissions INSERT/UPDATE/DELETE)
+# otherwise block:
+#   - reconcile_rbac re-seeds role_permissions for every is_system role
+#     (blocked by reject_system_role_perm_change without the bypass),
+#   - reconcile_user_roles_from_enums inserts user_roles with granted_by=NULL
+#     and no authenticated actor (blocked by enforce_priv_escalation),
+#   - wire_workspace_role_perms is the per-tenant scoped variant of the same
+#     role_permissions re-seed (same blocker).
+# These are system processes (boot reconcile + onboarding wiring), not request
+# handlers. Backend REQUEST code MUST NEVER set this GUC — request handlers
+# instead SET `app.actor_id` to the authenticated user so the trigger can run
+# the actor-holds-target-perms check.
+
 # system-role key -> SYSTEM_ROLE_PERMISSIONS key
 _PLATFORM_ROLE_MAP = {"super_admin": "super_admin", "admin": "admin"}
 _WORKSPACE_ROLE_MAP = {
@@ -37,6 +55,9 @@ async def reconcile_rbac(db: AsyncSession) -> None:
     # Postgres READ COMMITTED + MVCC the DELETE+re-INSERT in _sync_role_perms
     # is invisible to concurrent readers until this commit, so no reader ever
     # observes an empty permission set for a system role.
+    # 0. opt out of the 0009 system-role-immutability trigger for this
+    # transaction (see module-level comment above).
+    await db.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
     # 1. upsert catalog -> permissions
     for p in CATALOG:
         await db.execute(
@@ -125,7 +146,16 @@ async def wire_workspace_role_perms(db: AsyncSession, *, workspace_id: UUID) -> 
     """Set role_permissions for ONE workspace's 4 is_system roles to match
     SYSTEM_ROLE_PERMISSIONS. SCOPED to this workspace (no all-tenants sweep)
     and does NOT commit — the caller owns the transaction. Idempotent
-    (DELETE+re-INSERT for just this workspace's role ids)."""
+    (DELETE+re-INSERT for just this workspace's role ids).
+
+    Sets the bypass GUC because this function re-seeds role_permissions for
+    is_system workspace roles (which the 0009 reject_system_role_perm_change
+    trigger blocks). Called from boot reconcile (system) AND from
+    `_accept_tenant` during onboarding — onboarding today has no clean
+    actor-permission story for re-wiring catalog perms, so we bypass; if
+    P4-C1 reframes onboarding to flow the inviter's actor id, we revisit.
+    See module-level comment for the request-vs-system rule."""
+    await db.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
     for role_key, map_key in _WORKSPACE_ROLE_MAP.items():
         rid = (
             await db.execute(
@@ -177,6 +207,10 @@ async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
     at startup / `make rbac-seed` only (NOT a request path), so the per-tenant
     wiring loop's O(tenants) cost is acceptable. One commit.
     """
+    # Boot-time projection: no authenticated actor exists, so opt out of the
+    # 0009 enforce_priv_escalation + reject_system_role_perm_change triggers
+    # for this transaction (see module-level comment above).
+    await db.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
     # Step A: seed any missing per-tenant workspace system role ROWS.
     await db.execute(
         text(

@@ -28,6 +28,12 @@ async def purge_test_data() -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     async with SessionLocal() as s:
+        # Opt out of 0009 governance triggers for the cleanup transaction.
+        # purge_test_data is a system process (test-suite teardown), not a
+        # request — deleting tenants cascades to per-workspace is_system
+        # roles via FK, which reject_system_role_mutation would otherwise
+        # block. See rbac/reconcile.py for the same bypass pattern.
+        await s.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
         # Resolve the set of test auth.users ids first (drives FK-dependent deletes).
         test_ids = [
             r[0]

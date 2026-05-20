@@ -60,6 +60,10 @@ async def test_grant_role_workspace_is_idempotent() -> None:
         assert n == 1
     finally:
         async with SessionLocal() as priv:
+            # Test-fixture teardown is a system process — bypass the 0009
+            # immutable-system-role triggers for this transaction (per-workspace
+            # is_system roles are dropped when the tenant cascades).
+            await priv.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
             await priv.execute(
                 text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
             )
