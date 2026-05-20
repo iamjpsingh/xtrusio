@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
@@ -9,7 +10,9 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from xtrusio_api.models.platform_user import PlatformUser
+from xtrusio_api.core.db import SessionLocal
+from xtrusio_api.models.platform_user import PlatformRole, PlatformUser
+from xtrusio_api.services.platform_invites import create_platform_invite
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -235,3 +238,53 @@ async def test_create_invite_super_admin_role_rejected_422(
         json={"email": "x@example.com", "role": existing_super_admin.role.value},
     )
     assert r.status_code == 422
+
+
+async def test_list_platform_invites_paginates(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
+        user=MagicMock(id=str(uuid4()))
+    )
+    async with SessionLocal() as s:
+        for i in range(3):
+            await create_platform_invite(
+                s,
+                email=f"paginv-{i}-{uuid4().hex[:6]}@example.com",
+                role=PlatformRole.ADMIN,
+                invited_by=existing_super_admin.id,
+            )
+
+    token = make_jwt(sub=existing_super_admin.id)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r1 = await http_client.get("/api/platform/users/invites?limit=2", headers=headers)
+    assert r1.status_code == 200, r1.text
+    p1 = r1.json()
+    assert len(p1["items"]) == 2
+    assert p1["next_cursor"] is not None
+
+    r2 = await http_client.get(
+        f"/api/platform/users/invites?limit=2&cursor={p1['next_cursor']}",
+        headers=headers,
+    )
+    assert r2.status_code == 200, r2.text
+    p2 = r2.json()
+    assert len(p2["items"]) >= 1
+    assert {x["id"] for x in p1["items"]}.isdisjoint({x["id"] for x in p2["items"]})
+
+
+async def test_list_platform_invites_rejects_bad_cursor(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+) -> None:
+    token = make_jwt(sub=existing_super_admin.id)
+    r = await http_client.get(
+        "/api/platform/users/invites?cursor=NOPE",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 400
