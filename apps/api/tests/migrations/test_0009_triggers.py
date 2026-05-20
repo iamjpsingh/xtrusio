@@ -96,6 +96,42 @@ async def test_priv_escalation_allows_grant_when_actor_holds_target_perms(
     await db_session.commit()
 
 
+async def test_null_granted_by_auto_bypasses_priv_escalation(
+    db_session: AsyncSession,
+) -> None:
+    """System / bootstrap grants set granted_by=NULL — trigger auto-bypasses.
+
+    Onboarding, invite-acceptance, bootstrap, and the boot reconciler all use
+    granted_by=NULL. Only P4's grant API sets granted_by=actor_id, which is
+    where the trigger enforces.
+    """
+    target_id = uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO auth.users (id, instance_id, aud, role, email, "
+            "encrypted_password, email_confirmed_at, created_at, updated_at) "
+            "VALUES (:id, '00000000-0000-0000-0000-000000000000', 'authenticated', "
+            "'authenticated', :email, '', now(), now(), now())"
+        ),
+        {"id": str(target_id), "email": f"null-by-{target_id.hex[:8]}@example.com"},
+    )
+    await db_session.commit()
+    role_id = (
+        await db_session.execute(
+            text("SELECT id FROM roles WHERE scope='platform' AND key='admin' AND is_system")
+        )
+    ).scalar_one()
+    # No app.actor_id set, no bypass GUC — granted_by=NULL alone should pass.
+    await db_session.execute(
+        text("INSERT INTO user_roles (auth_user_id, role_id, granted_by) VALUES (:u, :r, NULL)"),
+        {"u": str(target_id), "r": str(role_id)},
+    )
+    await db_session.execute(
+        text("DELETE FROM user_roles WHERE auth_user_id = :u"), {"u": str(target_id)}
+    )
+    await db_session.commit()
+
+
 async def test_bypass_guc_allows_grant_without_actor(db_session: AsyncSession) -> None:
     """The reconciler boot path uses app.bypass_priv_escalation = on."""
     target_id = uuid4()

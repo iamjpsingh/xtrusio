@@ -49,6 +49,17 @@ def upgrade() -> None:
                 RETURN NEW;
             END IF;
 
+            -- System / bootstrap grants set granted_by = NULL (reconciler,
+            -- onboarding, invite-acceptance, bootstrap script). The priv-
+            -- escalation rule applies only to human-actor grants (P4's grant
+            -- API), which always sets granted_by to the actor's user id.
+            -- Direct-DB attackers who can forge granted_by = NULL already have
+            -- privileged DB access; this trigger is defense-in-depth on the
+            -- application path, not a sole control.
+            IF NEW.granted_by IS NULL THEN
+                RETURN NEW;
+            END IF;
+
             actor_id := nullif(current_setting('app.actor_id', true), '')::uuid;
 
             SELECT r.scope, NEW.workspace_id

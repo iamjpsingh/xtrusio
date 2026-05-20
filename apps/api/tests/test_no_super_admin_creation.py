@@ -34,6 +34,10 @@ _ALLOWED = {
     Path("test_no_super_admin_creation.py"),
     Path("conftest.py"),
     Path("_cleanup.py"),
+    # DB trigger tests legitimately reference the 'super_admin' role-catalog
+    # key in raw SQL (UPDATE/DELETE on roles WHERE key='super_admin') to verify
+    # immutable-system-roles. They never INSERT a super_admin user_role.
+    Path("migrations/test_0009_triggers.py"),
 }
 
 
