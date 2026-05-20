@@ -15,14 +15,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     queryKey: ["me"],
     queryFn: fetchMe,
     enabled: !!auth.session,
-    staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
 
-  const decision = resolveRoute(
-    { session: auth.session ? "s" : null, me: me ?? null },
-    pathname,
-  );
+  const decision = resolveRoute({ session: auth.session ? "s" : null, me: me ?? null }, pathname);
 
   useEffect(() => {
     if (decision.kind === "redirect" && pathname !== decision.to) {
@@ -32,9 +28,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   if (auth.loading || (auth.session && meLoading)) {
     return (
-      <div className="grid min-h-screen place-items-center text-muted-foreground">
-        Loading…
-      </div>
+      <div className="grid min-h-screen place-items-center text-muted-foreground">Loading…</div>
     );
   }
   if (decision.kind === "redirect") return null;

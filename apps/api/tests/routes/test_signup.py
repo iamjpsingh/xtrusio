@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from gotrue.errors import AuthApiError
 from httpx import AsyncClient
 from xtrusio_api.models.platform_user import PlatformUser
 
@@ -104,7 +105,9 @@ async def test_signup_email_taken_returns_409(
         headers={"Authorization": f"Bearer {token}"},
         json={"signups_enabled": True},
     )
-    mock_supabase_admin.auth.admin.create_user.side_effect = Exception("user already registered")
+    mock_supabase_admin.auth.admin.create_user.side_effect = AuthApiError(
+        "email already registered", 422, "email_exists"
+    )
     try:
         r = await http_client.post(
             "/api/signup", json={"email": "taken@example.com", "password": "Password1!"}

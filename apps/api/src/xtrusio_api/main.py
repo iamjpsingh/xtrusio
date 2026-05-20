@@ -23,15 +23,21 @@ from .routes import tenants as tenants_routes
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
     try:
         async with SessionLocal() as _s:
             await reconcile_rbac(_s)
         async with SessionLocal() as _s:
             await reconcile_user_roles_from_enums(_s)
-    except Exception:  # pragma: no cover - boot must not fail on reconcile
+    except Exception:
         import logging
 
-        logging.getLogger(__name__).exception("rbac reconcile on startup failed")
+        log = logging.getLogger(__name__)
+        if settings.startup_reconcile_tolerant:
+            log.exception("rbac reconcile on startup failed (tolerant mode, continuing)")
+        else:
+            log.exception("rbac reconcile on startup failed — failing fast")
+            raise
     yield
 
 

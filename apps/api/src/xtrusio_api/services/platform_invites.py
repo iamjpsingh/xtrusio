@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
@@ -129,14 +129,30 @@ async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
             )
 
 
-async def list_platform_invites(db: AsyncSession, *, limit: int = 50) -> list[PlatformInvite]:
-    rows = (
-        (
-            await db.execute(
-                select(PlatformInvite).order_by(PlatformInvite.created_at.desc()).limit(limit)
+async def list_platform_invites(
+    db: AsyncSession,
+    *,
+    cursor: tuple[datetime, UUID] | None = None,
+    limit: int = 50,
+) -> tuple[list[PlatformInvite], str | None]:
+    from ..core.pagination import encode_cursor
+
+    stmt = select(PlatformInvite).order_by(
+        PlatformInvite.created_at.desc(), PlatformInvite.id.desc()
+    )
+    if cursor is not None:
+        ts, rid = cursor
+        stmt = stmt.where(
+            or_(
+                PlatformInvite.created_at < ts,
+                and_(PlatformInvite.created_at == ts, PlatformInvite.id < rid),
             )
         )
-        .scalars()
-        .all()
-    )
-    return list(rows)
+    stmt = stmt.limit(limit + 1)
+    rows = list((await db.execute(stmt)).scalars().all())
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = encode_cursor(last.created_at, last.id)
+        rows = rows[:limit]
+    return rows, next_cursor

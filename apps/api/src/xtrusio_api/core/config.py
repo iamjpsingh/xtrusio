@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     log_level: str = Field(alias="LOG_LEVEL")
 
+    startup_reconcile_tolerant: bool = Field(alias="STARTUP_RECONCILE_TOLERANT")
+
     cors_allow_origins_raw: str = Field(alias="CORS_ALLOW_ORIGINS")
 
     @property

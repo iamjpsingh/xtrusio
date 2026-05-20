@@ -1,0 +1,82 @@
+name: ci
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  # All jobs that touch the shared CI Supabase project serialise here.
+  # Do NOT cancel in progress: a half-cleaned DB is worse than a slow queue.
+  group: ci-test-db
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Supabase test project (xtrusio-ci) — all secrets configured in repo settings.
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_JWKS_URL: ${{ secrets.CI_SUPABASE_JWKS_URL }}
+      SUPABASE_TIMEOUT_SEC: "10"
+      JWKS_TTL_SEC: "300"
+      JWKS_FETCH_TIMEOUT_SEC: "5"
+      API_HOST: "127.0.0.1"
+      API_PORT: "8000"
+      CORS_ALLOW_ORIGINS: "http://localhost:5173"
+      XTRUSIO_PROCESS_ROLE: "api"
+      STARTUP_RECONCILE_TOLERANT: "false"
+      LOG_LEVEL: "INFO"
+      WEB_APP_URL: "http://localhost:5173"
+      # CI does not run Valkey; the URL only needs to satisfy Settings validation.
+      VALKEY_URL: "redis://localhost:6379/0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ban .js/.jsx/.mjs/.cjs in frontend paths (§2.0)
+        run: |
+          if git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs' | grep -q .; then
+            echo "::error::Frontend path contains a .js/.jsx/.mjs/.cjs file. See ENGINEERING_PRINCIPLES.md §2.0."
+            git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs'
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: make install
+
+      - name: Migrate test DB (idempotent)
+        run: make migrate
+
+      - name: Pre-test cleanup
+        run: make test-clean
+
+      - name: Lint
+        run: make lint
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Test (backend + frontend)
+        run: make test
+
+      - name: Post-test cleanup (best-effort)
+        if: always()
+        run: make test-clean

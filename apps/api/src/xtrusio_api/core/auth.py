@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Annotated, Any
 from uuid import UUID
@@ -19,6 +21,7 @@ from .db import get_db
 
 _AUDIENCE = "authenticated"
 _JWKS_CACHE: dict[str, tuple[dict[str, Any], float]] = {}
+_JWKS_LOCKS: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _ALLOWED_ALGS: frozenset[str] = frozenset({"RS256", "RS384", "RS512", "ES256", "ES384"})
 
 
@@ -30,18 +33,32 @@ class CurrentUser:
     is_active: bool
 
 
-async def _fetch_jwks(url: str) -> dict[str, Any]:
-    """Fetch JWKS doc with an in-process TTL cache. Network bound, async."""
-    cached = _JWKS_CACHE.get(url)
-    if cached and cached[1] > time.time():
-        return cached[0]
+async def _fetch_jwks_uncached(url: str) -> dict[str, Any]:
     settings = get_settings()
     async with httpx.AsyncClient(timeout=settings.jwks_fetch_timeout_sec) as client:
         resp = await client.get(url)
         resp.raise_for_status()
-        jwks: dict[str, Any] = resp.json()
-    _JWKS_CACHE[url] = (jwks, time.time() + settings.jwks_ttl_sec)
-    return jwks
+        out: dict[str, Any] = resp.json()
+        return out
+
+
+async def _fetch_jwks(url: str) -> dict[str, Any]:
+    """Fetch JWKS doc with an in-process TTL cache and per-URL coalescing.
+
+    Why the lock: under cold-start with N concurrent callers, the unlocked
+    version fired N httpx fetches. The lock collapses that to 1; later callers
+    observe the cached value when they acquire the lock and skip the network.
+    """
+    cached = _JWKS_CACHE.get(url)
+    if cached and cached[1] > time.time():
+        return cached[0]
+    async with _JWKS_LOCKS[url]:
+        cached = _JWKS_CACHE.get(url)
+        if cached and cached[1] > time.time():
+            return cached[0]
+        jwks = await _fetch_jwks_uncached(url)
+        _JWKS_CACHE[url] = (jwks, time.time() + get_settings().jwks_ttl_sec)
+        return jwks
 
 
 async def _decode_jwt(token: str) -> dict[str, Any]:
