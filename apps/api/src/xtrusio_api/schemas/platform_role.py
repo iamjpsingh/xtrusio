@@ -43,6 +43,12 @@ class PlatformRolesPage(BaseModel):
     next_cursor: str | None = None
 
 
+class PlatformRoleGrantIn(BaseModel):
+    """Create-payload for `POST /api/platform/users/{user_id}/roles`."""
+
+    role_id: UUID
+
+
 class PlatformRoleGrantOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
