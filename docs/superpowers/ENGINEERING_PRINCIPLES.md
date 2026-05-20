@@ -32,7 +32,7 @@ Project-wide engineering constraints. These apply to **every** spec, every PR, e
 - Backend (`apps/api/`, future `apps/worker/`) is unaffected — Python uses `.py`.
 - Build outputs (`dist/`, `.turbo/`, etc.) are gitignored and don't count.
 
-A grep gate in CI (when CI lands) and as a local pre-commit hook fails the build if a `.js`/`.jsx`/`.mjs`/`.cjs` file is staged in any frontend path. **No exceptions without a written deviation in this doc.**
+A grep gate in CI (see .github/workflows/ci.yml) and as a local pre-commit hook fails the build if a `.js`/`.jsx`/`.mjs`/`.cjs` file is staged in any frontend path. **No exceptions without a written deviation in this doc.**
 
 ### 2.1 Compiler strictness
 
