@@ -99,21 +99,27 @@ def upgrade() -> None:
         """
     )
 
-    # Immutable system roles: block UPDATE/DELETE on roles where is_system.
+    # Immutable system roles: block UPDATE/DELETE on PLATFORM-scope is_system
+    # roles. Workspace-scope is_system roles (owner/admin/editor/read_only,
+    # instantiated per workspace per spec section 3.3) are per-workspace data
+    # with the workspace's lifecycle — they cascade-delete with the tenant and
+    # get reconfigured by the reconciler when the catalog changes. Platform-
+    # scope system roles (super_admin, admin) are truly global and immutable.
+    # Application-level governance for workspace system roles is enforced via
+    # RLS + the workspace.roles.manage perm (P5).
     op.execute(
         """
         CREATE OR REPLACE FUNCTION reject_system_role_mutation()
         RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
-            -- System reconcilers / cascade-delete-from-tenants paths bypass
-            -- via the same GUC used by enforce_priv_escalation. Backend
-            -- request code MUST NEVER set this GUC.
             IF current_setting('app.bypass_priv_escalation', true) = 'on' THEN
                 RETURN COALESCE(NEW, OLD);
             END IF;
-            IF (TG_OP IN ('UPDATE','DELETE')) AND (OLD.is_system) THEN
+            IF (TG_OP IN ('UPDATE','DELETE'))
+               AND (OLD.is_system)
+               AND (OLD.scope = 'platform') THEN
                 RAISE EXCEPTION
-                  'system role is immutable (role.id=%)', OLD.id
+                  'platform system role is immutable (role.id=%)', OLD.id
                   USING ERRCODE = 'insufficient_privilege';
             END IF;
             RETURN COALESCE(NEW, OLD);
@@ -130,24 +136,27 @@ def upgrade() -> None:
         """
     )
 
+    # Immutable permissions for PLATFORM-scope system roles only. Workspace
+    # system roles' permissions are reconciler-managed (catalog-driven) and
+    # need to be mutable for per-workspace seeding and re-sync.
     op.execute(
         """
         CREATE OR REPLACE FUNCTION reject_system_role_perm_change()
         RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE
             role_is_system boolean;
+            role_scope text;
             target_role_id uuid;
         BEGIN
-            -- System reconcilers re-seed role_permissions for is_system roles;
-            -- bypass via the same GUC used by enforce_priv_escalation.
             IF current_setting('app.bypass_priv_escalation', true) = 'on' THEN
                 RETURN COALESCE(NEW, OLD);
             END IF;
             target_role_id := COALESCE(NEW.role_id, OLD.role_id);
-            SELECT is_system INTO role_is_system FROM roles WHERE id = target_role_id;
-            IF role_is_system THEN
+            SELECT is_system, scope INTO role_is_system, role_scope
+              FROM roles WHERE id = target_role_id;
+            IF role_is_system AND role_scope = 'platform' THEN
                 RAISE EXCEPTION
-                  'system role permissions are immutable (role.id=%)', target_role_id
+                  'platform system role permissions are immutable (role.id=%)', target_role_id
                   USING ERRCODE = 'insufficient_privilege';
             END IF;
             RETURN COALESCE(NEW, OLD);

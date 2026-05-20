@@ -185,19 +185,52 @@ async def test_immutable_system_role_rejects_delete(db_session: AsyncSession) ->
 async def test_immutable_system_role_rejects_role_perm_change(
     db_session: AsyncSession,
 ) -> None:
-    # Find a (system_role_id, permission_id) currently attached to a system role.
+    """PLATFORM-scope is_system role permissions are immutable."""
     row = (
         await db_session.execute(
             text(
                 "SELECT rp.role_id, rp.permission_id FROM role_permissions rp "
-                "JOIN roles r ON r.id = rp.role_id WHERE r.is_system LIMIT 1"
+                "JOIN roles r ON r.id = rp.role_id "
+                "WHERE r.is_system AND r.scope='platform' LIMIT 1"
             )
         )
     ).first()
-    assert row is not None, "no system-role permissions found — DB not seeded"
+    assert row is not None, "no platform-system role_permissions found — DB not seeded"
     with pytest.raises(DBAPIError):
         await db_session.execute(
             text("DELETE FROM role_permissions WHERE role_id = :r AND permission_id = :p"),
             {"r": str(row.role_id), "p": str(row.permission_id)},
         )
+    await db_session.rollback()
+
+
+async def test_workspace_system_roles_are_mutable_for_workspace_lifecycle(
+    db_session: AsyncSession,
+) -> None:
+    """Workspace-scope is_system roles are per-workspace data and must allow
+    DELETE so a tenant deletion can cascade through its roles.
+
+    Spec §3.3: workspace system roles are 'instantiated per workspace'. Their
+    immutability is enforced by the application via the workspace.roles.manage
+    permission gate (P5), not by the DB trigger.
+    """
+    # Find a workspace-scope is_system role and a permission attached to it.
+    # If no tenant exists, the test is vacuous (skip).
+    row = (
+        await db_session.execute(
+            text(
+                "SELECT rp.role_id, rp.permission_id FROM role_permissions rp "
+                "JOIN roles r ON r.id = rp.role_id "
+                "WHERE r.is_system AND r.scope='workspace' LIMIT 1"
+            )
+        )
+    ).first()
+    if row is None:
+        pytest.skip("no workspace tenants/roles present — vacuous")
+    # DELETE on workspace system role_permissions should NOT raise.
+    # We rollback to avoid actually mutating seeded state.
+    await db_session.execute(
+        text("DELETE FROM role_permissions WHERE role_id = :r AND permission_id = :p"),
+        {"r": str(row.role_id), "p": str(row.permission_id)},
+    )
     await db_session.rollback()
