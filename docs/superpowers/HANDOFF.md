@@ -1,7 +1,7 @@
 # HANDOFF — RBAC + RLS Re-architecture
 
-**Written:** 2026-05-19, updated 2026-05-20 (P3.5 merged)
-**Status:** **Backend RBAC re-architecture COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5 all in `main` (`e315dc5`). The enum→resolver authorization cutover is finished and the parked review-fix backlog is now drained except for surfaced follow-ups (see below). Remaining: P4/P5 (RBAC admin APIs+UIs + the deferred P3c governance items), P6b/P6c (frontend permission-driven nav/shells + RBAC admin UIs).
+**Written:** 2026-05-19, updated 2026-05-20 (P3.5 + type-the-tests + P4 merged)
+**Status:** **Backend RBAC re-architecture + Platform RBAC admin COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5, type-the-tests, P4 all in `main` (`edc5226`). The enum→resolver authorization cutover is finished, the parked review-fix backlog is drained, and platform-side RBAC admin (custom roles + grants + audit log + governance triggers) is live. Remaining: P5 (Workspace RBAC admin), P6b/P6c (frontend permission-driven nav/shells + RBAC admin UIs).
 
 Read top to bottom before doing anything.
 
@@ -9,7 +9,7 @@ Read top to bottom before doing anything.
 
 ## ⏩ RESUME HERE — 2026-05-20
 
-### Done & merged (PRs #1–#6, #8 MERGED; `main` @ `e315dc5`; single Alembic head `0008`; 0 open PRs)
+### Done & merged (PRs #1–#6, #8, #10, #11 MERGED; `main` @ `edc5226`; single Alembic head `0009`; 0 open PRs)
 
 | Phase | What |
 |---|---|
@@ -19,22 +19,26 @@ Read top to bottom before doing anything.
 | P3b (#5) | `core/permissions.py` (`require_permission` calling the resolvers); all 10 routes + tenant-invite service authz converted enum→resolver; `/me` additive effective-perm keys |
 | P3c (#6) | `0008`: helpers → **pure resolver** (enum disjunct retired, reversible); pre-RBAC rls canaries reframed to grants. **Cutover complete.** |
 | P6a (#2) | Frontend: pathless `_app` shell (shell-bleed fixed), shared `AuthLayout`, auth-page polish, public `/api/signup-status` rename |
-| P3.5 (#8) | Review-fix backlog: CI workflow (`.github/workflows/ci.yml`), cursor pagination on 3 list endpoints + structural invariant test, JWKS coalescing lock, signup duplicate-email by `AuthApiError` class, lifespan fail-fast (`STARTUP_RECONCILE_TOLERANT` escape hatch), AuthGuard duplicate-staleTime cleanup. Principles §8 amended to permit managed-Supabase test project. Plan + PR body in `docs/superpowers/`. |
+| P3.5 (#8) | Review-fix backlog: CI workflow (`.github/workflows/ci.yml`), cursor pagination on 3 list endpoints + structural invariant test, JWKS coalescing lock, signup duplicate-email by `AuthApiError` class, lifespan fail-fast (`STARTUP_RECONCILE_TOLERANT` escape hatch), AuthGuard duplicate-staleTime cleanup. Principles §8 amended to permit managed-Supabase test project. |
+| type-the-tests (#10) | Annotated 10 P3a/P3b-era test files for `mypy --strict`; project-wide `ruff format` cleanup. `make check` now fully green on `main` — was the prerequisite for P4. |
+| P4 (#11) | **Platform RBAC admin (API + governance).** Migration `0009` adds DB triggers (privilege-escalation, immutable platform-system-roles); `core/audit.py` writes one row per RBAC mutation. `GET/POST/PATCH/DELETE /api/platform/roles[/{id}]` for custom platform-role CRUD (gated by `platform.roles.manage`). `GET/POST/DELETE /api/platform/users/{user_id}/roles[/{grant_id}]` for grants (gated by `platform.users.read/manage`). `GET /api/platform/audit-log` (gated by `platform.audit.read`). Service-layer enforcement of privilege-escalation + single-super_admin invariant mirrors DB triggers for friendly 403/409 errors. **Backend only — UI deferred to P6c per scope split.** |
 
-Backend authorization is now **fully resolver/permission-driven** and consistent with RLS (same `0007` fns). Verified: full suite green from a CLEAN DB (0 failed; 2 documented vacuous skips; env-flaky `test_signup` state-dependent), `0007↔0008` reversible.
+Backend authorization is now **fully resolver/permission-driven** and consistent with RLS (same `0007` fns). Verified: full suite green from a CLEAN DB (226 passed; 0 failed; 3 documented vacuous skips; env-flaky `test_signup` state-dependent), `0007↔0008↔0009` reversible.
 
 ### NEXT (gated: each phase planned/executed only after the prior MERGED)
 
-1. **P4 — Platform RBAC admin** (own branch off `main`, lean plan, lean execution): platform role/permission management API + UI for `super_admin` (`platform.roles.manage`) — create/edit/delete platform custom roles, attach catalog permissions, assign roles to platform users; platform audit-log viewer. Calls the `0007` resolvers / `require_permission` (P3b primitive) — reuse, don't re-invent. Spec §4/§9.
-2. **P5 — Workspace RBAC admin**: per-workspace role/permission management API + UI for workspace `owner` (`workspace.roles.manage`), scope-isolated; workspace audit-log viewer; permission category grouping UI.
-3. **Deferred-from-P3c, bundle with P4/P5** (they're only meaningful once human role/permission-mutation endpoints exist): **audit-log writes** on every RBAC mutation (the `rbac_audit_log` table exists since P1, still unwritten); **privilege-escalation guard** (service + DB trigger — actor can't grant perms they lack); **single-super_admin service-layer enforcement** (DB partial-unique index already enforces it; add the friendly service check). Use the existing `grant_role`/`require_permission`/resolvers.
+1. ~~**P4**~~ — DRAINED by #11 (merged 2026-05-20). Platform-side RBAC admin API + governance triggers in place. Plan at `docs/superpowers/plans/2026-05-20-rbac-p4-platform-admin.md`.
+2. **P5 — Workspace RBAC admin** (own branch off `main`, lean plan, lean execution): per-workspace role/permission management API for workspace `owner` (`workspace.roles.manage`), scope-isolated to `workspace_id`; workspace audit-log viewer; permission category grouping UI. **Reuses the P4 surface:** `core/audit.py`, `0009` triggers (priv-escalation already handles workspace-scope via `has_workspace_perm`), `core/pagination.py`. Service-layer single-super_admin check is platform-only — no equivalent invariant at workspace scope. Permission keys already in catalog: `workspace.roles.manage`, `workspace.members.read/invite/manage`, `workspace.audit.read`.
+3. ~~**Deferred-from-P3c governance**~~ — DRAINED by #11. Audit-log writes are live (`core/audit.py`); priv-escalation guard is enforced at both service layer (P4) and DB trigger (`0009`); single-super_admin invariant has both the DB partial-unique index (P1) and the service-layer friendly check (P4 `services/platform_role_grants.py`).
 4. **P6b** — pinned `/me` effective-perms TS contract + legacy-compat adapter + permission-driven nav + two physically-separate Platform/Workspace shells + workspace switcher. (P3b already returns the effective-perm keys additively; the enum `platform.role`/`tenants[].role` fields stay until P6b removes the frontend's enum consumption.)
 5. **P6c** — RBAC admin UIs (consume P4/P5 APIs).
 6. **🔒 LATE cleanup (only after P6b removes frontend enum consumption AND every backend enum read is gone):** drop `platform_users.role` / `tenant_memberships.role` columns + the `platform_role`/`tenant_role` enum types. Do NOT do this earlier — `/me` (P3b additive), onboarding/invite-accept/bootstrap still legitimately write the enum rows; `0008` downgrade restores the enum-reading OR-form so the enum columns must exist while `0008` is reversible.
-7. ~~**Parked review-fix backlog NOW UNBLOCKED**~~ — **DRAINED by P3.5 (#8, merged 2026-05-20)**. Remaining surfaced follow-ups (not in P3.5 scope, captured for a future phase):
-   - **Pre-existing test-file typecheck debt:** `uv run mypy apps/api` reports ~49 `no-untyped-def` errors in P3a/P3b-era test files (test_onboarding, test_me, test_signup, test_platform_settings, test_invite_acceptance, test_tenants, test_platform_invites, test_tenant_invites, test_signup_to_tenant_flow, test_invite_full_flow, test_permission_engine_rls). P3.5 contributed zero new mypy errors; every new source/test in #8 is fully typed. Propose a small "type the tests" phase before P4, OR absorb into P4 prep.
-   - **`gotrue` → `supabase_auth` migration:** supabase-py 2.x emits a `DeprecationWarning` saying `gotrue` is being replaced by `supabase_auth`. Migrate imports in a future phase.
+7. ~~**Parked review-fix backlog NOW UNBLOCKED**~~ — **DRAINED by P3.5 (#8) + type-the-tests (#10) + P4 (#11)**. Remaining surfaced follow-ups (captured for a future phase):
+   - ~~Pre-existing test-file typecheck debt~~ — DRAINED by #10. `uv run mypy apps/api` now reports `Success: no issues found in 123 source files`.
+   - **`gotrue` → `supabase_auth` migration:** supabase-py 2.x emits a `DeprecationWarning` saying `gotrue` is being replaced by `supabase_auth`. Migrate imports in a future phase. Touches `services/signup.py` (the `from gotrue.errors import AuthApiError`).
    - **Pre-existing broad `except Exception` in invite services:** `services/platform_invites.py:90` and `services/tenant_invites.py:146` swallow every exception class into `EmailProviderUnavailableError`. Narrow to specific (`httpx.HTTPError`, `AuthApiError`, `AuthRetryableError`, etc.) in a follow-up audit.
+   - **`grant_role` (`rbac/grants.py`) `ON CONFLICT DO NOTHING` + Postgres NULLS DISTINCT:** for `workspace_id IS NULL` platform grants, the unique constraint doesn't match — duplicate INSERTs would silently produce duplicate rows. **Existing call sites are safe in practice** (reconciler uses `NOT EXISTS`; onboarding/invite-accept/bootstrap are once-per-user paths). P4's new `grant_platform_role` service uses an explicit `SELECT then INSERT`. Follow-up: migrate `user_roles` to `UNIQUE NULLS NOT DISTINCT (auth_user_id, role_id, workspace_id)` (PG15+), or backport the explicit SELECT pattern.
+   - **`DELETE /api/platform/users/{user_id}/roles/{grant_id}`** doesn't verify `grant.auth_user_id == user_id`. `grant_id` is globally unique so a mismatched user_id in the path is harmless, but adding the check would be a small consistency polish (P4 follow-up).
 
 ### P3.5 (#8) operator artifacts
 
