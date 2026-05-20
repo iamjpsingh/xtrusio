@@ -58,3 +58,8 @@ class TenantOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: UUID
+
+
+class TenantsPage(BaseModel):
+    items: list[TenantOut]
+    next_cursor: str | None = None

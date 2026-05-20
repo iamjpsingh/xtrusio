@@ -142,7 +142,7 @@ async def test_list_empty_for_super_admin(
     token = make_jwt(sub=existing_super_admin.id)
     res = await http_client.get("/api/tenants", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
-    assert res.json() == []
+    assert res.json()["items"] == []
 
 
 async def test_create_tenant_succeeds(
@@ -201,3 +201,60 @@ async def test_create_tenant_invalid_slug(
         json={"slug": "Bad Slug!", "name": "X"},
     )
     assert res.status_code == 422
+
+
+async def test_list_tenants_paginates_and_caps(
+    http_client: AsyncClient,
+    platform_admin_user: PlatformUser,
+    make_jwt: Callable[..., str],
+) -> None:
+    async with SessionLocal() as s:
+        for i in range(3):
+            await s.execute(
+                text("INSERT INTO tenants (slug, name, created_by) " "VALUES (:slug, :name, :uid)"),
+                {
+                    "slug": f"page-tenant-{platform_admin_user.id.hex[:6]}-{i}-example",
+                    "name": f"Page Tenant {i}",
+                    "uid": str(platform_admin_user.id),
+                },
+            )
+        await s.commit()
+
+    token = make_jwt(sub=platform_admin_user.id)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r1 = await http_client.get("/api/tenants?limit=2", headers=headers)
+    assert r1.status_code == 200, r1.text
+    p1 = r1.json()
+    assert len(p1["items"]) == 2
+    assert p1["next_cursor"] is not None
+
+    r2 = await http_client.get(f"/api/tenants?limit=2&cursor={p1['next_cursor']}", headers=headers)
+    assert r2.status_code == 200, r2.text
+    p2 = r2.json()
+    assert len(p2["items"]) >= 1
+    ids1 = {t["id"] for t in p1["items"]}
+    ids2 = {t["id"] for t in p2["items"]}
+    assert ids1.isdisjoint(ids2)
+
+    # Clean up seeded tenants so the platform_admin_user fixture teardown
+    # (which deletes the auth user) doesn't violate the tenants FK.
+    async with SessionLocal() as s:
+        await s.execute(
+            text("DELETE FROM tenants WHERE created_by = :uid"),
+            {"uid": str(platform_admin_user.id)},
+        )
+        await s.commit()
+
+
+async def test_list_tenants_rejects_invalid_cursor(
+    http_client: AsyncClient,
+    platform_admin_user: PlatformUser,
+    make_jwt: Callable[..., str],
+) -> None:
+    token = make_jwt(sub=platform_admin_user.id)
+    r = await http_client.get(
+        "/api/tenants?cursor=not-a-cursor",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 400
