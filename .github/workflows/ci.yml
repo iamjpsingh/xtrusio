@@ -29,7 +29,7 @@ jobs:
       API_PORT: "8000"
       CORS_ALLOW_ORIGINS: "http://localhost:5173"
       XTRUSIO_PROCESS_ROLE: "api"
-      # Fail-fast in CI; STARTUP_RECONCILE_TOLERANT stays unset.
+      STARTUP_RECONCILE_TOLERANT: "false"
 
     steps:
       - uses: actions/checkout@v4
