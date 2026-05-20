@@ -49,9 +49,7 @@ async def test_existing_super_admin_has_platform_roles_manage(
 
 
 async def test_unknown_user_has_no_platform_perm() -> None:
-    got = await _scalar(
-        "SELECT has_platform_perm(:u, 'platform.roles.manage')", u=str(uuid4())
-    )
+    got = await _scalar("SELECT has_platform_perm(:u, 'platform.roles.manage')", u=str(uuid4()))
     assert got is False
 
 
@@ -94,9 +92,7 @@ async def test_owner_admin_member_helpers_behaviour_preserved(rls_as: RlsAs) -> 
             {"id": str(uid), "e": email},
         )
         await priv.execute(
-            text(
-                "INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:id)"
-            ),
+            text("INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:id)"),
             {"t": str(tid), "s": f"xt-{tid.hex[:8]}", "n": "P2 RLS probe", "id": str(uid)},
         )
         await priv.execute(
@@ -123,13 +119,17 @@ async def test_owner_admin_member_helpers_behaviour_preserved(rls_as: RlsAs) -> 
                 {"u": str(uid), "t": str(tid)},
             )
             await priv.commit()
-        assert await _scalar("SELECT is_tenant_owner_or_admin(:u,:t)", u=str(uid), t=str(tid)) is True
+        assert (
+            await _scalar("SELECT is_tenant_owner_or_admin(:u,:t)", u=str(uid), t=str(tid)) is True
+        )
         assert await _scalar("SELECT is_tenant_member(:u,:t)", u=str(uid), t=str(tid)) is True
         assert await _scalar("SELECT is_super_admin(:u)", u=str(uid)) is False
         assert await _scalar("SELECT is_tenant_member(:u,:t)", u=str(uid), t=str(uuid4())) is False
     finally:
         async with SessionLocal() as priv:
-            await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
+            )
             await priv.execute(text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)})
             await priv.execute(text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)})
             await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
@@ -141,9 +141,7 @@ async def test_super_admin_can_select_platform_roles(
 ) -> None:
     async with rls_as(existing_super_admin.id) as s:
         n = (
-            await s.execute(
-                text("SELECT count(*) FROM roles WHERE scope='platform'")
-            )
+            await s.execute(text("SELECT count(*) FROM roles WHERE scope='platform'"))
         ).scalar_one()
     assert n >= 2  # super_admin + admin system roles visible to a roles.manage holder
 
@@ -164,9 +162,7 @@ async def test_stranger_cannot_select_platform_roles(rls_as: RlsAs) -> None:
     try:
         async with rls_as(uid) as s:
             n = (
-                await s.execute(
-                    text("SELECT count(*) FROM roles WHERE scope='platform'")
-                )
+                await s.execute(text("SELECT count(*) FROM roles WHERE scope='platform'"))
             ).scalar_one()
         assert n == 0  # no platform.roles.manage → RLS hides every platform role
     finally:
@@ -215,9 +211,7 @@ async def test_audit_log_hidden_from_non_auditor(rls_as: RlsAs) -> None:
         await priv.commit()
     try:
         async with rls_as(uid) as s:
-            n = (
-                await s.execute(text("SELECT count(*) FROM rbac_audit_log"))
-            ).scalar_one()
+            n = (await s.execute(text("SELECT count(*) FROM rbac_audit_log"))).scalar_one()
         assert n == 0
     finally:
         async with SessionLocal() as priv:
@@ -228,6 +222,7 @@ async def test_audit_log_hidden_from_non_auditor(rls_as: RlsAs) -> None:
 # --- direct resolver matrix (closes the P2-Task-1 review coverage gap:
 # has_workspace_perm + can_manage_role + cross-scope isolation + a
 # genuinely-deprecated-but-PRESENT permission). Ephemeral graph, finally-torn.
+
 
 async def _make_workspace_principal() -> tuple[UUID, UUID]:
     """Ephemeral @example.com user + tenant + its 4 system workspace roles
@@ -244,9 +239,7 @@ async def _make_workspace_principal() -> tuple[UUID, UUID]:
             {"id": str(uid), "e": f"x-{uid.hex[:8]}@example.com"},
         )
         await priv.execute(
-            text(
-                "INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:id)"
-            ),
+            text("INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:id)"),
             {"t": str(tid), "s": f"xt-{tid.hex[:8]}", "n": "P2 resolver probe", "id": str(uid)},
         )
         await priv.execute(
@@ -289,12 +282,18 @@ async def test_has_workspace_perm_and_can_manage_role_direct() -> None:
     uid, tid = await _make_workspace_principal()
     try:
         # owner has every workspace perm incl. roles.manage
-        assert await _scalar(
-            "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')", u=str(uid), t=str(tid)
-        ) is True
-        assert await _scalar(
-            "SELECT has_workspace_perm(:u,:t,'workspace.members.read')", u=str(uid), t=str(tid)
-        ) is True
+        assert (
+            await _scalar(
+                "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')", u=str(uid), t=str(tid)
+            )
+            is True
+        )
+        assert (
+            await _scalar(
+                "SELECT has_workspace_perm(:u,:t,'workspace.members.read')", u=str(uid), t=str(tid)
+            )
+            is True
+        )
         # can_manage_role true for that workspace's 'owner' role row
         rid = await _scalar(
             "SELECT id FROM roles WHERE scope='workspace' AND workspace_id=:t AND key='owner'",
@@ -309,15 +308,20 @@ async def test_cross_scope_isolation(existing_super_admin: PlatformUser) -> None
     uid, tid = await _make_workspace_principal()
     try:
         # workspace grant must NOT satisfy a platform check...
-        assert await _scalar(
-            "SELECT has_platform_perm(:u,'platform.roles.manage')", u=str(uid)
-        ) is False
+        assert (
+            await _scalar("SELECT has_platform_perm(:u,'platform.roles.manage')", u=str(uid))
+            is False
+        )
         # ...and the real platform super_admin must NOT satisfy a workspace
         # check for an unrelated workspace.
-        assert await _scalar(
-            "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')",
-            u=str(existing_super_admin.id), t=str(tid),
-        ) is False
+        assert (
+            await _scalar(
+                "SELECT has_workspace_perm(:u,:t,'workspace.roles.manage')",
+                u=str(existing_super_admin.id),
+                t=str(tid),
+            )
+            is False
+        )
     finally:
         await _teardown_workspace_principal(uid, tid)
 
@@ -347,9 +351,10 @@ async def test_genuinely_deprecated_present_permission_does_not_grant() -> None:
                 {"t": str(tid), "k": dep_key},
             )
             await priv.commit()
-        assert await _scalar(
-            "SELECT has_workspace_perm(:u,:t,:k)", u=str(uid), t=str(tid), k=dep_key
-        ) is False
+        assert (
+            await _scalar("SELECT has_workspace_perm(:u,:t,:k)", u=str(uid), t=str(tid), k=dep_key)
+            is False
+        )
     finally:
         async with SessionLocal() as priv:
             await priv.execute(text("DELETE FROM permissions WHERE key=:k"), {"k": dep_key})
@@ -376,18 +381,15 @@ async def test_rbac_table_perm_aware_policies_present() -> None:
         "rbac_audit_log_no_read",
     }
     async with SessionLocal() as s:
-        rows = dict(
-            (
-                await s.execute(
-                    text(
-                        "SELECT policyname, qual FROM pg_policies "
-                        "WHERE schemaname='public' AND tablename IN "
-                        "('permissions','roles','role_permissions','user_roles',"
-                        "'rbac_audit_log')"
-                    )
-                )
-            ).all()
+        result = await s.execute(
+            text(
+                "SELECT policyname, qual FROM pg_policies "
+                "WHERE schemaname='public' AND tablename IN "
+                "('permissions','roles','role_permissions','user_roles',"
+                "'rbac_audit_log')"
+            )
         )
+        rows: dict[str, str | None] = {r.policyname: r.qual for r in result}
     present = set(rows)
     assert new_names <= present, f"missing perm-aware policies: {new_names - present}"
     assert not (old_names & present), f"interim policies not retired: {old_names & present}"

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -18,7 +19,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 async def test_signup_to_tenant_flow(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     db_session: AsyncSession,
     mock_supabase_admin: MagicMock,
 ) -> None:
