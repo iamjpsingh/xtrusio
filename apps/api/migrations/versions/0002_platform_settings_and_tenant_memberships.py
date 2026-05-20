@@ -48,12 +48,8 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX tenant_memberships_user_id_idx ON tenant_memberships(user_id)"
-    )
-    op.execute(
-        "CREATE INDEX tenant_memberships_tenant_id_idx ON tenant_memberships(tenant_id)"
-    )
+    op.execute("CREATE INDEX tenant_memberships_user_id_idx ON tenant_memberships(user_id)")
+    op.execute("CREATE INDEX tenant_memberships_tenant_id_idx ON tenant_memberships(tenant_id)")
     op.execute(
         """
         CREATE UNIQUE INDEX tenant_memberships_one_owner_per_tenant

@@ -41,8 +41,7 @@ async def grant_role(
     ).scalar_one_or_none()
     if role_id is None:
         raise LookupError(
-            f"no is_system role for scope={scope!r} key={key!r} "
-            f"workspace_id={workspace_id!r}"
+            f"no is_system role for scope={scope!r} key={key!r} " f"workspace_id={workspace_id!r}"
         )
     await db.execute(
         text(

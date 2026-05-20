@@ -36,15 +36,19 @@ async def test_super_admin_role_has_all_platform_permissions() -> None:
     async with SessionLocal() as s:
         await reconcile_rbac(s)
         got = (
-            await s.execute(
-                text(
-                    "SELECT p.key FROM role_permissions rp "
-                    "JOIN roles r ON r.id=rp.role_id "
-                    "JOIN permissions p ON p.id=rp.permission_id "
-                    "WHERE r.scope='platform' AND r.key='super_admin'"
+            (
+                await s.execute(
+                    text(
+                        "SELECT p.key FROM role_permissions rp "
+                        "JOIN roles r ON r.id=rp.role_id "
+                        "JOIN permissions p ON p.id=rp.permission_id "
+                        "WHERE r.scope='platform' AND r.key='super_admin'"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert set(got) == set(SYSTEM_ROLE_PERMISSIONS["super_admin"])
 
 
@@ -52,16 +56,20 @@ async def test_workspace_owner_roles_wired_for_every_tenant() -> None:
     async with SessionLocal() as s:
         await reconcile_rbac(s)
         bad = (
-            await s.execute(
-                text(
-                    "SELECT r.id FROM roles r "
-                    "WHERE r.scope='workspace' AND r.key='owner' AND r.is_system "
-                    "AND (SELECT count(*) FROM role_permissions rp "
-                    "     WHERE rp.role_id=r.id) <> :n"
-                ),
-                {"n": len(SYSTEM_ROLE_PERMISSIONS["owner"])},
+            (
+                await s.execute(
+                    text(
+                        "SELECT r.id FROM roles r "
+                        "WHERE r.scope='workspace' AND r.key='owner' AND r.is_system "
+                        "AND (SELECT count(*) FROM role_permissions rp "
+                        "     WHERE rp.role_id=r.id) <> :n"
+                    ),
+                    {"n": len(SYSTEM_ROLE_PERMISSIONS["owner"])},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert bad == []
 
 
@@ -83,16 +91,11 @@ async def test_unknown_db_permission_is_soft_deprecated_not_deleted() -> None:
             await reconcile_rbac(s)
             row = (
                 await s.execute(
-                    text(
-                        "SELECT is_deprecated FROM permissions "
-                        "WHERE key='platform.zzz.legacy'"
-                    )
+                    text("SELECT is_deprecated FROM permissions " "WHERE key='platform.zzz.legacy'")
                 )
             ).scalar_one_or_none()
         assert row is True
     finally:
         async with SessionLocal() as s:
-            await s.execute(
-                text("DELETE FROM permissions WHERE key='platform.zzz.legacy'")
-            )
+            await s.execute(text("DELETE FROM permissions WHERE key='platform.zzz.legacy'"))
             await s.commit()

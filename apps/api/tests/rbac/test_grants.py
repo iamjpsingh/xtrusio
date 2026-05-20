@@ -41,12 +41,10 @@ async def test_grant_role_workspace_is_idempotent() -> None:
         await priv.commit()
     try:
         async with SessionLocal() as s:
-            await grant_role(s, auth_user_id=uid, scope="workspace", key="owner",
-                             workspace_id=tid)
+            await grant_role(s, auth_user_id=uid, scope="workspace", key="owner", workspace_id=tid)
             await s.commit()
         async with SessionLocal() as s:
-            await grant_role(s, auth_user_id=uid, scope="workspace", key="owner",
-                             workspace_id=tid)
+            await grant_role(s, auth_user_id=uid, scope="workspace", key="owner", workspace_id=tid)
             await s.commit()
         async with SessionLocal() as s:
             n = (
@@ -62,7 +60,9 @@ async def test_grant_role_workspace_is_idempotent() -> None:
         assert n == 1
     finally:
         async with SessionLocal() as priv:
-            await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
+            )
             await priv.execute(text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)})
             await priv.execute(text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)})
             await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
@@ -72,5 +72,4 @@ async def test_grant_role_workspace_is_idempotent() -> None:
 async def test_grant_role_unknown_role_raises() -> None:
     async with SessionLocal() as s:
         with pytest.raises(LookupError):
-            await grant_role(s, auth_user_id=uuid4(), scope="platform",
-                             key="does_not_exist")
+            await grant_role(s, auth_user_id=uuid4(), scope="platform", key="does_not_exist")

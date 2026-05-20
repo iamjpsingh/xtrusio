@@ -16,9 +16,7 @@ from ..services.onboarding import AlreadyHasMembershipError, create_tenant_with_
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
-@router.post(
-    "/tenants", response_model=CreateTenantResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/tenants", response_model=CreateTenantResponse, status_code=status.HTTP_201_CREATED)
 async def onboard(
     body: CreateTenantRequest,
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],

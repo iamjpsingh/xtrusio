@@ -13,7 +13,10 @@ from xtrusio_api.services.slug import slugify, unique_slug_from_taken
         ("  Acme  Corp  ", "acme-corp"),
         ("ACME!!! Corp™", "acme-corp"),
         ("Über Glühwein", "uber-gluhwein"),
-        ("123 Numbers Then Letters", "n123-numbers-then-letters"),  # leading digit forbidden by schema regex
+        (
+            "123 Numbers Then Letters",
+            "n123-numbers-then-letters",
+        ),  # leading digit forbidden by schema regex
         ("------", "tenant"),  # all hyphens stripped → fallback
         ("a", "tenant-a"),  # below min length 3, padded by fallback
         ("x" * 200, "x" * 64),  # truncated to schema max

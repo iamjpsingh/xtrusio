@@ -76,8 +76,7 @@ async def _run(*, email: str, password: str, force: bool) -> None:
             # super_admin role id, so the new grant would otherwise collide.
             await db.execute(
                 sa_text(
-                    "DELETE FROM user_roles "
-                    "WHERE role_id='00000000-0000-0000-0000-0000000000a1'"
+                    "DELETE FROM user_roles " "WHERE role_id='00000000-0000-0000-0000-0000000000a1'"
                 )
             )
             await db.commit()

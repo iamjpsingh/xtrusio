@@ -58,9 +58,10 @@ async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]
     resolvers would authorize.
     """
     rows = (
-        await db.execute(
-            text(
-                """
+        (
+            await db.execute(
+                text(
+                    """
                 SELECT DISTINCT p.key
                 FROM user_roles ur
                 JOIN roles r ON r.id = ur.role_id
@@ -74,10 +75,13 @@ async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]
                   AND NOT p.is_deprecated
                 ORDER BY p.key
                 """
-            ),
-            {"u": user_id},
+                ),
+                {"u": user_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -89,9 +93,10 @@ async def effective_workspace_perms(
     Mirrors `has_workspace_perm` (single query, deprecated permissions excluded).
     """
     rows = (
-        await db.execute(
-            text(
-                """
+        (
+            await db.execute(
+                text(
+                    """
                 SELECT DISTINCT p.key
                 FROM user_roles ur
                 JOIN roles r ON r.id = ur.role_id
@@ -105,8 +110,11 @@ async def effective_workspace_perms(
                   AND NOT p.is_deprecated
                 ORDER BY p.key
                 """
-            ),
-            {"u": user_id, "t": workspace_id},
+                ),
+                {"u": user_id, "t": workspace_id},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return list(rows)
