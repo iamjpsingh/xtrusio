@@ -87,6 +87,22 @@ async def purge_test_data() -> dict[str, int]:
                     "DELETE FROM tenant_invites WHERE invited_by = ANY(:ids)",
                 ),
                 (
+                    "rbac_audit_log",
+                    "DELETE FROM rbac_audit_log WHERE actor_auth_user_id = ANY(:ids)",
+                ),
+                (
+                    "user_roles_by_user",
+                    "DELETE FROM user_roles WHERE auth_user_id = ANY(:ids)",
+                ),
+                (
+                    "user_roles_by_granter",
+                    "DELETE FROM user_roles WHERE granted_by = ANY(:ids)",
+                ),
+                (
+                    "roles_custom_by_creator",
+                    "DELETE FROM roles WHERE created_by = ANY(:ids) AND NOT is_system",
+                ),
+                (
                     "tenant_memberships",
                     "DELETE FROM tenant_memberships WHERE tenant_id IN "
                     "(SELECT id FROM tenants WHERE created_by = ANY(:ids))",
@@ -109,6 +125,10 @@ async def purge_test_data() -> dict[str, int]:
                 "platform_invites_by_inviter",
                 "tenant_invites_by_tenant",
                 "tenant_invites_by_inviter",
+                "rbac_audit_log",
+                "user_roles_by_user",
+                "user_roles_by_granter",
+                "roles_custom_by_creator",
                 "tenant_memberships",
                 "tenants",
             ):
