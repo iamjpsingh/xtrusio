@@ -18,28 +18,36 @@ _TABLES = ("permissions", "roles", "role_permissions", "user_roles", "rbac_audit
 async def test_rbac_tables_exist() -> None:
     async with SessionLocal() as s:
         rows = (
-            await s.execute(
-                text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema='public' AND table_name = ANY(:names)"
-                ),
-                {"names": list(_TABLES)},
+            (
+                await s.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema='public' AND table_name = ANY(:names)"
+                    ),
+                    {"names": list(_TABLES)},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert set(rows) == set(_TABLES)
 
 
 async def test_rls_enabled_on_rbac_tables() -> None:
     async with SessionLocal() as s:
         rows = (
-            await s.execute(
-                text(
-                    "SELECT relname FROM pg_class "
-                    "WHERE relrowsecurity AND relname = ANY(:names)"
-                ),
-                {"names": list(_TABLES)},
+            (
+                await s.execute(
+                    text(
+                        "SELECT relname FROM pg_class "
+                        "WHERE relrowsecurity AND relname = ANY(:names)"
+                    ),
+                    {"names": list(_TABLES)},
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert set(rows) == set(_TABLES)
 
 
@@ -63,10 +71,7 @@ async def test_single_super_admin_partial_unique_index_exists() -> None:
     async with SessionLocal() as s:
         exists = (
             await s.execute(
-                text(
-                    "SELECT 1 FROM pg_indexes "
-                    "WHERE indexname = 'user_roles_one_super_admin'"
-                )
+                text("SELECT 1 FROM pg_indexes " "WHERE indexname = 'user_roles_one_super_admin'")
             )
         ).scalar_one_or_none()
     assert exists == 1
@@ -75,13 +80,16 @@ async def test_single_super_admin_partial_unique_index_exists() -> None:
 async def test_platform_system_roles_seeded() -> None:
     async with SessionLocal() as s:
         rows = (
-            await s.execute(
-                text(
-                    "SELECT key FROM roles WHERE scope='platform' AND is_system "
-                    "ORDER BY key"
+            (
+                await s.execute(
+                    text(
+                        "SELECT key FROM roles WHERE scope='platform' AND is_system " "ORDER BY key"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert rows == ["admin", "super_admin"]
 
 
@@ -97,32 +105,32 @@ async def test_super_admin_role_has_the_fixed_well_known_id() -> None:
 
 async def test_each_existing_tenant_has_4_workspace_system_roles() -> None:
     async with SessionLocal() as s:
-        n_tenants = (
-            await s.execute(text("SELECT count(*) FROM tenants"))
-        ).scalar_one()
+        n_tenants = (await s.execute(text("SELECT count(*) FROM tenants"))).scalar_one()
         if n_tenants == 0:
             pytest.skip("no tenants present; per-tenant seed assertion is vacuous")
         bad = (
-            await s.execute(
-                text(
-                    "SELECT t.id FROM tenants t "
-                    "LEFT JOIN ("
-                    "  SELECT workspace_id, count(*) c FROM roles "
-                    "  WHERE scope='workspace' AND is_system GROUP BY workspace_id"
-                    ") r ON r.workspace_id = t.id "
-                    "WHERE COALESCE(r.c,0) <> 4"
+            (
+                await s.execute(
+                    text(
+                        "SELECT t.id FROM tenants t "
+                        "LEFT JOIN ("
+                        "  SELECT workspace_id, count(*) c FROM roles "
+                        "  WHERE scope='workspace' AND is_system GROUP BY workspace_id"
+                        ") r ON r.workspace_id = t.id "
+                        "WHERE COALESCE(r.c,0) <> 4"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert bad == [], f"tenants missing the 4 workspace system roles: {bad}"
 
 
 async def test_existing_super_admin_backfilled_to_user_roles() -> None:
     async with SessionLocal() as s:
         sa = (
-            await s.execute(
-                text("SELECT id FROM platform_users WHERE role='super_admin' LIMIT 1")
-            )
+            await s.execute(text("SELECT id FROM platform_users WHERE role='super_admin' LIMIT 1"))
         ).scalar_one_or_none()
         if sa is None:
             pytest.skip("no real super_admin present; nothing to assert")
@@ -148,17 +156,21 @@ async def test_membership_enum_backfilled_to_user_roles() -> None:
         if n_memberships == 0:
             pytest.skip("no tenant_memberships present; backfill assertion is vacuous")
         missing = (
-            await s.execute(
-                text(
-                    "SELECT m.id FROM tenant_memberships m "
-                    "LEFT JOIN roles r ON r.scope='workspace' "
-                    "  AND r.workspace_id = m.tenant_id AND r.key = m.role::text "
-                    "LEFT JOIN user_roles ur ON ur.auth_user_id = m.user_id "
-                    "  AND ur.role_id = r.id AND ur.workspace_id = m.tenant_id "
-                    "WHERE ur.id IS NULL"
+            (
+                await s.execute(
+                    text(
+                        "SELECT m.id FROM tenant_memberships m "
+                        "LEFT JOIN roles r ON r.scope='workspace' "
+                        "  AND r.workspace_id = m.tenant_id AND r.key = m.role::text "
+                        "LEFT JOIN user_roles ur ON ur.auth_user_id = m.user_id "
+                        "  AND ur.role_id = r.id AND ur.workspace_id = m.tenant_id "
+                        "WHERE ur.id IS NULL"
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert missing == [], f"memberships without a user_roles grant: {missing}"
 
 

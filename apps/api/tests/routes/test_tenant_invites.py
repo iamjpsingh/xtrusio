@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def _insert_auth_user(db: AsyncSession, user_id, email: str) -> None:
+async def _insert_auth_user(db: AsyncSession, user_id: UUID, email: str) -> None:
     await db.execute(
         text(
             "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, "
@@ -25,7 +26,7 @@ async def _insert_auth_user(db: AsyncSession, user_id, email: str) -> None:
     )
 
 
-async def _seed_workspace_roles(db: AsyncSession, tid) -> None:
+async def _seed_workspace_roles(db: AsyncSession, tid: UUID) -> None:
     """Seed the 4 workspace system roles for `tid` and wire their
     role_permissions to the catalog (the P3b authz precondition that the
     startup reconciler provides for real tenants; tests create tenants
@@ -45,7 +46,7 @@ async def _seed_workspace_roles(db: AsyncSession, tid) -> None:
 
 
 async def _seed_member_with_grant(
-    db: AsyncSession, *, tid, user_id, enum_role: str, grant_key: str | None
+    db: AsyncSession, *, tid: UUID, user_id: UUID, enum_role: str, grant_key: str | None
 ) -> None:
     """Insert a tenant_memberships row (the enum, kept for can_invite) and,
     when `grant_key` is given, a resolver-visible workspace `user_roles` grant
@@ -64,7 +65,7 @@ async def _seed_member_with_grant(
         )
 
 
-async def _seed_owner(db: AsyncSession) -> tuple:
+async def _seed_owner(db: AsyncSession) -> tuple[UUID, UUID]:
     user_id = uuid4()
     email = f"o-{user_id.hex[:8]}@example.com"
     await _insert_auth_user(db, user_id, email)
@@ -84,7 +85,7 @@ async def _seed_owner(db: AsyncSession) -> tuple:
     return user_id, tid
 
 
-async def _cleanup(db: AsyncSession, user_id) -> None:
+async def _cleanup(db: AsyncSession, user_id: UUID) -> None:
     # FK-safe order: invites & grants & memberships first, then the tenant
     # (its workspace roles cascade via roles.workspace_id ON DELETE CASCADE),
     # then the auth user. user_roles for the tenant's workspace roles are
@@ -103,7 +104,7 @@ async def _cleanup(db: AsyncSession, user_id) -> None:
 async def test_owner_invites_admin(
     http_client: AsyncClient,
     db_session: AsyncSession,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     user_id, tid = await _seed_owner(db_session)
@@ -130,7 +131,7 @@ async def test_owner_invites_admin(
 
 
 async def test_admin_cannot_invite_admin(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     # The admin HAS workspace.members.invite (P3b authz passes); the
     # can_invite() BUSINESS rule still rejects admin->admin (preserved).
@@ -163,7 +164,7 @@ async def test_admin_cannot_invite_admin(
 
 
 async def test_non_member_cannot_invite(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     owner_id, tid = await _seed_owner(db_session)
     outsider_id = uuid4()
@@ -187,7 +188,7 @@ async def test_non_member_cannot_invite(
 
 
 async def test_owner_role_rejected_by_rule(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     user_id, tid = await _seed_owner(db_session)
     try:
@@ -208,7 +209,7 @@ async def test_owner_role_rejected_by_rule(
 async def test_list_and_revoke(
     http_client: AsyncClient,
     db_session: AsyncSession,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     user_id, tid = await _seed_owner(db_session)
@@ -245,7 +246,7 @@ async def test_list_and_revoke(
 
 
 async def test_non_member_cannot_list(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     owner_id, tid = await _seed_owner(db_session)
     outsider_id = uuid4()
@@ -270,7 +271,7 @@ async def test_non_member_cannot_list(
 async def test_list_tenant_invites_paginates(
     http_client: AsyncClient,
     db_session: AsyncSession,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     from xtrusio_api.models.tenant_membership import TenantRole
@@ -310,7 +311,7 @@ async def test_list_tenant_invites_paginates(
 
 
 async def test_list_tenant_invites_rejects_bad_cursor(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     user_id, tid = await _seed_owner(db_session)
     try:
@@ -325,7 +326,7 @@ async def test_list_tenant_invites_rejects_bad_cursor(
 
 
 async def test_member_without_manage_perm_cannot_list_permission_denied(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:
     # P3b authz model: a workspace member who is NOT owner/admin (editor enum +
     # editor grant -> no workspace.members.manage) IS a member (so NOT the

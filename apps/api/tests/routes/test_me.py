@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -20,7 +21,9 @@ async def test_me_unauth_returns_401(http_client: AsyncClient) -> None:
 
 
 async def test_me_super_admin(
-    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
 ) -> None:
     token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
@@ -41,7 +44,9 @@ async def test_me_super_admin(
 
 
 async def test_me_tenant_member(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
 ) -> None:
     user_id = uuid4()
     email = f"member-{user_id.hex[:8]}@example.com"
@@ -60,9 +65,7 @@ async def test_me_tenant_member(
         {"slug": slug, "name": "T", "uid": str(user_id)},
     )
     tid = (
-        await db_session.execute(
-            text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": slug}
-        )
+        await db_session.execute(text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": slug})
     ).scalar_one()
     await db_session.execute(
         text(
@@ -128,7 +131,9 @@ async def test_me_tenant_member(
 
 
 async def test_me_unprovisioned(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
 ) -> None:
     user_id = uuid4()
     email = f"unprov-{user_id.hex[:8]}@example.com"
@@ -159,7 +164,10 @@ async def test_me_unprovisioned(
 
 
 async def test_me_with_pending_platform_invite(
-    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    db_session: AsyncSession,
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()

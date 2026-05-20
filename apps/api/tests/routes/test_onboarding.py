@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from collections.abc import Callable
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def _make_unprovisioned_user(db: AsyncSession) -> tuple:
+async def _make_unprovisioned_user(db: AsyncSession) -> tuple[UUID, str]:
     user_id = uuid4()
     email = f"new-{user_id.hex[:8]}@example.com"
     await db.execute(
@@ -28,11 +29,9 @@ async def _make_unprovisioned_user(db: AsyncSession) -> tuple:
     return user_id, email
 
 
-async def _cleanup_user(db: AsyncSession, user_id) -> None:
+async def _cleanup_user(db: AsyncSession, user_id: UUID) -> None:
     await db.execute(
-        text(
-            "DELETE FROM tenant_memberships WHERE user_id = :id"
-        ),
+        text("DELETE FROM tenant_memberships WHERE user_id = :id"),
         {"id": str(user_id)},
     )
     await db.execute(
@@ -52,7 +51,9 @@ async def test_onboarding_unauth_returns_401(http_client: AsyncClient) -> None:
 
 
 async def test_onboarding_happy_path(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
 ) -> None:
     user_id, _email = await _make_unprovisioned_user(db_session)
     try:
@@ -72,7 +73,9 @@ async def test_onboarding_happy_path(
 
 
 async def test_onboarding_slug_collision_appends_suffix(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
 ) -> None:
     user_id_a, _ = await _make_unprovisioned_user(db_session)
     user_id_b, _ = await _make_unprovisioned_user(db_session)
@@ -97,7 +100,9 @@ async def test_onboarding_slug_collision_appends_suffix(
 
 
 async def test_onboarding_already_has_membership_returns_409(
-    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
 ) -> None:
     user_id, _ = await _make_unprovisioned_user(db_session)
     try:

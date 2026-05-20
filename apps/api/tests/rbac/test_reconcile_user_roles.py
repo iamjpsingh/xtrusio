@@ -52,9 +52,7 @@ async def test_reconcile_backfills_enum_membership_idempotently() -> None:
             ),
             {"t": str(tid), "u": str(uid)},
         )
-        await priv.execute(
-            text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
-        )
+        await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
         await priv.commit()
     try:
         async with SessionLocal() as s:
@@ -89,8 +87,12 @@ async def test_reconcile_backfills_enum_membership_idempotently() -> None:
             assert miss == 0
     finally:
         async with SessionLocal() as priv:
-            await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
-            await priv.execute(text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)})
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
+            )
+            await priv.execute(
+                text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)}
+            )
             await priv.execute(
                 text(
                     "DELETE FROM role_permissions WHERE role_id IN "
@@ -130,9 +132,7 @@ async def test_reconcile_seeds_missing_workspace_role_rows() -> None:
             ),
             {"t": str(tid), "u": str(uid)},
         )
-        await priv.execute(
-            text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
-        )
+        await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
         await priv.commit()
     try:
         async with SessionLocal() as s:
@@ -174,8 +174,12 @@ async def test_reconcile_seeds_missing_workspace_role_rows() -> None:
             assert g == 1
     finally:
         async with SessionLocal() as priv:
-            await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
-            await priv.execute(text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)})
+            await priv.execute(
+                text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
+            )
+            await priv.execute(
+                text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)}
+            )
             await priv.execute(
                 text(
                     "DELETE FROM role_permissions WHERE role_id IN "

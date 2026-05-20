@@ -78,9 +78,7 @@ def upgrade() -> None:
         """
     )
     op.execute("REVOKE EXECUTE ON FUNCTION is_tenant_owner_or_admin(uuid, uuid) FROM public")
-    op.execute(
-        "GRANT EXECUTE ON FUNCTION is_tenant_owner_or_admin(uuid, uuid) TO authenticated"
-    )
+    op.execute("GRANT EXECUTE ON FUNCTION is_tenant_owner_or_admin(uuid, uuid) TO authenticated")
 
     op.execute(
         """

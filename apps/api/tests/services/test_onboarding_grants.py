@@ -61,9 +61,18 @@ async def test_onboarding_grants_owner_user_role() -> None:
     finally:
         async with SessionLocal() as priv:
             if tid is not None:
-                await priv.execute(text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)})
-                await priv.execute(text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)})
-                await priv.execute(text("DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE workspace_id=:t)"), {"t": str(tid)})
+                await priv.execute(
+                    text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
+                )
+                await priv.execute(
+                    text("DELETE FROM tenant_memberships WHERE user_id=:u"), {"u": str(uid)}
+                )
+                await priv.execute(
+                    text(
+                        "DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE workspace_id=:t)"
+                    ),
+                    {"t": str(tid)},
+                )
                 await priv.execute(text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)})
                 await priv.execute(text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)})
             await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})

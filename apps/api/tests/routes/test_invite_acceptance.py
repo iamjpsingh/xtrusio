@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from xtrusio_api.models.platform_user import PlatformUser
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def _insert_auth_user(db: AsyncSession, user_id, email: str) -> None:
+async def _insert_auth_user(db: AsyncSession, user_id: UUID, email: str) -> None:
     await db.execute(
         text(
             "INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, "
@@ -26,7 +28,9 @@ async def _insert_auth_user(db: AsyncSession, user_id, email: str) -> None:
 
 
 async def test_no_invite_in_metadata_returns_403(
-    http_client: AsyncClient, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient,
+    make_jwt: Callable[..., str],
+    db_session: AsyncSession,
 ) -> None:
     user_id = uuid4()
     await _insert_auth_user(db_session, user_id, f"x-{user_id.hex[:8]}@example.com")
@@ -46,7 +50,10 @@ async def test_no_invite_in_metadata_returns_403(
 
 
 async def test_accept_platform_invite_happy_path(
-    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    db_session: AsyncSession,
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()
@@ -102,7 +109,10 @@ async def test_accept_platform_invite_happy_path(
 
 
 async def test_expired_invite_returns_403(
-    http_client: AsyncClient, existing_super_admin, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    db_session: AsyncSession,
 ) -> None:
     invite_id = uuid4()
     user_id = uuid4()
@@ -141,7 +151,9 @@ async def test_expired_invite_returns_403(
 
 
 async def test_accept_tenant_invite_happy_path(
-    http_client: AsyncClient, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient,
+    make_jwt: Callable[..., str],
+    db_session: AsyncSession,
 ) -> None:
     inviter_id = uuid4()
     user_id = uuid4()

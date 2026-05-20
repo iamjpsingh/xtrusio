@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
+from collections.abc import Callable
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import AsyncClient
@@ -14,7 +15,7 @@ from xtrusio_api.rbac.grants import grant_role
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def _seed_platform_user(db: AsyncSession, *, role_key: str | None) -> tuple:
+async def _seed_platform_user(db: AsyncSession, *, role_key: str | None) -> tuple[UUID, str]:
     """Ephemeral auth.users + platform_users; optional resolver-visible platform
     role grant (the P3b authz source). Never a super_admin."""
     user_id = uuid4()
@@ -35,7 +36,7 @@ async def _seed_platform_user(db: AsyncSession, *, role_key: str | None) -> tupl
     return user_id, email
 
 
-async def _drop_platform_user(db: AsyncSession, user_id) -> None:
+async def _drop_platform_user(db: AsyncSession, user_id: UUID) -> None:
     await db.execute(text("DELETE FROM user_roles WHERE auth_user_id = :id"), {"id": str(user_id)})
     await db.execute(text("DELETE FROM platform_users WHERE id = :id"), {"id": str(user_id)})
     await db.execute(text("DELETE FROM auth.users WHERE id = :id"), {"id": str(user_id)})
@@ -50,7 +51,7 @@ async def test_get_settings_unauthenticated(http_client: AsyncClient) -> None:
 async def test_get_settings_reflects_stored_values(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
-    make_jwt,
+    make_jwt: Callable[..., str],
     db_session: AsyncSession,
 ) -> None:
     # Read the live DB row so the assertion is robust to whatever the operator set.
@@ -82,7 +83,7 @@ async def test_get_settings_reflects_stored_values(
 
 
 async def test_put_settings_unprivileged_returns_403_permission_denied(
-    http_client: AsyncClient, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, make_jwt: Callable[..., str], db_session: AsyncSession
 ) -> None:
     # P3b authz model: no `platform.settings.manage` grant -> permission_denied.
     user_id, _ = await _seed_platform_user(db_session, role_key=None)
@@ -100,7 +101,7 @@ async def test_put_settings_unprivileged_returns_403_permission_denied(
 
 
 async def test_put_settings_platform_admin_succeeds(
-    http_client: AsyncClient, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, make_jwt: Callable[..., str], db_session: AsyncSession
 ) -> None:
     # P3b intentionally CHANGES authz: platform `admin` now holds
     # `platform.settings.manage` (spec matrix) and may edit settings.
@@ -119,7 +120,7 @@ async def test_put_settings_platform_admin_succeeds(
 
 
 async def test_get_settings_unprivileged_returns_403_permission_denied(
-    http_client: AsyncClient, make_jwt, db_session: AsyncSession
+    http_client: AsyncClient, make_jwt: Callable[..., str], db_session: AsyncSession
 ) -> None:
     # P3b: GET now requires `platform.settings.read` (previously any auth user).
     user_id, _ = await _seed_platform_user(db_session, role_key=None)
@@ -135,7 +136,7 @@ async def test_get_settings_unprivileged_returns_403_permission_denied(
 
 
 async def test_put_settings_happy_path(
-    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt
+    http_client: AsyncClient, existing_super_admin: PlatformUser, make_jwt: Callable[..., str]
 ) -> None:
     token = make_jwt(sub=existing_super_admin.id)
     r = await http_client.put(

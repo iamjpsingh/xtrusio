@@ -59,14 +59,18 @@ async def reconcile_rbac(db: AsyncSession) -> None:
     # 3. wire platform system roles
     for role_key, map_key in _PLATFORM_ROLE_MAP.items():
         await _sync_role_perms(
-            db, scope="platform", role_key=role_key,
+            db,
+            scope="platform",
+            role_key=role_key,
             perm_keys=SYSTEM_ROLE_PERMISSIONS[map_key],
         )
 
     # 4. wire every per-workspace system role
     for role_key, map_key in _WORKSPACE_ROLE_MAP.items():
         await _sync_role_perms(
-            db, scope="workspace", role_key=role_key,
+            db,
+            scope="workspace",
+            role_key=role_key,
             perm_keys=SYSTEM_ROLE_PERMISSIONS[map_key],
         )
 
@@ -80,29 +84,33 @@ async def _sync_role_perms(
     equal to perm_keys. Covers platform (one row) and workspace (one per tenant).
     """
     role_ids = (
-        await db.execute(
-            text(
-                "SELECT id FROM roles WHERE scope=:scope AND key=:key AND is_system"
-            ),
-            {"scope": scope, "key": role_key},
+        (
+            await db.execute(
+                text("SELECT id FROM roles WHERE scope=:scope AND key=:key AND is_system"),
+                {"scope": scope, "key": role_key},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not role_ids:
         return
     perm_ids = (
-        await db.execute(
-            text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
-            {"keys": list(perm_keys)},
+        (
+            await db.execute(
+                text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
+                {"keys": list(perm_keys)},
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for rid in role_ids:
         # Full reset per role: DELETE then re-INSERT the exact target set, so
         # removing a key from the catalog also drops it from system roles.
         # `ON CONFLICT DO NOTHING` is belt-and-suspenders (nothing can collide
         # right after the same-txn DELETE) — kept for safety on re-entrancy.
-        await db.execute(
-            text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
-        )
+        await db.execute(text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid})
         for pid in perm_ids:
             await db.execute(
                 text(
@@ -131,14 +139,16 @@ async def wire_workspace_role_perms(db: AsyncSession, *, workspace_id: UUID) -> 
         if rid is None:
             continue
         perm_ids = (
-            await db.execute(
-                text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
-                {"keys": list(SYSTEM_ROLE_PERMISSIONS[map_key])},
+            (
+                await db.execute(
+                    text("SELECT id FROM permissions WHERE key = ANY(:keys)"),
+                    {"keys": list(SYSTEM_ROLE_PERMISSIONS[map_key])},
+                )
             )
-        ).scalars().all()
-        await db.execute(
-            text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid}
+            .scalars()
+            .all()
         )
+        await db.execute(text("DELETE FROM role_permissions WHERE role_id=:rid"), {"rid": rid})
         for pid in perm_ids:
             await db.execute(
                 text(
@@ -182,9 +192,7 @@ async def reconcile_user_roles_from_enums(db: AsyncSession) -> None:
     )
     # raw db.execute() runs on the connection immediately within this txn, so
     # the seeded rows are visible to the following SELECT — no flush needed.
-    tenant_ids = (
-        await db.execute(text("SELECT id FROM tenants"))
-    ).scalars().all()
+    tenant_ids = (await db.execute(text("SELECT id FROM tenants"))).scalars().all()
     for tid in tenant_ids:
         await wire_workspace_role_perms(db, workspace_id=tid)
     # Step B: project enum principals -> user_roles.

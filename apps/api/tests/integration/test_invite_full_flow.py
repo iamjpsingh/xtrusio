@@ -3,6 +3,7 @@ adding the user with the right metadata) -> /invites/accept -> /me reflects new 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -17,7 +18,7 @@ pytestmark = pytest.mark.asyncio(loop_scope="session")
 async def test_owner_invites_admin_full_flow(
     http_client: AsyncClient,
     db_session: AsyncSession,
-    make_jwt,
+    make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     # 1. Seed an owner with a tenant.

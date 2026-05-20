@@ -73,12 +73,8 @@ def upgrade() -> None:
         $$
         """
     )
-    op.execute(
-        "REVOKE EXECUTE ON FUNCTION has_workspace_perm(uuid, uuid, text) FROM public"
-    )
-    op.execute(
-        "GRANT EXECUTE ON FUNCTION has_workspace_perm(uuid, uuid, text) TO authenticated"
-    )
+    op.execute("REVOKE EXECUTE ON FUNCTION has_workspace_perm(uuid, uuid, text) FROM public")
+    op.execute("GRANT EXECUTE ON FUNCTION has_workspace_perm(uuid, uuid, text) TO authenticated")
 
     op.execute(
         """
@@ -163,17 +159,14 @@ def upgrade() -> None:
     # (RLS does not constrain it) — no write policies needed for authenticated.
     op.execute("DROP POLICY IF EXISTS permissions_authenticated_read ON permissions")
     op.execute("DROP POLICY IF EXISTS roles_authenticated_read ON roles")
-    op.execute(
-        "DROP POLICY IF EXISTS role_permissions_authenticated_read ON role_permissions"
-    )
+    op.execute("DROP POLICY IF EXISTS role_permissions_authenticated_read ON role_permissions")
     op.execute("DROP POLICY IF EXISTS user_roles_authenticated_read ON user_roles")
     op.execute("DROP POLICY IF EXISTS rbac_audit_log_no_read ON rbac_audit_log")
 
     # permissions: the catalog is non-sensitive key metadata; any authenticated
     # user may read it (unchanged from 0006 intent).
     op.execute(
-        "CREATE POLICY permissions_read ON permissions "
-        "FOR SELECT TO authenticated USING (true)"
+        "CREATE POLICY permissions_read ON permissions " "FOR SELECT TO authenticated USING (true)"
     )
     # roles: visible to whoever may manage roles in that scope/workspace.
     op.execute(

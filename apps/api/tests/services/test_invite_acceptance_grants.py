@@ -46,9 +46,7 @@ async def test_accept_platform_invite_also_grants_user_role() -> None:
         await priv.commit()
     try:
         async with SessionLocal() as s:
-            out = await _accept_platform(
-                s, user_id=uid, email=email, invite_id=invite_id
-            )
+            out = await _accept_platform(s, user_id=uid, email=email, invite_id=invite_id)
         assert out["kind"] == "platform"
         assert out["role"] == "admin"
         async with SessionLocal() as s:
@@ -77,16 +75,12 @@ async def test_accept_platform_invite_also_grants_user_role() -> None:
             await priv.execute(
                 text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
             )
-            await priv.execute(
-                text("DELETE FROM platform_users WHERE id=:u"), {"u": str(uid)}
-            )
+            await priv.execute(text("DELETE FROM platform_users WHERE id=:u"), {"u": str(uid)})
             await priv.execute(
                 text("DELETE FROM platform_invites WHERE id=:i"),
                 {"i": str(invite_id)},
             )
-            await priv.execute(
-                text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)}
-            )
+            await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
             await priv.commit()
 
 
@@ -133,9 +127,7 @@ async def test_accept_tenant_invite_also_grants_user_role() -> None:
         await priv.commit()
     try:
         async with SessionLocal() as s:
-            out = await _accept_tenant(
-                s, user_id=uid, email=email, invite_id=invite_id
-            )
+            out = await _accept_tenant(s, user_id=uid, email=email, invite_id=invite_id)
         assert out["kind"] == "tenant"
         assert out["role"] == "editor"
         async with SessionLocal() as s:
@@ -174,13 +166,7 @@ async def test_accept_tenant_invite_also_grants_user_role() -> None:
             await priv.execute(
                 text("DELETE FROM tenant_invites WHERE id=:i"), {"i": str(invite_id)}
             )
-            await priv.execute(
-                text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)}
-            )
-            await priv.execute(
-                text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)}
-            )
-            await priv.execute(
-                text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)}
-            )
+            await priv.execute(text("DELETE FROM roles WHERE workspace_id=:t"), {"t": str(tid)})
+            await priv.execute(text("DELETE FROM tenants WHERE id=:t"), {"t": str(tid)})
+            await priv.execute(text("DELETE FROM auth.users WHERE id=:u"), {"u": str(uid)})
             await priv.commit()
