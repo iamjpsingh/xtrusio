@@ -28,6 +28,12 @@ async def purge_test_data() -> dict[str, int]:
     """
     counts: dict[str, int] = {}
     async with SessionLocal() as s:
+        # Opt out of 0009 governance triggers for the cleanup transaction.
+        # purge_test_data is a system process (test-suite teardown), not a
+        # request — deleting tenants cascades to per-workspace is_system
+        # roles via FK, which reject_system_role_mutation would otherwise
+        # block. See rbac/reconcile.py for the same bypass pattern.
+        await s.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
         # Resolve the set of test auth.users ids first (drives FK-dependent deletes).
         test_ids = [
             r[0]
@@ -81,6 +87,22 @@ async def purge_test_data() -> dict[str, int]:
                     "DELETE FROM tenant_invites WHERE invited_by = ANY(:ids)",
                 ),
                 (
+                    "rbac_audit_log",
+                    "DELETE FROM rbac_audit_log WHERE actor_auth_user_id = ANY(:ids)",
+                ),
+                (
+                    "user_roles_by_user",
+                    "DELETE FROM user_roles WHERE auth_user_id = ANY(:ids)",
+                ),
+                (
+                    "user_roles_by_granter",
+                    "DELETE FROM user_roles WHERE granted_by = ANY(:ids)",
+                ),
+                (
+                    "roles_custom_by_creator",
+                    "DELETE FROM roles WHERE created_by = ANY(:ids) AND NOT is_system",
+                ),
+                (
                     "tenant_memberships",
                     "DELETE FROM tenant_memberships WHERE tenant_id IN "
                     "(SELECT id FROM tenants WHERE created_by = ANY(:ids))",
@@ -103,6 +125,10 @@ async def purge_test_data() -> dict[str, int]:
                 "platform_invites_by_inviter",
                 "tenant_invites_by_tenant",
                 "tenant_invites_by_inviter",
+                "rbac_audit_log",
+                "user_roles_by_user",
+                "user_roles_by_granter",
+                "roles_custom_by_creator",
                 "tenant_memberships",
                 "tenants",
             ):

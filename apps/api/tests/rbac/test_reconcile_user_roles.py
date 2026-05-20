@@ -87,6 +87,9 @@ async def test_reconcile_backfills_enum_membership_idempotently() -> None:
             assert miss == 0
     finally:
         async with SessionLocal() as priv:
+            # Test-fixture teardown is a system process — bypass the 0009
+            # immutable-system-role triggers for this transaction.
+            await priv.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
             await priv.execute(
                 text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
             )
@@ -174,6 +177,9 @@ async def test_reconcile_seeds_missing_workspace_role_rows() -> None:
             assert g == 1
     finally:
         async with SessionLocal() as priv:
+            # Test-fixture teardown is a system process — bypass the 0009
+            # immutable-system-role triggers for this transaction.
+            await priv.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
             await priv.execute(
                 text("DELETE FROM user_roles WHERE auth_user_id=:u"), {"u": str(uid)}
             )
