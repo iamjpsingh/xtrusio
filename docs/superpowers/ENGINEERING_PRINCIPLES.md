@@ -108,7 +108,7 @@ A grep gate in CI (when CI lands) and as a local pre-commit hook fails the build
 - **Tests are first-class code.** Same lint rules, same naming standards, same review bar.
 - **Test behavior, not implementation.** Refactoring should not break tests unless behavior changed.
 - **Test the unhappy paths.** Every endpoint has a test for: unauthenticated, unauthorized, validation error, not found, success.
-- **Don't mock what you don't own** unless it's slow or expensive. Use Postgres test containers; mock only third-party LLM APIs and email senders.
+- **Don't mock what you don't own** unless it's slow or expensive. Tests run against either a Postgres test container OR a dedicated managed-Supabase test project (`xtrusio-ci`) — never against dev or prod. Per-run isolation comes from the `_cleanup` fixture purging `@example.com` rows; CI uses `concurrency: ci-test-db` so only one job hits the DB at a time. Mock only third-party LLM APIs and email senders.
 
 ---
 
