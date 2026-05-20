@@ -5,11 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
+from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..schemas.invite import (
     CreateTenantInviteRequest,
     TenantInviteResponse,
@@ -63,14 +64,27 @@ async def list_invites(
     tenant_id: UUID,
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
 ) -> TenantInvitesPage:
+    params = CursorParams(cursor=cursor, limit=limit)
     try:
-        rows = await list_tenant_invites(db, tenant_id=tenant_id, requester_id=identity.user_id)
+        decoded = params.decoded()
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from e
+    try:
+        rows, next_cursor = await list_tenant_invites(
+            db,
+            tenant_id=tenant_id,
+            requester_id=identity.user_id,
+            cursor=decoded,
+            limit=params.effective_limit,
+        )
     except NotAMemberError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
-    # next_cursor: pagination not yet implemented (single page, newest first)
     return TenantInvitesPage(
-        items=[TenantInviteResponse.model_validate(r) for r in rows], next_cursor=None
+        items=[TenantInviteResponse.model_validate(r) for r in rows],
+        next_cursor=next_cursor,
     )
 
 

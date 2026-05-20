@@ -54,8 +54,7 @@ async def _seed_member_with_grant(
 
     await db.execute(
         text(
-            "INSERT INTO tenant_memberships (tenant_id, user_id, role) "
-            "VALUES (:tid, :uid, :r)"
+            "INSERT INTO tenant_memberships (tenant_id, user_id, role) " "VALUES (:tid, :uid, :r)"
         ),
         {"tid": str(tid), "uid": str(user_id), "r": enum_role},
     )
@@ -266,6 +265,63 @@ async def test_non_member_cannot_list(
         )
         await db_session.commit()
         await _cleanup(db_session, owner_id)
+
+
+async def test_list_tenant_invites_paginates(
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt,
+    mock_supabase_admin: MagicMock,
+) -> None:
+    from xtrusio_api.models.tenant_membership import TenantRole
+    from xtrusio_api.services.tenant_invites import create_tenant_invite
+
+    user_id, tid = await _seed_owner(db_session)
+    try:
+        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
+        for i in range(3):
+            await create_tenant_invite(
+                db_session,
+                tenant_id=tid,
+                inviter_id=user_id,
+                email=f"paginv-{i}-{uuid4().hex[:6]}@example.com",
+                role=TenantRole.ADMIN,
+            )
+
+        token = make_jwt(sub=user_id)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        r1 = await http_client.get(f"/api/tenants/{tid}/invites?limit=2", headers=headers)
+        assert r1.status_code == 200, r1.text
+        p1 = r1.json()
+        assert len(p1["items"]) == 2
+        assert p1["next_cursor"] is not None
+
+        r2 = await http_client.get(
+            f"/api/tenants/{tid}/invites?limit=2&cursor={p1['next_cursor']}",
+            headers=headers,
+        )
+        assert r2.status_code == 200, r2.text
+        p2 = r2.json()
+        assert len(p2["items"]) >= 1
+        assert {x["id"] for x in p1["items"]}.isdisjoint({x["id"] for x in p2["items"]})
+    finally:
+        await _cleanup(db_session, user_id)
+
+
+async def test_list_tenant_invites_rejects_bad_cursor(
+    http_client: AsyncClient, db_session: AsyncSession, make_jwt
+) -> None:
+    user_id, tid = await _seed_owner(db_session)
+    try:
+        token = make_jwt(sub=user_id)
+        r = await http_client.get(
+            f"/api/tenants/{tid}/invites?cursor=NOPE",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 400
+    finally:
+        await _cleanup(db_session, user_id)
 
 
 async def test_member_without_manage_perm_cannot_list_permission_denied(

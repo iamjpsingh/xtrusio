@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
@@ -45,9 +45,7 @@ class EmailProviderUnavailableError(Exception):
     pass
 
 
-async def _load_membership(
-    db: AsyncSession, *, tenant_id: UUID, user_id: UUID
-) -> TenantMembership:
+async def _load_membership(db: AsyncSession, *, tenant_id: UUID, user_id: UUID) -> TenantMembership:
     """Load the requester's membership (needed by `can_invite`).
 
     Authorization is the resolver's job (`require_permission`), NOT the enum
@@ -79,9 +77,7 @@ async def create_tenant_invite(
     role: TenantRole,
 ) -> TenantInvite:
     membership = await _load_membership(db, tenant_id=tenant_id, user_id=inviter_id)
-    await require_permission(
-        db, inviter_id, "workspace.members.invite", workspace_id=tenant_id
-    )
+    await require_permission(db, inviter_id, "workspace.members.invite", workspace_id=tenant_id)
 
     if not can_invite(inviter=membership.role, target=role):
         raise ForbiddenRoleError()
@@ -157,34 +153,45 @@ async def create_tenant_invite(
 
 
 async def list_tenant_invites(
-    db: AsyncSession, *, tenant_id: UUID, requester_id: UUID
-) -> list[TenantInvite]:
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    requester_id: UUID,
+    cursor: tuple[datetime, UUID] | None = None,
+    limit: int = 50,
+) -> tuple[list[TenantInvite], str | None]:
+    from ..core.pagination import encode_cursor
+
     await _load_membership(db, tenant_id=tenant_id, user_id=requester_id)
-    await require_permission(
-        db, requester_id, "workspace.members.manage", workspace_id=tenant_id
+    await require_permission(db, requester_id, "workspace.members.manage", workspace_id=tenant_id)
+    stmt = (
+        select(TenantInvite)
+        .where(TenantInvite.tenant_id == tenant_id)
+        .order_by(TenantInvite.created_at.desc(), TenantInvite.id.desc())
     )
-    rows = (
-        (
-            await db.execute(
-                select(TenantInvite)
-                .where(TenantInvite.tenant_id == tenant_id)
-                .order_by(TenantInvite.created_at.desc())
-                .limit(50)
+    if cursor is not None:
+        ts, rid = cursor
+        stmt = stmt.where(
+            or_(
+                TenantInvite.created_at < ts,
+                and_(TenantInvite.created_at == ts, TenantInvite.id < rid),
             )
         )
-        .scalars()
-        .all()
-    )
-    return list(rows)
+    stmt = stmt.limit(limit + 1)
+    rows = list((await db.execute(stmt)).scalars().all())
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = encode_cursor(last.created_at, last.id)
+        rows = rows[:limit]
+    return rows, next_cursor
 
 
 async def revoke_tenant_invite(
     db: AsyncSession, *, tenant_id: UUID, invite_id: UUID, requester_id: UUID
 ) -> None:
     await _load_membership(db, tenant_id=tenant_id, user_id=requester_id)
-    await require_permission(
-        db, requester_id, "workspace.members.manage", workspace_id=tenant_id
-    )
+    await require_permission(db, requester_id, "workspace.members.manage", workspace_id=tenant_id)
     invite = (
         await db.execute(
             select(TenantInvite).where(
