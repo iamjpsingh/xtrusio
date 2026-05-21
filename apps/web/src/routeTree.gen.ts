@@ -14,11 +14,12 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppIndexRouteImport } from './routes/_app.index'
-import { Route as AppUsersRouteImport } from './routes/_app.users'
-import { Route as AppSettingsRouteImport } from './routes/_app.settings'
-import { Route as AppClientsRouteImport } from './routes/_app.clients'
-import { Route as AppClientsSlugUsersRouteImport } from './routes/_app.clients.$slug.users'
+import { Route as AppPlatformRouteImport } from './routes/_app.platform'
+import { Route as AppPlatformIndexRouteImport } from './routes/_app.platform.index'
+import { Route as AppPlatformUsersRouteImport } from './routes/_app.platform.users'
+import { Route as AppPlatformSettingsRouteImport } from './routes/_app.platform.settings'
+import { Route as AppPlatformClientsRouteImport } from './routes/_app.platform.clients'
+import { Route as AppPlatformClientsSlugUsersRouteImport } from './routes/_app.platform.clients.$slug.users'
 
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
@@ -44,53 +45,62 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppIndexRoute = AppIndexRouteImport.update({
+const AppPlatformRoute = AppPlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlatformIndexRoute = AppPlatformIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AppPlatformRoute,
 } as any)
-const AppUsersRoute = AppUsersRouteImport.update({
+const AppPlatformUsersRoute = AppPlatformUsersRouteImport.update({
   id: '/users',
   path: '/users',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AppPlatformRoute,
 } as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
+const AppPlatformSettingsRoute = AppPlatformSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AppPlatformRoute,
 } as any)
-const AppClientsRoute = AppClientsRouteImport.update({
+const AppPlatformClientsRoute = AppPlatformClientsRouteImport.update({
   id: '/clients',
   path: '/clients',
-  getParentRoute: () => AppRoute,
+  getParentRoute: () => AppPlatformRoute,
 } as any)
-const AppClientsSlugUsersRoute = AppClientsSlugUsersRouteImport.update({
-  id: '/$slug/users',
-  path: '/$slug/users',
-  getParentRoute: () => AppClientsRoute,
-} as any)
+const AppPlatformClientsSlugUsersRoute =
+  AppPlatformClientsSlugUsersRouteImport.update({
+    id: '/$slug/users',
+    path: '/$slug/users',
+    getParentRoute: () => AppPlatformClientsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppIndexRoute
+  '/': typeof AppRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/clients': typeof AppClientsRouteWithChildren
-  '/settings': typeof AppSettingsRoute
-  '/users': typeof AppUsersRoute
-  '/clients/$slug/users': typeof AppClientsSlugUsersRoute
+  '/platform': typeof AppPlatformRouteWithChildren
+  '/platform/clients': typeof AppPlatformClientsRouteWithChildren
+  '/platform/settings': typeof AppPlatformSettingsRoute
+  '/platform/users': typeof AppPlatformUsersRoute
+  '/platform/': typeof AppPlatformIndexRoute
+  '/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AppRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/clients': typeof AppClientsRouteWithChildren
-  '/settings': typeof AppSettingsRoute
-  '/users': typeof AppUsersRoute
-  '/': typeof AppIndexRoute
-  '/clients/$slug/users': typeof AppClientsSlugUsersRoute
+  '/platform/clients': typeof AppPlatformClientsRouteWithChildren
+  '/platform/settings': typeof AppPlatformSettingsRoute
+  '/platform/users': typeof AppPlatformUsersRoute
+  '/platform': typeof AppPlatformIndexRoute
+  '/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -99,11 +109,12 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
-  '/_app/clients': typeof AppClientsRouteWithChildren
-  '/_app/settings': typeof AppSettingsRoute
-  '/_app/users': typeof AppUsersRoute
-  '/_app/': typeof AppIndexRoute
-  '/_app/clients/$slug/users': typeof AppClientsSlugUsersRoute
+  '/_app/platform': typeof AppPlatformRouteWithChildren
+  '/_app/platform/clients': typeof AppPlatformClientsRouteWithChildren
+  '/_app/platform/settings': typeof AppPlatformSettingsRoute
+  '/_app/platform/users': typeof AppPlatformUsersRoute
+  '/_app/platform/': typeof AppPlatformIndexRoute
+  '/_app/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -113,21 +124,24 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
-    | '/clients'
-    | '/settings'
-    | '/users'
-    | '/clients/$slug/users'
+    | '/platform'
+    | '/platform/clients'
+    | '/platform/settings'
+    | '/platform/users'
+    | '/platform/'
+    | '/platform/clients/$slug/users'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/accept-invite'
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
-    | '/clients'
-    | '/settings'
-    | '/users'
-    | '/'
-    | '/clients/$slug/users'
+    | '/platform/clients'
+    | '/platform/settings'
+    | '/platform/users'
+    | '/platform'
+    | '/platform/clients/$slug/users'
   id:
     | '__root__'
     | '/_app'
@@ -135,11 +149,12 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
-    | '/_app/clients'
-    | '/_app/settings'
-    | '/_app/users'
-    | '/_app/'
-    | '/_app/clients/$slug/users'
+    | '/_app/platform'
+    | '/_app/platform/clients'
+    | '/_app/platform/settings'
+    | '/_app/platform/users'
+    | '/_app/platform/'
+    | '/_app/platform/clients/$slug/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -187,68 +202,86 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/': {
-      id: '/_app/'
+    '/_app/platform': {
+      id: '/_app/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof AppPlatformRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/platform/': {
+      id: '/_app/platform/'
       path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AppIndexRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/platform/'
+      preLoaderRoute: typeof AppPlatformIndexRouteImport
+      parentRoute: typeof AppPlatformRoute
     }
-    '/_app/users': {
-      id: '/_app/users'
+    '/_app/platform/users': {
+      id: '/_app/platform/users'
       path: '/users'
-      fullPath: '/users'
-      preLoaderRoute: typeof AppUsersRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/platform/users'
+      preLoaderRoute: typeof AppPlatformUsersRouteImport
+      parentRoute: typeof AppPlatformRoute
     }
-    '/_app/settings': {
-      id: '/_app/settings'
+    '/_app/platform/settings': {
+      id: '/_app/platform/settings'
       path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/platform/settings'
+      preLoaderRoute: typeof AppPlatformSettingsRouteImport
+      parentRoute: typeof AppPlatformRoute
     }
-    '/_app/clients': {
-      id: '/_app/clients'
+    '/_app/platform/clients': {
+      id: '/_app/platform/clients'
       path: '/clients'
-      fullPath: '/clients'
-      preLoaderRoute: typeof AppClientsRouteImport
-      parentRoute: typeof AppRoute
+      fullPath: '/platform/clients'
+      preLoaderRoute: typeof AppPlatformClientsRouteImport
+      parentRoute: typeof AppPlatformRoute
     }
-    '/_app/clients/$slug/users': {
-      id: '/_app/clients/$slug/users'
+    '/_app/platform/clients/$slug/users': {
+      id: '/_app/platform/clients/$slug/users'
       path: '/$slug/users'
-      fullPath: '/clients/$slug/users'
-      preLoaderRoute: typeof AppClientsSlugUsersRouteImport
-      parentRoute: typeof AppClientsRoute
+      fullPath: '/platform/clients/$slug/users'
+      preLoaderRoute: typeof AppPlatformClientsSlugUsersRouteImport
+      parentRoute: typeof AppPlatformClientsRoute
     }
   }
 }
 
-interface AppClientsRouteChildren {
-  AppClientsSlugUsersRoute: typeof AppClientsSlugUsersRoute
+interface AppPlatformClientsRouteChildren {
+  AppPlatformClientsSlugUsersRoute: typeof AppPlatformClientsSlugUsersRoute
 }
 
-const AppClientsRouteChildren: AppClientsRouteChildren = {
-  AppClientsSlugUsersRoute: AppClientsSlugUsersRoute,
+const AppPlatformClientsRouteChildren: AppPlatformClientsRouteChildren = {
+  AppPlatformClientsSlugUsersRoute: AppPlatformClientsSlugUsersRoute,
 }
 
-const AppClientsRouteWithChildren = AppClientsRoute._addFileChildren(
-  AppClientsRouteChildren,
+const AppPlatformClientsRouteWithChildren =
+  AppPlatformClientsRoute._addFileChildren(AppPlatformClientsRouteChildren)
+
+interface AppPlatformRouteChildren {
+  AppPlatformClientsRoute: typeof AppPlatformClientsRouteWithChildren
+  AppPlatformSettingsRoute: typeof AppPlatformSettingsRoute
+  AppPlatformUsersRoute: typeof AppPlatformUsersRoute
+  AppPlatformIndexRoute: typeof AppPlatformIndexRoute
+}
+
+const AppPlatformRouteChildren: AppPlatformRouteChildren = {
+  AppPlatformClientsRoute: AppPlatformClientsRouteWithChildren,
+  AppPlatformSettingsRoute: AppPlatformSettingsRoute,
+  AppPlatformUsersRoute: AppPlatformUsersRoute,
+  AppPlatformIndexRoute: AppPlatformIndexRoute,
+}
+
+const AppPlatformRouteWithChildren = AppPlatformRoute._addFileChildren(
+  AppPlatformRouteChildren,
 )
 
 interface AppRouteChildren {
-  AppClientsRoute: typeof AppClientsRouteWithChildren
-  AppSettingsRoute: typeof AppSettingsRoute
-  AppUsersRoute: typeof AppUsersRoute
-  AppIndexRoute: typeof AppIndexRoute
+  AppPlatformRoute: typeof AppPlatformRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppClientsRoute: AppClientsRouteWithChildren,
-  AppSettingsRoute: AppSettingsRoute,
-  AppUsersRoute: AppUsersRoute,
-  AppIndexRoute: AppIndexRoute,
+  AppPlatformRoute: AppPlatformRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
