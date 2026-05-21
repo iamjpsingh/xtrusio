@@ -16,9 +16,15 @@ import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppPlatformIndexRouteImport } from './routes/_app.platform.index'
+import { Route as AppWorkspaceWorkspaceIdRouteImport } from './routes/_app.workspace.$workspaceId'
 import { Route as AppPlatformUsersRouteImport } from './routes/_app.platform.users'
 import { Route as AppPlatformSettingsRouteImport } from './routes/_app.platform.settings'
 import { Route as AppPlatformClientsRouteImport } from './routes/_app.platform.clients'
+import { Route as AppWorkspaceWorkspaceIdIndexRouteImport } from './routes/_app.workspace.$workspaceId.index'
+import { Route as AppWorkspaceWorkspaceIdSettingsRouteImport } from './routes/_app.workspace.$workspaceId.settings'
+import { Route as AppWorkspaceWorkspaceIdRolesRouteImport } from './routes/_app.workspace.$workspaceId.roles'
+import { Route as AppWorkspaceWorkspaceIdMembersRouteImport } from './routes/_app.workspace.$workspaceId.members'
+import { Route as AppWorkspaceWorkspaceIdAuditLogRouteImport } from './routes/_app.workspace.$workspaceId.audit-log'
 import { Route as AppPlatformClientsSlugUsersRouteImport } from './routes/_app.platform.clients.$slug.users'
 
 const SignUpRoute = SignUpRouteImport.update({
@@ -55,6 +61,11 @@ const AppPlatformIndexRoute = AppPlatformIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppPlatformRoute,
 } as any)
+const AppWorkspaceWorkspaceIdRoute = AppWorkspaceWorkspaceIdRouteImport.update({
+  id: '/workspace/$workspaceId',
+  path: '/workspace/$workspaceId',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPlatformUsersRoute = AppPlatformUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -70,6 +81,36 @@ const AppPlatformClientsRoute = AppPlatformClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => AppPlatformRoute,
 } as any)
+const AppWorkspaceWorkspaceIdIndexRoute =
+  AppWorkspaceWorkspaceIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppWorkspaceWorkspaceIdRoute,
+  } as any)
+const AppWorkspaceWorkspaceIdSettingsRoute =
+  AppWorkspaceWorkspaceIdSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AppWorkspaceWorkspaceIdRoute,
+  } as any)
+const AppWorkspaceWorkspaceIdRolesRoute =
+  AppWorkspaceWorkspaceIdRolesRouteImport.update({
+    id: '/roles',
+    path: '/roles',
+    getParentRoute: () => AppWorkspaceWorkspaceIdRoute,
+  } as any)
+const AppWorkspaceWorkspaceIdMembersRoute =
+  AppWorkspaceWorkspaceIdMembersRouteImport.update({
+    id: '/members',
+    path: '/members',
+    getParentRoute: () => AppWorkspaceWorkspaceIdRoute,
+  } as any)
+const AppWorkspaceWorkspaceIdAuditLogRoute =
+  AppWorkspaceWorkspaceIdAuditLogRouteImport.update({
+    id: '/audit-log',
+    path: '/audit-log',
+    getParentRoute: () => AppWorkspaceWorkspaceIdRoute,
+  } as any)
 const AppPlatformClientsSlugUsersRoute =
   AppPlatformClientsSlugUsersRouteImport.update({
     id: '/$slug/users',
@@ -87,7 +128,13 @@ export interface FileRoutesByFullPath {
   '/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/platform/settings': typeof AppPlatformSettingsRoute
   '/platform/users': typeof AppPlatformUsersRoute
+  '/workspace/$workspaceId': typeof AppWorkspaceWorkspaceIdRouteWithChildren
   '/platform/': typeof AppPlatformIndexRoute
+  '/workspace/$workspaceId/audit-log': typeof AppWorkspaceWorkspaceIdAuditLogRoute
+  '/workspace/$workspaceId/members': typeof AppWorkspaceWorkspaceIdMembersRoute
+  '/workspace/$workspaceId/roles': typeof AppWorkspaceWorkspaceIdRolesRoute
+  '/workspace/$workspaceId/settings': typeof AppWorkspaceWorkspaceIdSettingsRoute
+  '/workspace/$workspaceId/': typeof AppWorkspaceWorkspaceIdIndexRoute
   '/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRoutesByTo {
@@ -100,6 +147,11 @@ export interface FileRoutesByTo {
   '/platform/settings': typeof AppPlatformSettingsRoute
   '/platform/users': typeof AppPlatformUsersRoute
   '/platform': typeof AppPlatformIndexRoute
+  '/workspace/$workspaceId/audit-log': typeof AppWorkspaceWorkspaceIdAuditLogRoute
+  '/workspace/$workspaceId/members': typeof AppWorkspaceWorkspaceIdMembersRoute
+  '/workspace/$workspaceId/roles': typeof AppWorkspaceWorkspaceIdRolesRoute
+  '/workspace/$workspaceId/settings': typeof AppWorkspaceWorkspaceIdSettingsRoute
+  '/workspace/$workspaceId': typeof AppWorkspaceWorkspaceIdIndexRoute
   '/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRoutesById {
@@ -113,7 +165,13 @@ export interface FileRoutesById {
   '/_app/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/_app/platform/settings': typeof AppPlatformSettingsRoute
   '/_app/platform/users': typeof AppPlatformUsersRoute
+  '/_app/workspace/$workspaceId': typeof AppWorkspaceWorkspaceIdRouteWithChildren
   '/_app/platform/': typeof AppPlatformIndexRoute
+  '/_app/workspace/$workspaceId/audit-log': typeof AppWorkspaceWorkspaceIdAuditLogRoute
+  '/_app/workspace/$workspaceId/members': typeof AppWorkspaceWorkspaceIdMembersRoute
+  '/_app/workspace/$workspaceId/roles': typeof AppWorkspaceWorkspaceIdRolesRoute
+  '/_app/workspace/$workspaceId/settings': typeof AppWorkspaceWorkspaceIdSettingsRoute
+  '/_app/workspace/$workspaceId/': typeof AppWorkspaceWorkspaceIdIndexRoute
   '/_app/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRouteTypes {
@@ -128,7 +186,13 @@ export interface FileRouteTypes {
     | '/platform/clients'
     | '/platform/settings'
     | '/platform/users'
+    | '/workspace/$workspaceId'
     | '/platform/'
+    | '/workspace/$workspaceId/audit-log'
+    | '/workspace/$workspaceId/members'
+    | '/workspace/$workspaceId/roles'
+    | '/workspace/$workspaceId/settings'
+    | '/workspace/$workspaceId/'
     | '/platform/clients/$slug/users'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -141,6 +205,11 @@ export interface FileRouteTypes {
     | '/platform/settings'
     | '/platform/users'
     | '/platform'
+    | '/workspace/$workspaceId/audit-log'
+    | '/workspace/$workspaceId/members'
+    | '/workspace/$workspaceId/roles'
+    | '/workspace/$workspaceId/settings'
+    | '/workspace/$workspaceId'
     | '/platform/clients/$slug/users'
   id:
     | '__root__'
@@ -153,7 +222,13 @@ export interface FileRouteTypes {
     | '/_app/platform/clients'
     | '/_app/platform/settings'
     | '/_app/platform/users'
+    | '/_app/workspace/$workspaceId'
     | '/_app/platform/'
+    | '/_app/workspace/$workspaceId/audit-log'
+    | '/_app/workspace/$workspaceId/members'
+    | '/_app/workspace/$workspaceId/roles'
+    | '/_app/workspace/$workspaceId/settings'
+    | '/_app/workspace/$workspaceId/'
     | '/_app/platform/clients/$slug/users'
   fileRoutesById: FileRoutesById
 }
@@ -216,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlatformIndexRouteImport
       parentRoute: typeof AppPlatformRoute
     }
+    '/_app/workspace/$workspaceId': {
+      id: '/_app/workspace/$workspaceId'
+      path: '/workspace/$workspaceId'
+      fullPath: '/workspace/$workspaceId'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/platform/users': {
       id: '/_app/platform/users'
       path: '/users'
@@ -236,6 +318,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/platform/clients'
       preLoaderRoute: typeof AppPlatformClientsRouteImport
       parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/workspace/$workspaceId/': {
+      id: '/_app/workspace/$workspaceId/'
+      path: '/'
+      fullPath: '/workspace/$workspaceId/'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdIndexRouteImport
+      parentRoute: typeof AppWorkspaceWorkspaceIdRoute
+    }
+    '/_app/workspace/$workspaceId/settings': {
+      id: '/_app/workspace/$workspaceId/settings'
+      path: '/settings'
+      fullPath: '/workspace/$workspaceId/settings'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdSettingsRouteImport
+      parentRoute: typeof AppWorkspaceWorkspaceIdRoute
+    }
+    '/_app/workspace/$workspaceId/roles': {
+      id: '/_app/workspace/$workspaceId/roles'
+      path: '/roles'
+      fullPath: '/workspace/$workspaceId/roles'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdRolesRouteImport
+      parentRoute: typeof AppWorkspaceWorkspaceIdRoute
+    }
+    '/_app/workspace/$workspaceId/members': {
+      id: '/_app/workspace/$workspaceId/members'
+      path: '/members'
+      fullPath: '/workspace/$workspaceId/members'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdMembersRouteImport
+      parentRoute: typeof AppWorkspaceWorkspaceIdRoute
+    }
+    '/_app/workspace/$workspaceId/audit-log': {
+      id: '/_app/workspace/$workspaceId/audit-log'
+      path: '/audit-log'
+      fullPath: '/workspace/$workspaceId/audit-log'
+      preLoaderRoute: typeof AppWorkspaceWorkspaceIdAuditLogRouteImport
+      parentRoute: typeof AppWorkspaceWorkspaceIdRoute
     }
     '/_app/platform/clients/$slug/users': {
       id: '/_app/platform/clients/$slug/users'
@@ -276,12 +393,36 @@ const AppPlatformRouteWithChildren = AppPlatformRoute._addFileChildren(
   AppPlatformRouteChildren,
 )
 
+interface AppWorkspaceWorkspaceIdRouteChildren {
+  AppWorkspaceWorkspaceIdAuditLogRoute: typeof AppWorkspaceWorkspaceIdAuditLogRoute
+  AppWorkspaceWorkspaceIdMembersRoute: typeof AppWorkspaceWorkspaceIdMembersRoute
+  AppWorkspaceWorkspaceIdRolesRoute: typeof AppWorkspaceWorkspaceIdRolesRoute
+  AppWorkspaceWorkspaceIdSettingsRoute: typeof AppWorkspaceWorkspaceIdSettingsRoute
+  AppWorkspaceWorkspaceIdIndexRoute: typeof AppWorkspaceWorkspaceIdIndexRoute
+}
+
+const AppWorkspaceWorkspaceIdRouteChildren: AppWorkspaceWorkspaceIdRouteChildren =
+  {
+    AppWorkspaceWorkspaceIdAuditLogRoute: AppWorkspaceWorkspaceIdAuditLogRoute,
+    AppWorkspaceWorkspaceIdMembersRoute: AppWorkspaceWorkspaceIdMembersRoute,
+    AppWorkspaceWorkspaceIdRolesRoute: AppWorkspaceWorkspaceIdRolesRoute,
+    AppWorkspaceWorkspaceIdSettingsRoute: AppWorkspaceWorkspaceIdSettingsRoute,
+    AppWorkspaceWorkspaceIdIndexRoute: AppWorkspaceWorkspaceIdIndexRoute,
+  }
+
+const AppWorkspaceWorkspaceIdRouteWithChildren =
+  AppWorkspaceWorkspaceIdRoute._addFileChildren(
+    AppWorkspaceWorkspaceIdRouteChildren,
+  )
+
 interface AppRouteChildren {
   AppPlatformRoute: typeof AppPlatformRouteWithChildren
+  AppWorkspaceWorkspaceIdRoute: typeof AppWorkspaceWorkspaceIdRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppPlatformRoute: AppPlatformRouteWithChildren,
+  AppWorkspaceWorkspaceIdRoute: AppWorkspaceWorkspaceIdRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
