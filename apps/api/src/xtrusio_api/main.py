@@ -22,6 +22,9 @@ from .routes import platform_settings as platform_settings_routes
 from .routes import signup as signup_routes
 from .routes import tenant_invites as tenant_invites_routes
 from .routes import tenants as tenants_routes
+from .routes import workspace_audit_log as workspace_audit_log_routes
+from .routes import workspace_role_grants as workspace_role_grants_routes
+from .routes import workspace_roles as workspace_roles_routes
 
 
 @asynccontextmanager
@@ -62,6 +65,9 @@ app.include_router(tenant_invites_routes.router)
 app.include_router(signup_routes.router)
 app.include_router(onboarding_routes.router)
 app.include_router(invite_acceptance_routes.router)
+app.include_router(workspace_roles_routes.router)
+app.include_router(workspace_role_grants_routes.router)
+app.include_router(workspace_audit_log_routes.router)
 
 
 @app.get("/health")

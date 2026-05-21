@@ -1,0 +1,361 @@
+"""Workspace-role grant/revoke service.
+
+Mirrors `services/platform_role_grants.py` shape, scoped to one workspace.
+Authorization gates (`workspace.members.read`/`workspace.members.manage`) are
+the caller's responsibility (route layer via `require_permission`). This
+service enforces:
+
+- privilege-escalation pre-check against the target role's perms (friendly
+  403 before the 0009 DB trigger fires; DB trigger already dispatches to
+  has_workspace_perm when workspace_id IS NOT NULL).
+- ≥1-active-owner floor: revoking the last workspace `owner` system-role
+  grant raises OwnerFloorError (no DB trigger covers this — service-only).
+- workspace-scope isolation: every read/write filters on workspace_id, so a
+  grant from another workspace cannot be created, listed, or revoked here.
+
+The caller owns the transaction (no commit here).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..core.audit import write_audit_event
+from ..core.pagination import encode_cursor
+
+
+class MembershipNotFoundError(LookupError):
+    """The (workspace_id, user_id) pair is not in tenant_memberships."""
+
+
+async def _require_workspace_membership(
+    db: AsyncSession, *, workspace_id: UUID, user_id: UUID
+) -> None:
+    """Raise MembershipNotFoundError unless (workspace_id, user_id) is in
+    tenant_memberships. Grants APIs use this to 404 callers who target a
+    non-member — a workspace-role grant for a non-member is meaningless."""
+    row = (
+        await db.execute(
+            text(
+                "SELECT 1 FROM tenant_memberships " "WHERE tenant_id = :t AND user_id = :u LIMIT 1"
+            ),
+            {"t": str(workspace_id), "u": str(user_id)},
+        )
+    ).first()
+    if row is None:
+        raise MembershipNotFoundError(f"user {user_id} not in workspace {workspace_id}")
+
+
+class RoleNotFoundError(LookupError):
+    """The role id doesn't exist or isn't a role of this workspace."""
+
+
+class RoleScopeMismatchError(Exception):
+    """Granting/revoking a role whose scope/workspace doesn't match the URL."""
+
+
+class GrantNotFoundError(LookupError):
+    """The user_roles grant id doesn't exist for this (workspace_id, user_id)."""
+
+
+class PrivilegeEscalationError(Exception):
+    """Actor lacks at least one permission contained in the target role."""
+
+    def __init__(self, missing_perm_key: str) -> None:
+        super().__init__(f"actor lacks permission: {missing_perm_key}")
+        self.missing_perm_key = missing_perm_key
+
+
+class OwnerFloorError(Exception):
+    """Revoking the proposed owner grant would leave the workspace with zero
+    owners. A workspace MUST retain at least one active owner grant."""
+
+
+async def _set_actor(db: AsyncSession, actor_id: UUID) -> None:
+    await db.execute(
+        text("SELECT set_config('app.actor_id', :a, true)"),
+        {"a": str(actor_id)},
+    )
+
+
+async def _load_role(
+    db: AsyncSession, *, workspace_id: UUID, role_id: UUID
+) -> dict[str, Any] | None:
+    row = (
+        (
+            await db.execute(
+                text(
+                    "SELECT id, scope, workspace_id, key, name, is_system "
+                    "FROM roles WHERE id = :id "
+                    "AND scope = 'workspace' AND workspace_id = :wid"
+                ),
+                {"id": str(role_id), "wid": str(workspace_id)},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    return dict(row) if row else None
+
+
+async def _find_missing_workspace_perm(
+    db: AsyncSession, *, actor_id: UUID, workspace_id: UUID, role_id: UUID
+) -> str | None:
+    """Mirror the 0009 trigger's workspace-scope branch. Return the first perm
+    in the target role the actor does NOT hold in this workspace, else None."""
+    row = (
+        await db.execute(
+            text(
+                "SELECT p.key FROM role_permissions rp "
+                "JOIN permissions p ON p.id = rp.permission_id "
+                "WHERE rp.role_id = :rid "
+                "AND NOT has_workspace_perm(:actor, :wid, p.key) "
+                "LIMIT 1"
+            ),
+            {"rid": str(role_id), "actor": str(actor_id), "wid": str(workspace_id)},
+        )
+    ).first()
+    return str(row.key) if row is not None else None
+
+
+async def _count_owner_grants(db: AsyncSession, *, workspace_id: UUID) -> int:
+    return int(
+        (
+            await db.execute(
+                text(
+                    "SELECT count(*) FROM user_roles ur "
+                    "JOIN roles r ON r.id = ur.role_id "
+                    "WHERE r.scope='workspace' AND r.workspace_id = :w "
+                    "AND r.key='owner' AND r.is_system "
+                    "AND ur.workspace_id = :w"
+                ),
+                {"w": str(workspace_id)},
+            )
+        ).scalar_one()
+    )
+
+
+async def grant_workspace_role(
+    db: AsyncSession,
+    *,
+    actor_id: UUID,
+    workspace_id: UUID,
+    target_user_id: UUID,
+    role_id: UUID,
+) -> dict[str, Any]:
+    """Grant role_id to target_user_id within workspace_id.
+
+    Pre-checks (in order):
+      1. target_user_id must be a tenant_memberships member of workspace_id
+         (else MembershipNotFoundError -> 404).
+      2. role_id must be a workspace-scope role belonging to this workspace
+         (else RoleNotFoundError -> 404).
+      3. actor must hold every perm in the target role under workspace_id
+         (else PrivilegeEscalationError -> 403; defense-in-depth by 0009).
+
+    Idempotent under serial access: pre-SELECT returns the existing grant if
+    present, otherwise INSERT. Concurrent identical grants from two callers
+    will lose one to the `user_roles` UNIQUE (auth_user_id, role_id,
+    workspace_id) constraint — workspace_id is NOT NULL for workspace grants,
+    so the NULLS-DISTINCT trap doesn't apply and the loser raises IntegrityError
+    cleanly; the user-visible effect is a retryable 5xx. Acceptable today
+    because `workspace.members.manage` is rare and concurrent identical grants
+    are essentially zero in practice; a future hardening could switch to
+    `INSERT ... ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING
+    RETURNING ...` with a fallback SELECT.
+    """
+    await _set_actor(db, actor_id)
+    await _require_workspace_membership(db, workspace_id=workspace_id, user_id=target_user_id)
+    role = await _load_role(db, workspace_id=workspace_id, role_id=role_id)
+    if role is None:
+        raise RoleNotFoundError(str(role_id))
+    missing = await _find_missing_workspace_perm(
+        db, actor_id=actor_id, workspace_id=workspace_id, role_id=role_id
+    )
+    if missing is not None:
+        raise PrivilegeEscalationError(missing)
+    existing = (
+        (
+            await db.execute(
+                text(
+                    "SELECT id, auth_user_id, role_id, workspace_id, granted_at, granted_by "
+                    "FROM user_roles WHERE auth_user_id = :u AND role_id = :r "
+                    "AND workspace_id = :w"
+                ),
+                {"u": str(target_user_id), "r": str(role_id), "w": str(workspace_id)},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if existing is not None:
+        row = existing
+    else:
+        row = (
+            (
+                await db.execute(
+                    text(
+                        "INSERT INTO user_roles "
+                        "(auth_user_id, role_id, workspace_id, granted_by) "
+                        "VALUES (:u, :r, :w, :g) "
+                        "RETURNING id, auth_user_id, role_id, workspace_id, "
+                        "granted_at, granted_by"
+                    ),
+                    {
+                        "u": str(target_user_id),
+                        "r": str(role_id),
+                        "w": str(workspace_id),
+                        "g": str(actor_id),
+                    },
+                )
+            )
+            .mappings()
+            .one()
+        )
+    out = dict(row)
+    await write_audit_event(
+        db,
+        actor_id=actor_id,
+        action="workspace_role.grant",
+        target_type="user_role",
+        target_id=UUID(str(out["id"])),
+        scope="workspace",
+        workspace_id=workspace_id,
+        after={
+            "auth_user_id": str(out["auth_user_id"]),
+            "role_id": str(out["role_id"]),
+            "role_key": role["key"],
+        },
+    )
+    return {**out, "role_key": role["key"]}
+
+
+async def revoke_workspace_role_grant(
+    db: AsyncSession,
+    *,
+    actor_id: UUID,
+    workspace_id: UUID,
+    user_id: UUID,
+    grant_id: UUID,
+) -> None:
+    """Revoke a workspace-scope grant. The lookup is pinned to
+    (grant_id, user_id, workspace_id) — passing a grant id from another
+    workspace or another user MUST 404 (scope isolation; not polish).
+
+    Pre-checks (in order):
+      1. grant exists with the given (id, auth_user_id, workspace_id) and is
+         workspace-scope (else GrantNotFoundError -> 404).
+      2. actor holds every perm in the role being revoked
+         (else PrivilegeEscalationError -> 403).
+      3. if the role is the workspace owner system role, revoking this grant
+         must leave at least one other active owner grant in this workspace
+         (else OwnerFloorError -> 409).
+    """
+    await _set_actor(db, actor_id)
+    grant = (
+        (
+            await db.execute(
+                text(
+                    "SELECT ur.id, ur.auth_user_id, ur.role_id, ur.workspace_id, "
+                    "r.scope, r.key, r.is_system "
+                    "FROM user_roles ur JOIN roles r ON r.id = ur.role_id "
+                    "WHERE ur.id = :id AND ur.auth_user_id = :u "
+                    "AND ur.workspace_id = :w"
+                ),
+                {"id": str(grant_id), "u": str(user_id), "w": str(workspace_id)},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if grant is None:
+        raise GrantNotFoundError(str(grant_id))
+    if grant["scope"] != "workspace":
+        raise RoleScopeMismatchError(str(grant_id))
+    missing = await _find_missing_workspace_perm(
+        db,
+        actor_id=actor_id,
+        workspace_id=workspace_id,
+        role_id=UUID(str(grant["role_id"])),
+    )
+    if missing is not None:
+        raise PrivilegeEscalationError(missing)
+    # ≥1-owner floor: only matters if this grant is the workspace owner system
+    # role. Counting BEFORE the delete and requiring count > 1 enforces the
+    # invariant under any race: a concurrent revoke could only further reduce
+    # the count, but every revoke goes through this same pre-check on the same
+    # row (no two txns can both pass when count=2, because the second one sees
+    # count=1 after the first commit; READ COMMITTED is sufficient because the
+    # actor must also hold workspace.members.manage which is owner-only).
+    if grant["is_system"] and grant["key"] == "owner":
+        owners = await _count_owner_grants(db, workspace_id=workspace_id)
+        if owners <= 1:
+            raise OwnerFloorError(str(grant_id))
+    await db.execute(
+        text(
+            "DELETE FROM user_roles WHERE id = :id " "AND auth_user_id = :u AND workspace_id = :w"
+        ),
+        {"id": str(grant_id), "u": str(user_id), "w": str(workspace_id)},
+    )
+    await write_audit_event(
+        db,
+        actor_id=actor_id,
+        action="workspace_role.revoke",
+        target_type="user_role",
+        target_id=grant_id,
+        scope="workspace",
+        workspace_id=workspace_id,
+        before={
+            "auth_user_id": str(grant["auth_user_id"]),
+            "role_id": str(grant["role_id"]),
+            "role_key": grant["key"],
+        },
+    )
+
+
+async def list_workspace_role_grants(
+    db: AsyncSession,
+    *,
+    workspace_id: UUID,
+    user_id: UUID,
+    cursor: tuple[datetime, UUID] | None = None,
+    limit: int = 50,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """List workspace-scope grants for one user in this workspace, paginated
+    by (granted_at DESC, id DESC)."""
+    base = (
+        "SELECT ur.id, ur.auth_user_id, ur.workspace_id, ur.role_id, "
+        "r.key AS role_key, ur.granted_at, ur.granted_by "
+        "FROM user_roles ur JOIN roles r ON r.id = ur.role_id "
+        "WHERE ur.auth_user_id = :u AND ur.workspace_id = :w "
+        "AND r.scope = 'workspace' AND r.workspace_id = :w "
+    )
+    params: dict[str, Any]
+    if cursor is not None:
+        ts, rid = cursor
+        params = {
+            "u": str(user_id),
+            "w": str(workspace_id),
+            "ts": ts,
+            "rid": str(rid),
+            "lim": limit + 1,
+        }
+        sql = base + (
+            "AND (ur.granted_at < :ts OR (ur.granted_at = :ts AND ur.id < :rid)) "
+            "ORDER BY ur.granted_at DESC, ur.id DESC LIMIT :lim"
+        )
+    else:
+        params = {"u": str(user_id), "w": str(workspace_id), "lim": limit + 1}
+        sql = base + "ORDER BY ur.granted_at DESC, ur.id DESC LIMIT :lim"
+    rows = [dict(r) for r in (await db.execute(text(sql), params)).mappings().all()]
+    next_cursor: str | None = None
+    if len(rows) > limit:
+        last = rows[limit - 1]
+        next_cursor = encode_cursor(last["granted_at"], UUID(str(last["id"])))
+        rows = rows[:limit]
+    return rows, next_cursor
