@@ -12,19 +12,42 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { SearchTrigger } from "@/components/search-trigger";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
-import { platformNav } from "@/lib/nav";
+import { platformNav, workspaceNav } from "@/lib/nav";
+import { findTenant, useMe } from "@/lib/me-adapter";
 
-function findLabel(pathname: string): string {
-  if (pathname === "/") return "Dashboard";
+function platformLabel(pathname: string): string {
+  if (pathname === "/platform") return "Platform";
   const item = platformNav.find((n) => n.to === pathname);
-  if (item) return item.label;
-  if (pathname === "/sign-in") return "Sign in";
-  return pathname.replace(/^\//, "");
+  return item?.label ?? pathname.replace(/^\/platform\/?/, "");
+}
+
+function workspaceLabel(pathname: string, workspaceId: string): string {
+  const suffix = pathname.replace(`/workspace/${workspaceId}`, "");
+  if (suffix === "" || suffix === "/") return "Overview";
+  const item = workspaceNav.find((n) => n.to === suffix);
+  return item?.label ?? suffix.replace(/^\//, "");
 }
 
 export function AppTopbar() {
   const { location } = useRouterState();
-  const label = findLabel(location.pathname);
+  const { me } = useMe();
+  const path = location.pathname;
+
+  let scopeLabel = "Xtrusio";
+  let pageLabel = path.replace(/^\//, "");
+
+  if (path === "/platform" || path.startsWith("/platform/")) {
+    scopeLabel = "Platform";
+    pageLabel = platformLabel(path);
+  } else {
+    const m = /^\/workspace\/([^/]+)/.exec(path);
+    if (m) {
+      const wid = m[1] ?? "";
+      const t = findTenant(me, wid);
+      scopeLabel = t?.name ?? "Workspace";
+      pageLabel = workspaceLabel(path, wid);
+    }
+  }
 
   return (
     <header className="bg-background sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
@@ -33,13 +56,13 @@ export function AppTopbar() {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/">Xtrusio</BreadcrumbLink>
+            <BreadcrumbLink href="/">{scopeLabel}</BreadcrumbLink>
           </BreadcrumbItem>
-          {location.pathname !== "/" && (
+          {pageLabel && pageLabel !== scopeLabel && (
             <>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{label}</BreadcrumbPage>
+                <BreadcrumbPage>{pageLabel}</BreadcrumbPage>
               </BreadcrumbItem>
             </>
           )}
