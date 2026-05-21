@@ -7,9 +7,35 @@ Read top to bottom before doing anything.
 
 ---
 
-## ⏩ RESUME HERE — 2026-05-21
+## ⏩ RESUME HERE — 2026-05-21 (P6b paused mid-flight on `rbac-p6b-frontend-shells`)
 
-### Done & merged (PRs #1–#6, #8, #10, #11, #13 MERGED; `main` @ `485cdc9`; single Alembic head `0009`; 0 open PRs)
+### Active work — `rbac-p6b-frontend-shells` (pushed to origin @ `c2ffc73`, NOT merged)
+
+P6b is **partially built** and paused. Resume by `git checkout rbac-p6b-frontend-shells`.
+
+**Plan:** `docs/superpowers/plans/2026-05-21-rbac-p6b-frontend-shells.md` (4 slices + wrap, 21 tasks).
+
+**Done on the branch (14 commits ahead of `main`):**
+- **Slice A — pinned `/me` contract + adapter** (6 commits, A1–A6): `packages/api-types/src/me.ts` pins `MeResponse` with `platform_permissions: string[]` + `tenants[].permissions: string[]` additively; `apps/web` depends on `@xtrusio/api-types`; `route-resolver.ts` re-exports `MeResponse` as `type`; `apps/web/src/lib/me-adapter.ts` (`hasPlatformPerm`/`hasWorkspacePerm`/`findTenant`/`getDefaultLandingPath`/`useMe`) + tests; `apps/web/src/lib/last-workspace.ts` with `PLATFORM_SENTINEL` + tests. 18 new tests pass.
+- **Slice B — route resolver + AuthGuard glue** (2 commits, B1–B2): `route-resolver.test.ts` + `route-resolver.ts` rewritten to know `/platform/*` and `/workspace/$id/*`; AuthGuard fixtures updated. 15 affected tests pass.
+- **Slice C — two physically-separate shells (PARTIAL — 6 of 7 commits, C1–C6):**
+  - C1 `_app.tsx` reduced to pass-through; 5 existing platform pages moved under `_app.platform.*` via `git mv`; old `app-sidebar.tsx` deleted
+  - C2 `nav.ts` extended with `required_perm` + `workspaceNav`; `PlatformSidebar` (TDD, gates via `hasPlatformPerm`)
+  - C3 `WorkspaceSidebar` (TDD, gates via `hasWorkspacePerm`)
+  - C4 `_app.platform.tsx` layout route mounted, platform pages render correctly
+  - C5 `_app.workspace.$workspaceId.tsx` shell + 5 placeholder children (index/members/roles/audit-log/settings) — each renders real `PageHeader` + `EmptyState`, no "Coming soon" copy
+  - C6 `AppTopbar` reflects both shells (platform vs workspace scope label)
+
+**Remaining on the branch (still to do — pick up here):**
+- **Slice C7** — update `apps/web/src/components/app-shell-structure.test.tsx` for the dual-shell world + patch `apps/web/src/components/tenant-users-page.test.tsx:41` hand-rolled tenant fixture to include `permissions: []` (the last `MeResponse` hold-out flagged by the Slice B agent). Run full `pnpm --filter @xtrusio/web test --run` + `pnpm --filter @xtrusio/web typecheck`, confirm both green. One commit.
+- **Slice D — workspace switcher (3 tasks)** — D1 failing test for `WorkspaceSwitcher` (dropdown listing `me.tenants[]` + Platform admin entry gated on `me.platform`, persists last-selected to localStorage via `last-workspace.ts`); D2 implement; D3 wire `readLastWorkspace()` into `resolveRoute()` for path `/`. Plan at lines 1730–2028.
+- **Slice Wrap — controller-run `make check` (lint + ruff format + mypy --strict + pytest + turbo lint/typecheck/test) + Opus code-quality review + `gh pr create` + `gh pr merge` + HANDOFF update to mark P6b merged.** Plan at lines 2029–2097.
+
+**Open questions answered in the plan but worth re-confirming on resume:**
+1. `_app.workspace.$wid/index` empty-state vs 404 for users lacking `workspace.members.read` — plan defaults to rendering the empty state. Keep that unless the controller decides otherwise on resume.
+2. `UserMenu` still has a local `Me` type + duplicate `useQuery(["me"])` — out of scope for P6b, deferred to P6c.
+
+### Done & merged (PRs #1–#6, #8, #10, #11, #13, #14 MERGED; `main` @ `6b24146`; single Alembic head `0009`; 1 open branch (`rbac-p6b-frontend-shells`); 0 open PRs)
 
 | Phase | What |
 |---|---|
