@@ -1,13 +1,6 @@
-export type MeResponse = {
-  user_id: string;
-  email: string;
-  platform: { role: "super_admin" | "admin" | "editor"; is_active: boolean } | null;
-  tenants: { id: string; slug: string; name: string; role: "owner" | "admin" | "editor" | "read_only" }[];
-  pending_invite:
-    | { kind: "platform" | "tenant"; id: string; tenant_id: string | null; role: string }
-    | null;
-};
+import type { MeResponse } from "@xtrusio/api-types";
 
+export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
 export type RouteDecision = { kind: "render" } | { kind: "redirect"; to: string };
 
@@ -35,7 +28,5 @@ export function resolveRoute(state: AuthState, path: string): RouteDecision {
   }
 
   // Unprovisioned.
-  return path === "/onboarding"
-    ? { kind: "render" }
-    : { kind: "redirect", to: "/onboarding" };
+  return path === "/onboarding" ? { kind: "render" } : { kind: "redirect", to: "/onboarding" };
 }

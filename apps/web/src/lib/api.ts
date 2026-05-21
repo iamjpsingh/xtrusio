@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import type { MeResponse } from "./route-resolver";
+import type { MeResponse } from "@xtrusio/api-types";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL;
 if (!baseUrl) {
