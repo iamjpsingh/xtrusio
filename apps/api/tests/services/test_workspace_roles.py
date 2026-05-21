@@ -16,6 +16,7 @@ from xtrusio_api.services.workspace_roles import (
     RoleKeyTakenError,
     RoleNotFoundError,
     ScopeMismatchError,
+    SystemRoleImmutableError,
     UnknownPermissionError,
     create_workspace_role,
     get_workspace_role,
@@ -192,3 +193,143 @@ async def test_get_workspace_role_404_cross_workspace(
     # But succeeds under tid_a.
     found = await get_workspace_role(db_session, workspace_id=tid_a, role_id=role_id)
     assert UUID(str(found["id"])) == role_id
+
+
+async def test_update_workspace_role_happy(db_session: AsyncSession) -> None:
+    tid, uid = await _seed_owner_workspace()
+    from xtrusio_api.services.workspace_roles import update_workspace_role
+
+    r = await create_workspace_role(
+        db_session,
+        actor_id=uid,
+        workspace_id=tid,
+        key=f"test_wsr_{uuid4().hex[:8]}",
+        name="Before",
+        description="desc-before",
+        permission_keys=["workspace.members.read"],
+    )
+    await db_session.commit()
+    role_id = UUID(str(r["id"]))
+    updated = await update_workspace_role(
+        db_session,
+        actor_id=uid,
+        workspace_id=tid,
+        role_id=role_id,
+        name="After",
+        description="desc-after",
+        permission_keys=["workspace.members.read", "workspace.members.invite"],
+    )
+    await db_session.commit()
+    assert updated["name"] == "After"
+    assert updated["description"] == "desc-after"
+    assert list(updated["permission_keys"]) == [
+        "workspace.members.invite",
+        "workspace.members.read",
+    ]
+
+
+async def test_update_system_role_raises(db_session: AsyncSession) -> None:
+    tid, uid = await _seed_owner_workspace()
+    from xtrusio_api.services.workspace_roles import update_workspace_role
+
+    owner_role_id = UUID(
+        str(
+            (
+                await db_session.execute(
+                    text(
+                        "SELECT id FROM roles WHERE scope='workspace' "
+                        "AND workspace_id = :w AND key='owner' AND is_system"
+                    ),
+                    {"w": str(tid)},
+                )
+            ).scalar_one()
+        )
+    )
+    with pytest.raises(SystemRoleImmutableError):
+        await update_workspace_role(
+            db_session,
+            actor_id=uid,
+            workspace_id=tid,
+            role_id=owner_role_id,
+            name="renamed-owner",
+            description=None,
+            permission_keys=None,
+        )
+    await db_session.rollback()
+
+
+async def test_delete_workspace_role_happy(db_session: AsyncSession) -> None:
+    tid, uid = await _seed_owner_workspace()
+    from xtrusio_api.services.workspace_roles import delete_workspace_role
+
+    r = await create_workspace_role(
+        db_session,
+        actor_id=uid,
+        workspace_id=tid,
+        key=f"test_wsr_{uuid4().hex[:8]}",
+        name="Doomed",
+        description=None,
+        permission_keys=[],
+    )
+    await db_session.commit()
+    role_id = UUID(str(r["id"]))
+    await delete_workspace_role(db_session, actor_id=uid, workspace_id=tid, role_id=role_id)
+    await db_session.commit()
+    with pytest.raises(RoleNotFoundError):
+        await get_workspace_role(db_session, workspace_id=tid, role_id=role_id)
+
+
+async def test_delete_system_role_raises(db_session: AsyncSession) -> None:
+    tid, uid = await _seed_owner_workspace()
+    from xtrusio_api.services.workspace_roles import delete_workspace_role
+
+    editor_role_id = UUID(
+        str(
+            (
+                await db_session.execute(
+                    text(
+                        "SELECT id FROM roles WHERE scope='workspace' "
+                        "AND workspace_id = :w AND key='editor' AND is_system"
+                    ),
+                    {"w": str(tid)},
+                )
+            ).scalar_one()
+        )
+    )
+    with pytest.raises(SystemRoleImmutableError):
+        await delete_workspace_role(
+            db_session, actor_id=uid, workspace_id=tid, role_id=editor_role_id
+        )
+    await db_session.rollback()
+
+
+async def test_update_role_from_other_workspace_404s(
+    db_session: AsyncSession,
+) -> None:
+    """Cross-workspace scope isolation — update must 404 if role lives elsewhere."""
+    tid_a, uid_a = await _seed_owner_workspace()
+    tid_b, _ = await _seed_owner_workspace()
+    from xtrusio_api.services.workspace_roles import update_workspace_role
+
+    r = await create_workspace_role(
+        db_session,
+        actor_id=uid_a,
+        workspace_id=tid_a,
+        key=f"test_wsr_{uuid4().hex[:8]}",
+        name="In A",
+        description=None,
+        permission_keys=[],
+    )
+    await db_session.commit()
+    role_id = UUID(str(r["id"]))
+    with pytest.raises(RoleNotFoundError):
+        await update_workspace_role(
+            db_session,
+            actor_id=uid_a,
+            workspace_id=tid_b,
+            role_id=role_id,
+            name="hijack",
+            description=None,
+            permission_keys=None,
+        )
+    await db_session.rollback()
