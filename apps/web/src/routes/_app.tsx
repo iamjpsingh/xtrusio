@@ -1,22 +1,14 @@
+// apps/web/src/routes/_app.tsx
+// Pathless layout for every authed page. The two physically-separate shells
+// live in `_app.platform.tsx` and `_app.workspace.$workspaceId.tsx`. This
+// file intentionally renders only an Outlet so each shell owns its own
+// SidebarProvider tree.
 import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
-import { AppTopbar } from "@/components/app-topbar";
-
-function AppShell() {
-  return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <AppTopbar />
-        <main className="flex-1 p-6">
-          <Outlet />
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
-  );
-}
 
 export const Route = createFileRoute("/_app")({
-  component: AppShell,
+  component: AppPassthrough,
 });
+
+function AppPassthrough() {
+  return <Outlet />;
+}

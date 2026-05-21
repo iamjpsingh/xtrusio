@@ -25,7 +25,7 @@ type Tenant = {
   created_by: string;
 };
 
-export const Route = createFileRoute("/_app/clients")({
+export const Route = createFileRoute("/_app/platform/clients")({
   component: ClientsRoute,
 });
 
