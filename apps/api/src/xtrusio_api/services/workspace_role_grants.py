@@ -158,10 +158,16 @@ async def grant_workspace_role(
       3. actor must hold every perm in the target role under workspace_id
          (else PrivilegeEscalationError -> 403; defense-in-depth by 0009).
 
-    Idempotent: re-issuing an identical grant returns the existing row.
-    `user_roles` UNIQUE (auth_user_id, role_id, workspace_id) lets ON CONFLICT
-    work cleanly here because workspace_id is NOT NULL for workspace grants —
-    no NULLS-DISTINCT trap. We still pre-SELECT to return the existing row.
+    Idempotent under serial access: pre-SELECT returns the existing grant if
+    present, otherwise INSERT. Concurrent identical grants from two callers
+    will lose one to the `user_roles` UNIQUE (auth_user_id, role_id,
+    workspace_id) constraint — workspace_id is NOT NULL for workspace grants,
+    so the NULLS-DISTINCT trap doesn't apply and the loser raises IntegrityError
+    cleanly; the user-visible effect is a retryable 5xx. Acceptable today
+    because `workspace.members.manage` is rare and concurrent identical grants
+    are essentially zero in practice; a future hardening could switch to
+    `INSERT ... ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING
+    RETURNING ...` with a fallback SELECT.
     """
     await _set_actor(db, actor_id)
     await _require_workspace_membership(db, workspace_id=workspace_id, user_id=target_user_id)

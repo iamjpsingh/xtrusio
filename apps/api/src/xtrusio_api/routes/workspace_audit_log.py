@@ -21,7 +21,9 @@ from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT
 from ..core.permissions import require_permission
 from ..schemas.audit_log import AuditEventOut, AuditEventsPage
-from ..services.platform_audit_log import _decode_audit_cursor  # shared encoder
+from ..services.platform_audit_log import (
+    _decode_audit_cursor,  # intentional reuse: shared cursor wire format across platform + workspace audit-log endpoints
+)
 from ..services.workspace_audit_log import list_workspace_audit_events
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspace-audit-log"])
