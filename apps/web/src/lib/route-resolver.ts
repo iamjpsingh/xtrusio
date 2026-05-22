@@ -1,6 +1,7 @@
 // apps/web/src/lib/route-resolver.ts
 import type { MeResponse } from "@xtrusio/api-types";
 import { getDefaultLandingPath } from "./me-adapter";
+import { PLATFORM_SENTINEL, readLastWorkspace } from "./last-workspace";
 
 export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
@@ -54,6 +55,16 @@ export function resolveRoute(state: AuthState, path: string): RouteDecision {
     return belongs ? { kind: "render" } : { kind: "redirect", to: getDefaultLandingPath(me) };
   }
 
-  // Anything else (notably "/") → default landing.
+  // Anything else (notably "/") → honour last-selected scope if it's still valid,
+  // otherwise fall back to the default landing.
+  if (path === "/") {
+    const last = readLastWorkspace();
+    if (last === PLATFORM_SENTINEL && me.platform) {
+      return { kind: "redirect", to: "/platform" };
+    }
+    if (last && last !== PLATFORM_SENTINEL && me.tenants.some((t) => t.id === last)) {
+      return { kind: "redirect", to: `/workspace/${last}` };
+    }
+  }
   return { kind: "redirect", to: getDefaultLandingPath(me) };
 }

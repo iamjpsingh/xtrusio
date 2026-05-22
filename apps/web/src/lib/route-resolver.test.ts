@@ -110,4 +110,22 @@ describe("resolveRoute", () => {
       kind: "render",
     });
   });
+
+  it("honours last-selected workspace from localStorage on /", () => {
+    window.localStorage.setItem("xtrusio.last-workspace", "t1");
+    expect(resolveRoute({ session: "s", me: tenant }, "/")).toEqual({
+      kind: "redirect",
+      to: "/workspace/t1",
+    });
+    window.localStorage.clear();
+  });
+
+  it("falls back to default landing when last-selected workspace is unknown", () => {
+    window.localStorage.setItem("xtrusio.last-workspace", "missing");
+    expect(resolveRoute({ session: "s", me: tenant }, "/")).toEqual({
+      kind: "redirect",
+      to: "/workspace/t1",
+    });
+    window.localStorage.clear();
+  });
 });
