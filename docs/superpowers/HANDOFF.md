@@ -7,6 +7,62 @@ Read top to bottom before doing anything.
 
 ---
 
+## 🌙 SLEEPING — RESUME TOMORROW (written 2026-05-23, 03:30 local)
+
+The user signed off mid-session. **Start tomorrow by reading this section before doing anything else.**
+
+### Where we left off
+
+- **Slice 1 (Roles CRUD) MERGED** — PR #18 squashed to `main`. HANDOFF updated. Branch `rbac-p6c-slice-1-roles-crud` still on origin (can be deleted after Slice 2 ships).
+- **Slice 2 (Audit log) IN FLIGHT** — a background Opus subagent was running on branch `rbac-p6c-slice-2-audit-log` in the main checkout (`/Users/jpsingh/Developer/Project/xtrusio`). When the user signed off, **all 13 expected files were written** (modifications + new), and the subagent was running the vitest gate. It had NOT committed yet.
+- **Slice 3 (Members + nav + cleanup) NOT STARTED** — first dispatch (in a sibling worktree `/Users/jpsingh/Developer/Project/xtrusio-slice-3`) was blocked by harness path scope. Branch `rbac-p6c-slice-3-members-cleanup` exists locally but has zero work on it beyond Slice 2's base.
+
+### Tomorrow's first checks (in this order)
+
+1. `cd /Users/jpsingh/Developer/Project/xtrusio && git branch --show-current` — should be `rbac-p6c-slice-2-audit-log` (the subagent's working branch). If it's a different branch the subagent's writes are at risk; investigate before doing anything else.
+2. `git status` — if Slice 2's files are still uncommitted (the list below should match), the subagent died or stalled. If they're all committed in one or two new commits ahead of Slice 1, Slice 2 finished — proceed to step 5.
+3. Check for any leftover vitest / node / pytest processes from the subagent and kill if hung: `ps aux | grep -iE 'vitest|pytest|node.*xtrusio' | grep -v grep`.
+4. **If Slice 2 is uncommitted:** re-dispatch an Opus subagent to finish — same prompt as before, with the addendum "all 13 files are already written on disk; just run the gate and commit. Don't rewrite files unless something is broken." OR you can simply `git add` + commit yourself after running `pnpm --filter @xtrusio/web exec vitest run src/components/audit/ src/components/platform-audit-log-page.test.tsx src/components/workspace-audit-log-page.test.tsx` + `pnpm --filter @xtrusio/web typecheck`.
+5. **Once Slice 2 is committed:** push branch, open PR, squash-merge per the convention. PR body file location: `docs/superpowers/PR-rbac-p6c-slice-2-body.md` (does not exist yet — write one mirroring `docs/superpowers/PR-rbac-p6c-slice-1-body.md`'s shape from PR #18).
+6. **Update HANDOFF** to mark Slice 2 merged (move it into the Done & merged table) and pivot NEXT to Slice 3.
+7. **Then Slice 3:** rebase `rbac-p6c-slice-3-members-cleanup` onto the new main (`git fetch && git rebase origin/main`), then dispatch ONE Opus subagent for the whole slice per `docs/superpowers/plans/2026-05-22-rbac-p6c-slice-3-members-and-cleanup.md`. **Do NOT use a sibling worktree** — the harness blocks subagent access outside the main checkout. Work in `/Users/jpsingh/Developer/Project/xtrusio` directly (you'll need Slice 2 merged first so this checkout is on a clean branch).
+
+### Slice 2 working-tree inventory (what should be uncommitted on `rbac-p6c-slice-2-audit-log` if the subagent died)
+
+Modified:
+- `apps/api/src/xtrusio_api/schemas/audit_log.py` (+`actor_email: str | None`)
+- `apps/api/src/xtrusio_api/services/platform_audit_log.py` (+LEFT JOIN auth.users)
+- `apps/api/src/xtrusio_api/services/workspace_audit_log.py` (+LEFT JOIN auth.users)
+- `apps/api/tests/services/test_platform_audit_log.py` (+3 actor_email tests)
+- `apps/api/tests/services/test_workspace_audit_log.py` (+3 actor_email tests)
+- `apps/web/src/lib/api.ts` (+2 audit fetchers)
+- `apps/web/src/routeTree.gen.ts` (auto-regenerated)
+- `apps/web/src/routes/_app.workspace.$workspaceId.audit-log.tsx` (full rewrite — replaces placeholder)
+- `packages/api-types/src/index.ts` (+1 re-export line)
+
+New:
+- `apps/web/src/components/audit/{load-more-button,audit-table,audit-detail-drawer}.tsx` + matching `.test.tsx` files
+- `apps/web/src/components/{platform,workspace}-audit-log-page.tsx` + matching `.test.tsx` files
+- `apps/web/src/routes/_app.platform.audit-log.tsx`
+- `packages/api-types/src/audit-log.ts`
+
+Also on disk in `/Users/jpsingh/Developer/Project/xtrusio` (NOT yet committed anywhere):
+- `docs/superpowers/PR-rbac-p6c-slice-1-body.md` — already used to set PR #18's body; can be committed to `main` separately whenever.
+- `.claude/settings.json` modified (some harness-level setting change; review before committing).
+- `.claude/ralph-loop.local.md` untracked (Ralph loop state file from Slice 1's loop run — should be gitignored; deletable).
+
+### Worktrees in play
+
+- `/Users/jpsingh/Developer/Project/xtrusio` — main checkout, currently on `rbac-p6c-slice-2-audit-log`.
+- `/Users/jpsingh/Developer/Project/xtrusio-slice-1` — secondary worktree on `main` (used to write this HANDOFF). Keep or `git worktree remove ../xtrusio-slice-1` if no longer needed.
+- `/Users/jpsingh/Developer/Project/xtrusio-slice-3` — secondary worktree on `rbac-p6c-slice-3-members-cleanup` (empty branch). The harness blocks subagent access here — **do not try to dispatch Slice 3 into this worktree again**. Either delete the worktree (`git worktree remove ../xtrusio-slice-3 && git branch -D rbac-p6c-slice-3-members-cleanup`) and recreate the branch later in the main checkout, OR leave the worktree but ignore it for subagent dispatches.
+
+### What changed in CLAUDE.md mid-session that needs to stay
+
+The execution-cadence section was rewritten to "ONE Opus subagent for the whole slice + 'ship it'" — the 4-chunk approach used in Slice 1 was overkill. Slice 2 + 3 follow the new pattern (one subagent each, no chunks, no per-task tracking, no spec-reviewer, no code-quality-reviewer subagents except for high-risk slices). This commit pulls that CLAUDE.md update onto `main` so it's authoritative for tomorrow.
+
+---
+
 ## ⏩ RESUME HERE — 2026-05-23
 
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18 MERGED; `main` @ `bdfc39b`; single Alembic head `0009`; 0 open PRs)
