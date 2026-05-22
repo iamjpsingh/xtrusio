@@ -1,5 +1,16 @@
 import { supabase } from "./supabase";
-import type { MeResponse } from "@xtrusio/api-types";
+import type {
+  MeResponse,
+  PermissionsCatalog,
+  PlatformRoleIn,
+  PlatformRoleOut,
+  PlatformRolePatch,
+  PlatformRolesPage,
+  WorkspaceRoleIn,
+  WorkspaceRoleOut,
+  WorkspaceRolePatch,
+  WorkspaceRolesPage,
+} from "@xtrusio/api-types";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL;
 if (!baseUrl) {
@@ -156,4 +167,87 @@ export async function postAcceptInvite(): Promise<{
   tenant_id: string | null;
 }> {
   return apiFetch("/api/invites/accept", { method: "POST" });
+}
+
+// ----- Permissions catalog (P6c Slice 1A) -----
+
+export async function fetchPermissionsCatalog(): Promise<PermissionsCatalog> {
+  return apiFetch<PermissionsCatalog>("/api/permissions/catalog");
+}
+
+// ----- Platform role CRUD (consumes P4 routes) -----
+
+export async function fetchPlatformRoles(
+  cursor?: string,
+): Promise<PlatformRolesPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<PlatformRolesPage>(`/api/platform/roles${qs}`);
+}
+
+export async function postPlatformRole(
+  body: PlatformRoleIn,
+): Promise<PlatformRoleOut> {
+  return apiFetch<PlatformRoleOut>("/api/platform/roles", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function patchPlatformRole(
+  id: string,
+  body: PlatformRolePatch,
+): Promise<PlatformRoleOut> {
+  return apiFetch<PlatformRoleOut>(`/api/platform/roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function deletePlatformRole(id: string): Promise<void> {
+  await apiFetch(`/api/platform/roles/${id}`, { method: "DELETE" });
+}
+
+// ----- Workspace role CRUD (consumes P5 routes) -----
+
+export async function fetchWorkspaceRoles(
+  workspaceId: string,
+  cursor?: string,
+): Promise<WorkspaceRolesPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<WorkspaceRolesPage>(
+    `/api/workspaces/${workspaceId}/roles${qs}`,
+  );
+}
+
+export async function postWorkspaceRole(
+  workspaceId: string,
+  body: WorkspaceRoleIn,
+): Promise<WorkspaceRoleOut> {
+  return apiFetch<WorkspaceRoleOut>(`/api/workspaces/${workspaceId}/roles`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function patchWorkspaceRole(
+  workspaceId: string,
+  id: string,
+  body: WorkspaceRolePatch,
+): Promise<WorkspaceRoleOut> {
+  return apiFetch<WorkspaceRoleOut>(
+    `/api/workspaces/${workspaceId}/roles/${id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function deleteWorkspaceRole(
+  workspaceId: string,
+  id: string,
+): Promise<void> {
+  await apiFetch(`/api/workspaces/${workspaceId}/roles/${id}`, {
+    method: "DELETE",
+  });
 }
