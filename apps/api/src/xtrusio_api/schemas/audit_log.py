@@ -20,6 +20,7 @@ class AuditEventOut(BaseModel):
 
     id: int
     actor_auth_user_id: UUID | None
+    actor_email: str | None
     action: str
     target_type: str
     target_id: str

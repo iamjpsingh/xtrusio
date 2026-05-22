@@ -159,3 +159,87 @@ async def test_encode_decode_round_trip() -> None:
     ts2, rid2 = _decode_audit_cursor(token)
     assert ts2 == ts
     assert rid2 == 42
+
+
+async def test_actor_email_populated_when_actor_exists(
+    db_session: AsyncSession,
+) -> None:
+    actor_id = uuid4()
+    await _seed_actor(db_session, actor_id, "with-email")
+    await write_audit_event(
+        db_session,
+        actor_id=actor_id,
+        action="test_p6c_s2_actor_email.create",
+        target_type="role",
+        target_id=uuid4(),
+        scope="platform",
+        after={"key": "dispatcher"},
+    )
+    await db_session.commit()
+    rows, _ = await list_platform_audit_events(db_session, limit=200)
+    matching = [r for r in rows if r["actor_auth_user_id"] == actor_id]
+    assert matching, "seeded audit row not returned"
+    email = matching[0]["actor_email"]
+    assert email is not None
+    assert email.startswith("audit-svc-with-email-")
+    assert email.endswith("@example.com")
+
+
+async def test_actor_email_none_when_actor_auth_user_id_is_null(
+    db_session: AsyncSession,
+) -> None:
+    # Seed an audit row with actor_id=None to simulate a system-emitted event.
+    sentinel_target = uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO rbac_audit_log "
+            "(actor_auth_user_id, action, target_type, target_id, scope, before, after, created_at) "
+            "VALUES (NULL, 'test_p6c_s2_system_event', 'role', :tid, 'platform', NULL, '{}'::jsonb, NOW())"
+        ),
+        {"tid": str(sentinel_target)},
+    )
+    await db_session.commit()
+    rows, _ = await list_platform_audit_events(db_session, limit=200)
+    matching = [
+        r
+        for r in rows
+        if r["actor_auth_user_id"] is None and r["target_id"] == str(sentinel_target)
+    ]
+    assert matching, "system-emitted audit row not returned"
+    assert matching[0]["actor_email"] is None
+    # Cleanup so other tests don't see this synthetic row.
+    await db_session.execute(
+        text("DELETE FROM rbac_audit_log WHERE target_id = :tid"),
+        {"tid": str(sentinel_target)},
+    )
+    await db_session.commit()
+
+
+async def test_actor_email_none_when_actor_hard_deleted(
+    db_session: AsyncSession,
+) -> None:
+    actor_id = uuid4()
+    sentinel_target = uuid4()
+    await _seed_actor(db_session, actor_id, "to-be-deleted")
+    await write_audit_event(
+        db_session,
+        actor_id=actor_id,
+        action="test_p6c_s2_orphan.create",
+        target_type="role",
+        target_id=sentinel_target,
+        scope="platform",
+        after={"key": "ephemeral"},
+    )
+    await db_session.commit()
+    # Hard-delete the auth.users row. `rbac_audit_log.actor_auth_user_id`
+    # FK is ON DELETE SET NULL (see migration 0006), so the audit row keeps
+    # its identifying fields but loses the actor pointer — exactly the state
+    # we'd see if an account were purged manually. The audit-log endpoint
+    # must still surface this row with `actor_email = None`.
+    await db_session.execute(text("DELETE FROM auth.users WHERE id = :id"), {"id": str(actor_id)})
+    await db_session.commit()
+    rows, _ = await list_platform_audit_events(db_session, limit=200)
+    orphaned = [r for r in rows if r["target_id"] == str(sentinel_target)]
+    assert orphaned, "orphaned audit row missing"
+    assert orphaned[0]["actor_auth_user_id"] is None
+    assert orphaned[0]["actor_email"] is None
