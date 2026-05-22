@@ -4,7 +4,7 @@ These rules override default agent behaviour for this repository. Apply them on 
 
 ## Model selection (non-negotiable)
 
-- **Opus 4.7 (high effort)** for every implementer subagent, every reviewer subagent (spec compliance, code quality, security), every plan/spec/migration writer, every fix subagent. The controller itself runs on Opus.
+- **Opus 4.7 with MAX effort** for every implementer subagent, every reviewer subagent (spec compliance, code quality, security), every plan/spec/migration writer, every fix subagent. The controller itself runs on Opus max. "High" is NOT acceptable — the user has explicitly locked it at max (`/model` set to "Opus 4.7 (1M context) with max effort").
 - **Sonnet** ONLY for the `Explore` agent or pure read-only file-content lookups ("where is X defined", surface-mapping). If the subagent forms an opinion about code, that is NOT reading — use Opus.
 - **Haiku is forbidden.** Do not use Haiku for "small" tasks, "quick" reviews, or to save tokens. The user pays for Opus and expects it everywhere except pure exploration.
 
