@@ -6,7 +6,8 @@ import { queryClientDefaults } from "../lib/query-client";
 const navigateMock = vi.fn();
 let mockPathname = "/";
 vi.mock("@tanstack/react-router", () => ({
-  useRouter: () => ({ state: { location: { pathname: mockPathname } } }),
+  useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
+    select({ location: { pathname: mockPathname } }),
   useNavigate: () => navigateMock,
 }));
 
