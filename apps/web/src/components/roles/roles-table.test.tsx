@@ -52,11 +52,13 @@ describe("<RolesTable />", () => {
     );
     expect(screen.getByText(/system/i)).toBeInTheDocument();
     // The super_admin row's action buttons should be hidden.
-    const superRow = screen.getByText("super_admin").closest("tr")!;
+    const superRow = screen.getByText("super_admin").closest("tr");
+    if (!superRow) throw new Error("super_admin row not found");
     expect(superRow.querySelector('[aria-label^="Edit"]')).toBeNull();
     expect(superRow.querySelector('[aria-label^="Delete"]')).toBeNull();
     // The dispatcher row's buttons should be present.
-    const dispatcherRow = screen.getByText("dispatcher").closest("tr")!;
+    const dispatcherRow = screen.getByText("dispatcher").closest("tr");
+    if (!dispatcherRow) throw new Error("dispatcher row not found");
     expect(dispatcherRow.querySelector('[aria-label^="Edit"]')).not.toBeNull();
   });
 

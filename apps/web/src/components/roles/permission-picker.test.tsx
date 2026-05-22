@@ -112,7 +112,8 @@ describe("<PermissionPicker />", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.arrayContaining(["platform.users.read", "platform.users.invite"]),
     );
-    const arg = onChange.mock.calls[0]![0] as string[];
-    expect(arg).not.toContain("platform.roles.manage");
+    const firstCall = onChange.mock.calls[0];
+    if (!firstCall) throw new Error("onChange not called");
+    expect(firstCall[0]).not.toContain("platform.roles.manage");
   });
 });

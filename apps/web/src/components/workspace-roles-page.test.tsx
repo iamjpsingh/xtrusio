@@ -13,20 +13,20 @@ import { WorkspaceRolesPage } from "./workspace-roles-page";
 
 const WID = "wid-1";
 
+const OWNER_TENANT = {
+  id: WID,
+  slug: "acme",
+  name: "Acme",
+  role: "owner" as const,
+  permissions: ["workspace.roles.manage"],
+};
+
 const ME_OWNER: MeResponse = {
   user_id: "u-1",
   email: "owner@acme.com",
   platform: null,
   platform_permissions: [],
-  tenants: [
-    {
-      id: WID,
-      slug: "acme",
-      name: "Acme",
-      role: "owner",
-      permissions: ["workspace.roles.manage"],
-    },
-  ],
+  tenants: [OWNER_TENANT],
   pending_invite: null,
 };
 
@@ -34,7 +34,7 @@ const ME_NOT_OWNER: MeResponse = {
   ...ME_OWNER,
   tenants: [
     {
-      ...ME_OWNER.tenants[0]!,
+      ...OWNER_TENANT,
       role: "editor",
       permissions: ["workspace.members.read"],
     },
