@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type {
+  AuditEventsPage,
   MeResponse,
   PermissionsCatalog,
   PlatformRoleIn,
@@ -250,4 +251,23 @@ export async function deleteWorkspaceRole(
   await apiFetch(`/api/workspaces/${workspaceId}/roles/${id}`, {
     method: "DELETE",
   });
+}
+
+// ----- Audit-log (P6c Slice 2) -----
+
+export async function fetchPlatformAuditLog(
+  cursor?: string,
+): Promise<AuditEventsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<AuditEventsPage>(`/api/platform/audit-log${qs}`);
+}
+
+export async function fetchWorkspaceAuditLog(
+  workspaceId: string,
+  cursor?: string,
+): Promise<AuditEventsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<AuditEventsPage>(
+    `/api/workspaces/${workspaceId}/audit-log${qs}`,
+  );
 }
