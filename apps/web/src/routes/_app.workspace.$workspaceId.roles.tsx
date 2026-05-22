@@ -1,21 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Shield } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+import { createFileRoute, useParams } from "@tanstack/react-router";
+import { WorkspaceRolesPage } from "@/components/workspace-roles-page";
 
 export const Route = createFileRoute("/_app/workspace/$workspaceId/roles")({
-  component: RolesPage,
+  component: RouteComponent,
 });
 
-function RolesPage() {
-  return (
-    <>
-      <PageHeader title="Roles" description="Custom workspace roles and their permission sets." />
-      <EmptyState
-        icon={Shield}
-        title="Roles management ships in P6c"
-        description="Backed by /api/workspaces/$wid/roles."
-      />
-    </>
-  );
+function RouteComponent() {
+  const { workspaceId } = useParams({
+    from: "/_app/workspace/$workspaceId/roles",
+  });
+  return <WorkspaceRolesPage workspaceId={workspaceId} />;
 }
