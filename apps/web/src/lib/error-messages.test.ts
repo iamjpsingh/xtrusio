@@ -12,3 +12,60 @@ describe("errorMessage", () => {
     expect(errorMessage("not_a_real_code")).toMatch(/something/i);
   });
 });
+
+describe("errorMessage — P6c Slice 1 codes", () => {
+  it("maps role_key_taken", () => {
+    expect(errorMessage("role_key_taken")).toBe(
+      "A role with this key already exists.",
+    );
+  });
+  it("maps system_role_immutable", () => {
+    expect(errorMessage("system_role_immutable")).toBe(
+      "System roles can't be modified.",
+    );
+  });
+  it("maps role_scope_mismatch", () => {
+    expect(errorMessage("role_scope_mismatch")).toBe(
+      "That role belongs to a different scope.",
+    );
+  });
+  it("maps scope_mismatch", () => {
+    expect(errorMessage("scope_mismatch")).toBe(
+      "That permission belongs to a different scope.",
+    );
+  });
+  it("maps an unknown_permission key with the offending key surfaced", () => {
+    expect(errorMessage("unknown_permission: workspace.unknown")).toBe(
+      "Unknown permission: workspace.unknown. Refresh the page.",
+    );
+  });
+  it("maps single_super_admin_invariant", () => {
+    expect(errorMessage("single_super_admin_invariant")).toBe(
+      "You can't remove the last super admin.",
+    );
+  });
+  it("maps owner_floor", () => {
+    expect(errorMessage("owner_floor")).toBe(
+      "You can't revoke the last workspace owner.",
+    );
+  });
+  it("maps a privilege_escalation key with the offending perm surfaced", () => {
+    expect(errorMessage("privilege_escalation: platform.roles.manage")).toBe(
+      "You can't grant a role with a permission you lack: platform.roles.manage.",
+    );
+  });
+  it("maps membership_not_found", () => {
+    expect(errorMessage("membership_not_found")).toBe(
+      "That user isn't a member of this workspace.",
+    );
+  });
+  it("maps platform_user_not_found", () => {
+    expect(errorMessage("platform_user_not_found")).toBe(
+      "That user isn't a platform user.",
+    );
+  });
+  it("falls through to the existing default for unknown codes", () => {
+    const result = errorMessage("definitely-not-a-real-code");
+    expect(result).toBeTruthy();
+  });
+});

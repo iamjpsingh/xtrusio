@@ -12,8 +12,25 @@ const MESSAGES: Record<string, string> = {
   invite_already_accepted: "This invitation has already been accepted.",
   email_mismatch: "This invitation was for a different email address.",
   already_provisioned: "Your account is already set up.",
+  role_key_taken: "A role with this key already exists.",
+  system_role_immutable: "System roles can't be modified.",
+  role_scope_mismatch: "That role belongs to a different scope.",
+  scope_mismatch: "That permission belongs to a different scope.",
+  single_super_admin_invariant: "You can't remove the last super admin.",
+  owner_floor: "You can't revoke the last workspace owner.",
+  membership_not_found: "That user isn't a member of this workspace.",
+  platform_user_not_found: "That user isn't a platform user.",
+  "invalid cursor": "Couldn't load more events. Try refreshing.",
 };
 
 export function errorMessage(code: string): string {
+  if (code.startsWith("unknown_permission: ")) {
+    const key = code.slice("unknown_permission: ".length);
+    return `Unknown permission: ${key}. Refresh the page.`;
+  }
+  if (code.startsWith("privilege_escalation: ")) {
+    const perm = code.slice("privilege_escalation: ".length);
+    return `You can't grant a role with a permission you lack: ${perm}.`;
+  }
   return MESSAGES[code] ?? "Something went wrong. Please try again.";
 }
