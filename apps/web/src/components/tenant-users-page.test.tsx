@@ -38,7 +38,16 @@ describe("TenantUsersPage", () => {
       user_id: "u",
       email: "x@x.com",
       platform: null,
-      tenants: [{ id: "t-1", slug: "acme", name: "Acme", role: "owner" }],
+      platform_permissions: [],
+      tenants: [
+        {
+          id: "t-1",
+          slug: "acme",
+          name: "Acme",
+          role: "owner",
+          permissions: ["workspace.members.read", "workspace.members.manage"],
+        },
+      ],
       pending_invite: null,
     });
     vi.mocked(fetchTenantInvites).mockResolvedValue({ items: [] });

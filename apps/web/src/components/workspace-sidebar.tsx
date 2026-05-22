@@ -10,32 +10,42 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { platformNav } from "@/lib/nav";
+import { workspaceNav } from "@/lib/nav";
+import { findTenant, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
-export function AppSidebar() {
+export function WorkspaceSidebar({ workspaceId }: { workspaceId: string }) {
   const { location } = useRouterState();
+  const { me } = useMe();
+  const tenant = findTenant(me, workspaceId);
+  const items = workspaceNav.filter((n) => hasWorkspacePerm(me, workspaceId, n.required_perm));
+  const base = `/workspace/${workspaceId}`;
 
   return (
     <Sidebar variant="inset">
       <SidebarHeader>
         <div className="flex items-center gap-2 px-2 py-1.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background text-xs font-bold">
-            X
+            {(tenant?.name ?? "?").slice(0, 1).toUpperCase()}
           </div>
-          <span className="text-sm font-semibold tracking-tight">Xtrusio</span>
+          <span className="text-sm font-semibold tracking-tight truncate">
+            {tenant?.name ?? "Workspace"}
+          </span>
         </div>
+        <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {platformNav.map((item) => {
+              {items.map((item) => {
+                const fullPath = `${base}${item.to}`;
+                const active = location.pathname === fullPath;
                 const Icon = item.icon;
-                const active = location.pathname === item.to;
                 return (
-                  <SidebarMenuItem key={item.to}>
+                  <SidebarMenuItem key={fullPath}>
                     <SidebarMenuButton asChild isActive={active}>
-                      <Link to={item.to}>
+                      <Link to={fullPath}>
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
                       </Link>

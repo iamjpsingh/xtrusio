@@ -1,17 +1,21 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
-import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
-import { ThemeProvider } from "@/components/theme-provider";
-import { AuthProvider } from "@/lib/auth";
 import { routeTree } from "@/routeTree.gen";
+import type { MeResponse } from "@xtrusio/api-types";
+import { queryClient } from "@/lib/query-client";
+
+const holders = {
+  session: null as { access_token: string; user: { id: string; email: string } } | null,
+  me: null as MeResponse | null,
+};
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
-      getSession: vi.fn().mockResolvedValue({
-        data: { session: { access_token: "test", user: { id: "u1", email: "test@example.com" } } },
-      }),
+      getSession: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve({ data: { session: holders.session } })),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
       signInWithPassword: vi.fn(),
       signOut: vi.fn(),
@@ -20,12 +24,13 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  fetchMe: vi.fn().mockResolvedValue({
-    user_id: "u1",
+  fetchMe: vi.fn().mockImplementation(() => Promise.resolve(holders.me)),
+  fetchSignupStatus: vi.fn().mockResolvedValue({ signups_enabled: false }),
+  apiFetch: vi.fn().mockResolvedValue({
+    id: "u1",
     email: "test@example.com",
-    platform: { role: "super_admin", is_active: true },
-    tenants: [],
-    pending_invite: null,
+    role: "super_admin",
+    is_active: true,
   }),
 }));
 
@@ -34,23 +39,33 @@ function renderAt(initial: string) {
     routeTree,
     history: createMemoryHistory({ initialEntries: [initial] }),
   });
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={qc}>
-      <ThemeProvider attribute="class" defaultTheme="system">
-        <AuthProvider>
-          <RouterProvider router={router} />
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>,
-  );
+  render(<RouterProvider router={router} />);
 }
 
 describe("/ Dashboard route", () => {
-  it("renders the welcome empty state when authenticated", async () => {
+  beforeEach(() => {
+    holders.session = null;
+    holders.me = null;
+    queryClient.clear();
+  });
+
+  it("redirects an authenticated super_admin from / to /platform and shows the welcome empty state", async () => {
+    holders.session = { access_token: "test", user: { id: "u1", email: "test@example.com" } };
+    holders.me = {
+      user_id: "u1",
+      email: "test@example.com",
+      platform: { role: "super_admin", is_active: true },
+      platform_permissions: [
+        "platform.users.read",
+        "platform.clients.read",
+        "platform.settings.read",
+      ],
+      tenants: [],
+      pending_invite: null,
+    };
     renderAt("/");
     expect(
-      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 3000 }),
+      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
 });

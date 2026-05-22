@@ -35,6 +35,9 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.169.2
         version: 1.169.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@xtrusio/api-types':
+        specifier: workspace:*
+        version: link:../../packages/api-types
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

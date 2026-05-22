@@ -1,41 +1,70 @@
-export type MeResponse = {
-  user_id: string;
-  email: string;
-  platform: { role: "super_admin" | "admin" | "editor"; is_active: boolean } | null;
-  tenants: { id: string; slug: string; name: string; role: "owner" | "admin" | "editor" | "read_only" }[];
-  pending_invite:
-    | { kind: "platform" | "tenant"; id: string; tenant_id: string | null; role: string }
-    | null;
-};
+// apps/web/src/lib/route-resolver.ts
+import type { MeResponse } from "@xtrusio/api-types";
+import { getDefaultLandingPath } from "./me-adapter";
+import { PLATFORM_SENTINEL, readLastWorkspace } from "./last-workspace";
 
+export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
 export type RouteDecision = { kind: "render" } | { kind: "redirect"; to: string };
 
-const PLATFORM_ONLY = new Set(["/settings", "/users"]);
 const PUBLIC = new Set(["/sign-in", "/sign-up"]);
+const UNGATED_AUTHED = new Set(["/onboarding", "/accept-invite"]);
+
+function isPlatformPath(path: string): boolean {
+  return path === "/platform" || path.startsWith("/platform/");
+}
+
+function workspaceIdFromPath(path: string): string | null {
+  // Matches /workspace/<id> and /workspace/<id>/...
+  const m = /^\/workspace\/([^/]+)(?:\/.*)?$/.exec(path);
+  return m ? (m[1] ?? null) : null;
+}
 
 export function resolveRoute(state: AuthState, path: string): RouteDecision {
   if (!state.session) {
     return PUBLIC.has(path) ? { kind: "render" } : { kind: "redirect", to: "/sign-in" };
   }
-  if (!state.me) return { kind: "render" }; // spinner is rendered by the caller while /me loads
+  if (!state.me) return { kind: "render" }; // spinner rendered by caller while /me loads
 
-  const { platform, tenants, pending_invite } = state.me;
+  const me = state.me;
 
-  if (pending_invite) {
+  // Pending invite takes precedence over every authed path.
+  if (me.pending_invite) {
     return path === "/accept-invite"
       ? { kind: "render" }
       : { kind: "redirect", to: "/accept-invite" };
   }
 
-  if (platform) return { kind: "render" };
-
-  if (tenants.length > 0) {
-    return PLATFORM_ONLY.has(path) ? { kind: "redirect", to: "/" } : { kind: "render" };
+  // Ungated authed pages (onboarding, accept-invite when no pending invite).
+  if (UNGATED_AUTHED.has(path)) {
+    if (path === "/onboarding" && (me.platform || me.tenants.length > 0)) {
+      return { kind: "redirect", to: getDefaultLandingPath(me) };
+    }
+    return { kind: "render" };
   }
 
-  // Unprovisioned.
-  return path === "/onboarding"
-    ? { kind: "render" }
-    : { kind: "redirect", to: "/onboarding" };
+  // Platform shell — only when user has a platform context.
+  if (isPlatformPath(path)) {
+    return me.platform ? { kind: "render" } : { kind: "redirect", to: getDefaultLandingPath(me) };
+  }
+
+  // Workspace shell — only when the workspace id matches one of the user's tenants.
+  const wid = workspaceIdFromPath(path);
+  if (wid !== null) {
+    const belongs = me.tenants.some((t) => t.id === wid);
+    return belongs ? { kind: "render" } : { kind: "redirect", to: getDefaultLandingPath(me) };
+  }
+
+  // Anything else (notably "/") → honour last-selected scope if it's still valid,
+  // otherwise fall back to the default landing.
+  if (path === "/") {
+    const last = readLastWorkspace();
+    if (last === PLATFORM_SENTINEL && me.platform) {
+      return { kind: "redirect", to: "/platform" };
+    }
+    if (last && last !== PLATFORM_SENTINEL && me.tenants.some((t) => t.id === last)) {
+      return { kind: "redirect", to: `/workspace/${last}` };
+    }
+  }
+  return { kind: "redirect", to: getDefaultLandingPath(me) };
 }

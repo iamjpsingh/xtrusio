@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, test, vi } from "vitest";
 import { queryClientDefaults } from "../lib/query-client";
 
 const navigateMock = vi.fn();
+let mockPathname = "/";
 vi.mock("@tanstack/react-router", () => ({
-  useRouter: () => ({ state: { location: { pathname: "/" } } }),
+  useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
+    select({ location: { pathname: mockPathname } }),
   useNavigate: () => navigateMock,
 }));
 
@@ -48,11 +50,13 @@ describe("AuthGuard", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders children when user is super_admin on /", async () => {
+  it("renders children when user is super_admin on /platform", async () => {
+    mockPathname = "/platform";
     vi.mocked(fetchMe).mockResolvedValue({
       user_id: "u",
       email: "x@x.com",
       platform: { role: "super_admin", is_active: true },
+      platform_permissions: ["platform.users.read"],
       tenants: [],
       pending_invite: null,
     });
@@ -62,10 +66,12 @@ describe("AuthGuard", () => {
   });
 
   it("redirects unprovisioned user to /onboarding", async () => {
+    mockPathname = "/platform";
     vi.mocked(fetchMe).mockResolvedValue({
       user_id: "u",
       email: "x@x.com",
       platform: null,
+      platform_permissions: [],
       tenants: [],
       pending_invite: null,
     });
