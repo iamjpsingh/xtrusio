@@ -3,14 +3,21 @@ import type {
   AuditEventsPage,
   MeResponse,
   PermissionsCatalog,
+  PlatformRoleGrantOut,
+  PlatformRoleGrantsPage,
   PlatformRoleIn,
   PlatformRoleOut,
   PlatformRolePatch,
   PlatformRolesPage,
+  PlatformUsersPage,
+  WorkspaceMembersPage,
+  WorkspaceRoleGrantOut,
+  WorkspaceRoleGrantsPage,
   WorkspaceRoleIn,
   WorkspaceRoleOut,
   WorkspaceRolePatch,
   WorkspaceRolesPage,
+  WorkspaceSettingsOut,
 } from "@xtrusio/api-types";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -254,4 +261,95 @@ export async function fetchWorkspaceAuditLog(
 ): Promise<AuditEventsPage> {
   const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return apiFetch<AuditEventsPage>(`/api/workspaces/${workspaceId}/audit-log${qs}`);
+}
+
+// ----- Platform users list (P6d) -----
+
+export async function fetchPlatformUsers(cursor: string | null): Promise<PlatformUsersPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<PlatformUsersPage>(`/api/platform/users${qs}`);
+}
+
+// ----- Workspace members list (P6d) -----
+
+export async function fetchWorkspaceMembers(
+  workspaceId: string,
+  cursor: string | null,
+): Promise<WorkspaceMembersPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<WorkspaceMembersPage>(`/api/workspaces/${workspaceId}/members${qs}`);
+}
+
+// ----- Workspace settings (P6d) -----
+
+export async function fetchWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettingsOut> {
+  return apiFetch<WorkspaceSettingsOut>(`/api/workspaces/${workspaceId}/settings`);
+}
+
+export async function updateWorkspaceSettings(
+  workspaceId: string,
+  body: { name: string },
+): Promise<WorkspaceSettingsOut> {
+  return apiFetch<WorkspaceSettingsOut>(`/api/workspaces/${workspaceId}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+// ----- Platform role grants (P4) -----
+
+export async function fetchPlatformRoleGrants(
+  userId: string,
+  cursor?: string,
+): Promise<PlatformRoleGrantsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<PlatformRoleGrantsPage>(`/api/platform/users/${userId}/roles${qs}`);
+}
+
+export async function postPlatformRoleGrant(
+  userId: string,
+  roleId: string,
+): Promise<PlatformRoleGrantOut> {
+  return apiFetch<PlatformRoleGrantOut>(`/api/platform/users/${userId}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ role_id: roleId }),
+  });
+}
+
+export async function deletePlatformRoleGrant(userId: string, grantId: string): Promise<void> {
+  await apiFetch(`/api/platform/users/${userId}/roles/${grantId}`, { method: "DELETE" });
+}
+
+// ----- Workspace role grants (P5) -----
+
+export async function fetchWorkspaceRoleGrants(
+  workspaceId: string,
+  userId: string,
+  cursor?: string,
+): Promise<WorkspaceRoleGrantsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<WorkspaceRoleGrantsPage>(
+    `/api/workspaces/${workspaceId}/members/${userId}/roles${qs}`,
+  );
+}
+
+export async function postWorkspaceRoleGrant(
+  workspaceId: string,
+  userId: string,
+  roleId: string,
+): Promise<WorkspaceRoleGrantOut> {
+  return apiFetch<WorkspaceRoleGrantOut>(`/api/workspaces/${workspaceId}/members/${userId}/roles`, {
+    method: "POST",
+    body: JSON.stringify({ role_id: roleId }),
+  });
+}
+
+export async function deleteWorkspaceRoleGrant(
+  workspaceId: string,
+  userId: string,
+  grantId: string,
+): Promise<void> {
+  await apiFetch(`/api/workspaces/${workspaceId}/members/${userId}/roles/${grantId}`, {
+    method: "DELETE",
+  });
 }

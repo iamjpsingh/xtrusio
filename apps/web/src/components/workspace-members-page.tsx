@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Info } from "lucide-react";
 import type { MeResponse } from "@xtrusio/api-types";
 import type { TenantInvite } from "@/lib/api";
 import { deleteTenantInvite, errorCode, fetchTenantInvites, postTenantInvite } from "@/lib/api";
@@ -24,8 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/page-header";
 import { Forbidden } from "@/components/forbidden";
+import { WorkspaceMembersListPage } from "@/components/workspace-members-list-page";
 
 type InviteRole = "admin" | "editor" | "read_only";
 
@@ -137,21 +138,11 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
     <div className="space-y-6">
       <PageHeader
         title={`${tenant?.name ?? "Workspace"} — Members`}
-        description="People with access to this workspace. Invite, list pending invites, and revoke them."
+        description="People with access to this workspace. Invite new members, list pending invites, and manage existing members' roles."
         action={
           canInvite ? <InviteDialog workspaceId={workspaceId} canPickAdmin={canPickAdmin} /> : null
         }
       />
-      <section className="rounded-md border bg-muted/30 p-4 text-sm">
-        <div className="flex items-start gap-3">
-          <Info className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden />
-          <p className="text-muted-foreground">
-            Member listing ships in P6d. For now you can invite people and revoke pending invites;
-            the full member list will appear here once the backend{" "}
-            <code>GET /api/workspaces/{`{wid}`}/members</code> endpoint lands.
-          </p>
-        </div>
-      </section>
       <section>
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">Invitations</h2>
         {invites && invites.items.length > 0 ? (
@@ -183,6 +174,8 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
           <p className="text-sm text-muted-foreground">No invitations yet.</p>
         )}
       </section>
+      <Separator />
+      <WorkspaceMembersListPage workspaceId={workspaceId} />
     </div>
   );
 }
