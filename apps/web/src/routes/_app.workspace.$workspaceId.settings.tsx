@@ -17,7 +17,7 @@ function WorkspaceSettingsPage() {
       <EmptyState
         icon={Settings}
         title="Settings ship in P6c"
-        description="Backed by /api/workspaces/$wid/settings."
+        description="Workspace-scoped settings ship in P6d."
       />
     </>
   );
