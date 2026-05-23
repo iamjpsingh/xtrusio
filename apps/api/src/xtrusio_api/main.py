@@ -20,12 +20,15 @@ from .routes import platform_invites as platform_invites_routes
 from .routes import platform_role_grants as platform_role_grants_routes
 from .routes import platform_roles as platform_roles_routes
 from .routes import platform_settings as platform_settings_routes
+from .routes import platform_users as platform_users_routes
 from .routes import signup as signup_routes
 from .routes import tenant_invites as tenant_invites_routes
 from .routes import tenants as tenants_routes
 from .routes import workspace_audit_log as workspace_audit_log_routes
+from .routes import workspace_members as workspace_members_routes
 from .routes import workspace_role_grants as workspace_role_grants_routes
 from .routes import workspace_roles as workspace_roles_routes
+from .routes import workspace_settings as workspace_settings_routes
 
 
 @asynccontextmanager
@@ -61,6 +64,11 @@ app.include_router(platform_settings_routes.router)
 app.include_router(platform_invites_routes.router)
 app.include_router(platform_roles_routes.router)
 app.include_router(platform_role_grants_routes.router)
+# Note: platform_users_routes registers GET /api/platform/users (empty path
+# under the same prefix as platform_role_grants_routes). Static sub-paths
+# (e.g. /invites) and parameterised ones (/{user_id}/roles) belong to other
+# routers — they coexist because the paths are distinct.
+app.include_router(platform_users_routes.router)
 app.include_router(platform_audit_log_routes.router)
 app.include_router(permissions_routes.router)
 app.include_router(tenant_invites_routes.router)
@@ -68,7 +76,12 @@ app.include_router(signup_routes.router)
 app.include_router(onboarding_routes.router)
 app.include_router(invite_acceptance_routes.router)
 app.include_router(workspace_roles_routes.router)
+# Note: workspace_members_routes is registered BEFORE workspace_role_grants_routes
+# so the include order stays predictable (both share the prefix
+# /api/workspaces/{workspace_id}/members and declare distinct sub-paths).
+app.include_router(workspace_members_routes.router)
 app.include_router(workspace_role_grants_routes.router)
+app.include_router(workspace_settings_routes.router)
 app.include_router(workspace_audit_log_routes.router)
 
 
