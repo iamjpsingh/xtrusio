@@ -1,15 +1,12 @@
-import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import {
-  deleteTenantInvite,
-  errorCode,
-  fetchTenantInvites,
-  postTenantInvite,
-  type TenantInvite,
-} from "@/lib/api";
+import { Info } from "lucide-react";
+import type { MeResponse } from "@xtrusio/api-types";
+import type { TenantInvite } from "@/lib/api";
+import { deleteTenantInvite, errorCode, fetchTenantInvites, postTenantInvite } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
-import { hasWorkspacePerm, useMe } from "@/lib/me-adapter";
+import { qk } from "@/lib/query-keys";
+import { findTenant, getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,29 +25,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
+import { Forbidden } from "@/components/forbidden";
 
-type TenantRole = "admin" | "editor" | "read_only";
+type InviteRole = "admin" | "editor" | "read_only";
 
-function InviteTenantDialog({
-  tenantId,
-  inviterRole,
+function InviteDialog({
+  workspaceId,
+  canPickAdmin,
 }: {
-  tenantId: string;
-  inviterRole: "owner" | "admin";
+  workspaceId: string;
+  canPickAdmin: boolean;
 }) {
   const qc = useQueryClient();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<TenantRole>(inviterRole === "owner" ? "admin" : "editor");
+  const [role, setRole] = useState<InviteRole>(canPickAdmin ? "admin" : "editor");
   const [open, setOpen] = useState(false);
-  const allowed: TenantRole[] =
-    inviterRole === "owner" ? ["admin", "editor", "read_only"] : ["editor", "read_only"];
+  const allowed: InviteRole[] = canPickAdmin
+    ? ["admin", "editor", "read_only"]
+    : ["editor", "read_only"];
   const m = useMutation({
-    mutationFn: () => postTenantInvite(tenantId, email, role),
+    mutationFn: () => postTenantInvite(workspaceId, email, role),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["tenant-invites", tenantId] });
+      await qc.invalidateQueries({
+        queryKey: qk.workspaceInvites(workspaceId),
+      });
       setOpen(false);
       setEmail("");
-      setRole(inviterRole === "owner" ? "admin" : "editor");
+      setRole(canPickAdmin ? "admin" : "editor");
     },
   });
   return (
@@ -81,7 +82,7 @@ function InviteTenantDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as TenantRole)}>
+            <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
               <SelectTrigger id="role">
                 <SelectValue />
               </SelectTrigger>
@@ -106,36 +107,51 @@ function InviteTenantDialog({
   );
 }
 
-export function TenantUsersPage() {
-  const { slug } = useParams({ strict: false }) as { slug: string };
-  const qc = useQueryClient();
+export function WorkspaceMembersPage({ workspaceId }: { workspaceId: string }) {
   const { me } = useMe();
-  const myTenant = me?.tenants.find((t) => t.slug === slug);
-  const tenantId = myTenant?.id ?? "";
+  if (!hasWorkspacePerm(me, workspaceId, "workspace.members.read")) {
+    return <Forbidden landingPath={getDefaultLandingPath(me)} />;
+  }
+  return <Body me={me} workspaceId={workspaceId} />;
+}
+
+function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string }) {
+  const qc = useQueryClient();
+  const tenant = findTenant(me, workspaceId);
+  const canInvite = hasWorkspacePerm(me, workspaceId, "workspace.members.invite");
+  // "owner" is the workspace governance role; only owner may invite an admin.
+  // This mirrors the legacy invite contract used by tenant-users-page.
+  const canPickAdmin = tenant?.role === "owner";
+
   const { data: invites } = useQuery({
-    queryKey: ["tenant-invites", tenantId],
-    queryFn: () => fetchTenantInvites(tenantId),
-    enabled: !!myTenant,
+    queryKey: qk.workspaceInvites(workspaceId),
+    queryFn: () => fetchTenantInvites(workspaceId),
   });
+
   const revoke = useMutation({
-    mutationFn: (id: string) => deleteTenantInvite(tenantId, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenant-invites", tenantId] }),
+    mutationFn: (id: string) => deleteTenantInvite(workspaceId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.workspaceInvites(workspaceId) }),
   });
-  if (!myTenant) return null;
-  const canInvite = hasWorkspacePerm(me, myTenant.id, "workspace.members.invite");
-  // "owner" is the workspace governance role; only owner may pick the
-  // "admin" invite role. The legacy invite contract still scopes role-picker
-  // options by inviter role, separate from the outer authorization gate.
-  const inviterRole: "owner" | "admin" = myTenant.role === "owner" ? "owner" : "admin";
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`${myTenant.name} — Users`}
-        description="Manage who has access to this workspace."
+        title={`${tenant?.name ?? "Workspace"} — Members`}
+        description="People with access to this workspace. Invite, list pending invites, and revoke them."
         action={
-          canInvite ? <InviteTenantDialog tenantId={myTenant.id} inviterRole={inviterRole} /> : null
+          canInvite ? <InviteDialog workspaceId={workspaceId} canPickAdmin={canPickAdmin} /> : null
         }
       />
+      <section className="rounded-md border bg-muted/30 p-4 text-sm">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 h-4 w-4 text-muted-foreground" aria-hidden />
+          <p className="text-muted-foreground">
+            Member listing ships in P6d. For now you can invite people and revoke pending invites;
+            the full member list will appear here once the backend{" "}
+            <code>GET /api/workspaces/{`{wid}`}/members</code> endpoint lands.
+          </p>
+        </div>
+      </section>
       <section>
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">Invitations</h2>
         {invites && invites.items.length > 0 ? (

@@ -46,4 +46,28 @@ describe("PlatformSidebar", () => {
     });
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
+
+  it("hides Roles when platform.roles.manage is missing", () => {
+    renderSidebar({ platform_permissions: ["platform.users.read"] });
+    expect(screen.queryByText("Roles")).toBeNull();
+  });
+
+  it("renders Roles when platform.roles.manage is granted", () => {
+    renderSidebar({
+      platform_permissions: ["platform.users.read", "platform.roles.manage"],
+    });
+    expect(screen.getByText("Roles")).toBeInTheDocument();
+  });
+
+  it("hides Audit log when platform.audit.read is missing", () => {
+    renderSidebar({ platform_permissions: ["platform.users.read"] });
+    expect(screen.queryByText("Audit log")).toBeNull();
+  });
+
+  it("renders Audit log when platform.audit.read is granted", () => {
+    renderSidebar({
+      platform_permissions: ["platform.users.read", "platform.audit.read"],
+    });
+    expect(screen.getByText("Audit log")).toBeInTheDocument();
+  });
 });
