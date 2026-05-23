@@ -21,6 +21,7 @@ import { Route as AppPlatformUsersRouteImport } from './routes/_app.platform.use
 import { Route as AppPlatformSettingsRouteImport } from './routes/_app.platform.settings'
 import { Route as AppPlatformRolesRouteImport } from './routes/_app.platform.roles'
 import { Route as AppPlatformClientsRouteImport } from './routes/_app.platform.clients'
+import { Route as AppPlatformAuditLogRouteImport } from './routes/_app.platform.audit-log'
 import { Route as AppWorkspaceWorkspaceIdIndexRouteImport } from './routes/_app.workspace.$workspaceId.index'
 import { Route as AppWorkspaceWorkspaceIdSettingsRouteImport } from './routes/_app.workspace.$workspaceId.settings'
 import { Route as AppWorkspaceWorkspaceIdRolesRouteImport } from './routes/_app.workspace.$workspaceId.roles'
@@ -87,6 +88,11 @@ const AppPlatformClientsRoute = AppPlatformClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => AppPlatformRoute,
 } as any)
+const AppPlatformAuditLogRoute = AppPlatformAuditLogRouteImport.update({
+  id: '/audit-log',
+  path: '/audit-log',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
 const AppWorkspaceWorkspaceIdIndexRoute =
   AppWorkspaceWorkspaceIdIndexRouteImport.update({
     id: '/',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/platform': typeof AppPlatformRouteWithChildren
+  '/platform/audit-log': typeof AppPlatformAuditLogRoute
   '/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/platform/roles': typeof AppPlatformRolesRoute
   '/platform/settings': typeof AppPlatformSettingsRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/platform/audit-log': typeof AppPlatformAuditLogRoute
   '/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/platform/roles': typeof AppPlatformRolesRoute
   '/platform/settings': typeof AppPlatformSettingsRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
   '/_app/platform': typeof AppPlatformRouteWithChildren
+  '/_app/platform/audit-log': typeof AppPlatformAuditLogRoute
   '/_app/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/_app/platform/roles': typeof AppPlatformRolesRoute
   '/_app/platform/settings': typeof AppPlatformSettingsRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/platform'
+    | '/platform/audit-log'
     | '/platform/clients'
     | '/platform/roles'
     | '/platform/settings'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/platform/audit-log'
     | '/platform/clients'
     | '/platform/roles'
     | '/platform/settings'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/_app/platform'
+    | '/_app/platform/audit-log'
     | '/_app/platform/clients'
     | '/_app/platform/roles'
     | '/_app/platform/settings'
@@ -338,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlatformClientsRouteImport
       parentRoute: typeof AppPlatformRoute
     }
+    '/_app/platform/audit-log': {
+      id: '/_app/platform/audit-log'
+      path: '/audit-log'
+      fullPath: '/platform/audit-log'
+      preLoaderRoute: typeof AppPlatformAuditLogRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
     '/_app/workspace/$workspaceId/': {
       id: '/_app/workspace/$workspaceId/'
       path: '/'
@@ -395,6 +414,7 @@ const AppPlatformClientsRouteWithChildren =
   AppPlatformClientsRoute._addFileChildren(AppPlatformClientsRouteChildren)
 
 interface AppPlatformRouteChildren {
+  AppPlatformAuditLogRoute: typeof AppPlatformAuditLogRoute
   AppPlatformClientsRoute: typeof AppPlatformClientsRouteWithChildren
   AppPlatformRolesRoute: typeof AppPlatformRolesRoute
   AppPlatformSettingsRoute: typeof AppPlatformSettingsRoute
@@ -403,6 +423,7 @@ interface AppPlatformRouteChildren {
 }
 
 const AppPlatformRouteChildren: AppPlatformRouteChildren = {
+  AppPlatformAuditLogRoute: AppPlatformAuditLogRoute,
   AppPlatformClientsRoute: AppPlatformClientsRouteWithChildren,
   AppPlatformRolesRoute: AppPlatformRolesRoute,
   AppPlatformSettingsRoute: AppPlatformSettingsRoute,

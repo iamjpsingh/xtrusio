@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type {
+  AuditEventsPage,
   MeResponse,
   PermissionsCatalog,
   PlatformRoleIn,
@@ -177,16 +178,12 @@ export async function fetchPermissionsCatalog(): Promise<PermissionsCatalog> {
 
 // ----- Platform role CRUD (consumes P4 routes) -----
 
-export async function fetchPlatformRoles(
-  cursor?: string,
-): Promise<PlatformRolesPage> {
+export async function fetchPlatformRoles(cursor?: string): Promise<PlatformRolesPage> {
   const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return apiFetch<PlatformRolesPage>(`/api/platform/roles${qs}`);
 }
 
-export async function postPlatformRole(
-  body: PlatformRoleIn,
-): Promise<PlatformRoleOut> {
+export async function postPlatformRole(body: PlatformRoleIn): Promise<PlatformRoleOut> {
   return apiFetch<PlatformRoleOut>("/api/platform/roles", {
     method: "POST",
     body: JSON.stringify(body),
@@ -214,9 +211,7 @@ export async function fetchWorkspaceRoles(
   cursor?: string,
 ): Promise<WorkspaceRolesPage> {
   const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  return apiFetch<WorkspaceRolesPage>(
-    `/api/workspaces/${workspaceId}/roles${qs}`,
-  );
+  return apiFetch<WorkspaceRolesPage>(`/api/workspaces/${workspaceId}/roles${qs}`);
 }
 
 export async function postWorkspaceRole(
@@ -234,20 +229,29 @@ export async function patchWorkspaceRole(
   id: string,
   body: WorkspaceRolePatch,
 ): Promise<WorkspaceRoleOut> {
-  return apiFetch<WorkspaceRoleOut>(
-    `/api/workspaces/${workspaceId}/roles/${id}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(body),
-    },
-  );
+  return apiFetch<WorkspaceRoleOut>(`/api/workspaces/${workspaceId}/roles/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 }
 
-export async function deleteWorkspaceRole(
-  workspaceId: string,
-  id: string,
-): Promise<void> {
+export async function deleteWorkspaceRole(workspaceId: string, id: string): Promise<void> {
   await apiFetch(`/api/workspaces/${workspaceId}/roles/${id}`, {
     method: "DELETE",
   });
+}
+
+// ----- Audit-log (P6c Slice 2) -----
+
+export async function fetchPlatformAuditLog(cursor?: string): Promise<AuditEventsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<AuditEventsPage>(`/api/platform/audit-log${qs}`);
+}
+
+export async function fetchWorkspaceAuditLog(
+  workspaceId: string,
+  cursor?: string,
+): Promise<AuditEventsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<AuditEventsPage>(`/api/workspaces/${workspaceId}/audit-log${qs}`);
 }

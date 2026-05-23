@@ -51,21 +51,24 @@ async def list_platform_audit_events(
     page resumes deterministically even if multiple events share a timestamp.
     """
     base = (
-        "SELECT id, actor_auth_user_id, action, target_type, target_id, "
-        "scope, workspace_id, before, after, created_at "
-        "FROM rbac_audit_log WHERE scope = 'platform' "
+        "SELECT r.id, r.actor_auth_user_id, u.email AS actor_email, "
+        "r.action, r.target_type, r.target_id, r.scope, r.workspace_id, "
+        "r.before, r.after, r.created_at "
+        "FROM rbac_audit_log r "
+        "LEFT JOIN auth.users u ON u.id = r.actor_auth_user_id "
+        "WHERE r.scope = 'platform' "
     )
     params: dict[str, Any]
     if cursor is not None:
         ts, rid = cursor
         params = {"ts": ts, "rid": rid, "lim": limit + 1}
         sql = base + (
-            "AND (created_at < :ts OR (created_at = :ts AND id < :rid)) "
-            "ORDER BY created_at DESC, id DESC LIMIT :lim"
+            "AND (r.created_at < :ts OR (r.created_at = :ts AND r.id < :rid)) "
+            "ORDER BY r.created_at DESC, r.id DESC LIMIT :lim"
         )
     else:
         params = {"lim": limit + 1}
-        sql = base + "ORDER BY created_at DESC, id DESC LIMIT :lim"
+        sql = base + "ORDER BY r.created_at DESC, r.id DESC LIMIT :lim"
     rows = [dict(r) for r in (await db.execute(text(sql), params)).mappings().all()]
     next_cursor: str | None = None
     if len(rows) > limit:
