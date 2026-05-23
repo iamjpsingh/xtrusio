@@ -8,9 +8,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import httpx
+from gotrue.errors import AuthApiError, AuthRetryableError
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from supabase import create_client
 
 from ..core.config import get_settings
@@ -87,7 +88,7 @@ async def create_platform_invite(
     except TimeoutError as e:
         await db.rollback()
         raise EmailProviderUnavailableError() from e
-    except Exception as e:
+    except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
         await db.rollback()
         raise EmailProviderUnavailableError() from e
 

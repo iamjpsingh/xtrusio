@@ -237,6 +237,7 @@ async def revoke_platform_role_grant(
     db: AsyncSession,
     *,
     actor_id: UUID,
+    user_id: UUID,
     grant_id: UUID,
 ) -> None:
     """Revoke a grant by its id.
@@ -244,6 +245,10 @@ async def revoke_platform_role_grant(
     Enforces priv-escalation against the role being revoked (so a non-super_admin
     can't strip super_admin from someone). Audit row is written with ``before=``
     payload describing the deleted grant.
+
+    Validates ``grant.auth_user_id == user_id`` for scope consistency: a request
+    addressing user A's path with grant B's id (where B belongs to user C) must
+    not succeed. Mismatches return GrantNotFoundError so we don't leak existence.
     """
     await _set_actor(db, actor_id)
     grant = (
@@ -262,6 +267,8 @@ async def revoke_platform_role_grant(
         .one_or_none()
     )
     if grant is None:
+        raise GrantNotFoundError(str(grant_id))
+    if str(grant["auth_user_id"]) != str(user_id):
         raise GrantNotFoundError(str(grant_id))
     if grant["scope"] != "platform" or grant["workspace_id"] is not None:
         raise RoleScopeMismatchError(f"grant {grant_id} is not a platform-scope grant")
