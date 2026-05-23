@@ -47,8 +47,9 @@ jobs:
           fi
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # pnpm version is read from `packageManager` in package.json
+        # (single source of truth). Don't add `with: version: ...` here —
+        # specifying it in both places trips ERR_PNPM_BAD_PM_VERSION.
 
       - uses: actions/setup-node@v4
         with:
