@@ -1,7 +1,7 @@
 # HANDOFF — RBAC + RLS Re-architecture
 
-**Written:** 2026-05-19, updated 2026-05-23 (P6c + P6d MERGED — RBAC admin surface complete).
-**Status:** **Backend RBAC re-architecture + Platform/Workspace RBAC admin + Frontend permission-driven shells + Platform/Workspace Roles CRUD UI + Audit log viewers + Workspace Members surface + Grant-management UIs + Workspace Settings UI all COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5, type-the-tests, P4, P5, P6b, P6c (Slices 1+2+3), P6d (backend + frontend) all in `main` (`1b3b561`). The enum→resolver authorization cutover is finished; backend admin APIs are live; the frontend has permission-driven nav across two physically-separate Platform/Workspace shells; super_admins and workspace owners can do **every** RBAC admin action through the UI (list users/members, create/edit/delete roles, grant/revoke roles, read audit logs, rename workspaces). **The admin surface is complete; next phase is the first product feature.**
+**Written:** 2026-05-19, updated 2026-05-23 (P6c + P6d MERGED + polish round MERGED — RBAC admin surface complete; foundation ready for first product feature).
+**Status:** **Backend RBAC re-architecture + Platform/Workspace RBAC admin + Frontend permission-driven shells + Platform/Workspace Roles CRUD UI + Audit log viewers + Workspace Members surface + Grant-management UIs + Workspace Settings UI + post-merge polish all COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5, type-the-tests, P4, P5, P6b, P6c (Slices 1+2+3), P6d (backend + frontend), and two polish PRs all in `main` (`564b11e`). The enum→resolver authorization cutover is finished; backend admin APIs are live; the frontend has permission-driven nav across two physically-separate Platform/Workspace shells; super_admins and workspace owners can do **every** RBAC admin action through the UI (list users/members, create/edit/delete roles, grant/revoke roles, read audit logs, rename workspaces); grant races are hardened. **The admin surface is complete; next phase is the first product feature.**
 
 Read top to bottom before doing anything.
 
@@ -9,7 +9,7 @@ Read top to bottom before doing anything.
 
 ## ⏩ RESUME HERE — 2026-05-23 (post-P6d)
 
-### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#22 MERGED; `main` @ `1b3b561`; single Alembic head `0009`; 0 open PRs)
+### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#24 MERGED; `main` @ `564b11e`; single Alembic head `0009`; 0 open PRs)
 
 | Phase | What |
 |---|---|
@@ -28,7 +28,9 @@ Read top to bottom before doing anything.
 | P6c Slice 2 (#19) | **Audit log viewers (platform + workspace).** `AuditEventOut` gains `actor_email: str \| None` via service-layer LEFT JOIN onto `auth.users`. Shared UI blocks: `<AuditTable>` (dense `[time \| actor email \| action \| target]`), `<AuditDetailDrawer>` (Sheet, pretty-printed before/after JSON), `<LoadMoreButton>` (hidden when `next_cursor === null`). Per-scope pages `<PlatformAuditLogPage>` + `<WorkspaceAuditLogPage>` (gated `platform.audit.read` / `workspace.audit.read`). Cursor-driven Load-more with local accumulator (deliberately not `useInfiniteQuery`). No migration. |
 | P6c Slice 3 (#20) | **Workspace Members port + platform nav + cleanup.** `<WorkspaceMembersPage>` invite-only port from `tenant-users-page` (gated `workspace.members.read` page + `workspace.members.invite` button); Slice-3 originally shipped a "members list ships in P6d" notice, since superseded by P6d's list section. `platformNav` gains Roles + Audit log entries. `<UserMenu>` rewrite consumes `useMe()` from me-adapter (drops legacy `type Me` + duplicate inline `useQuery(["me"])`). `tenant-users-page` `canInvite` switches from enum to `hasWorkspacePerm`. Workspace Settings placeholder copy updated. |
 | P6d backend (#21) | **List endpoints + workspace settings.** `GET /api/platform/users` (cursor-paginated; gated `platform.users.read`; includes `granted_role_count`). `GET /api/workspaces/{wid}/members` (cursor-paginated; gated `workspace.members.read`; LEFT JOIN auth.users for email). `GET/PUT /api/workspaces/{wid}/settings` (gated `workspace.settings.read` / `workspace.settings.manage`; PUT writes audit-log row ONLY when `name` actually changed; MVP allows only `name` mutation). TS mirrors + re-exports. Mechanical ruff isort cleanup on 4 pre-existing files. No migration; Alembic head stays at `0009`. Catalog perms `workspace.settings.{read,manage}` already existed from P5 — plan section A.1 was a no-op. |
-| P6d frontend (#22) | **Grant-management UIs + workspace settings + platform users list.** Shared `<RolePicker>` + `<GrantManagerDialog>` (Sheet; discriminated union on scope; revokes + grants with `qk` invalidation for parent list re-render). `<PlatformUsersPage>` at `/platform/users` (gated `platform.users.read`). `<WorkspaceMembersListPage>` embedded under Slice-3's invite UI at `/workspace/$wid/members` (gated `workspace.members.read` + `workspace.members.manage`). `<WorkspaceSettingsPage>` at `/workspace/$wid/settings` (gated `workspace.settings.{read,manage}`; Save disabled when name unchanged). 6 P4/P5 grant fetchers added to `lib/api.ts`; 7 new `qk` entries; 3 new error mappings (`workspace_not_found`, `role_not_found`, `grant_not_found`). Legacy `users-page.tsx` (platform invites) left orphaned-from-route but on disk; cleanup TBD. |
+| P6d frontend (#22) | **Grant-management UIs + workspace settings + platform users list.** Shared `<RolePicker>` + `<GrantManagerDialog>` (Sheet; discriminated union on scope; revokes + grants with `qk` invalidation for parent list re-render). `<PlatformUsersPage>` at `/platform/users` (gated `platform.users.read`). `<WorkspaceMembersListPage>` embedded under Slice-3's invite UI at `/workspace/$wid/members` (gated `workspace.members.read` + `workspace.members.manage`). `<WorkspaceSettingsPage>` at `/workspace/$wid/settings` (gated `workspace.settings.{read,manage}`; Save disabled when name unchanged). 6 P4/P5 grant fetchers added to `lib/api.ts`; 7 new `qk` entries; 3 new error mappings. |
+| Polish round 1 (#23) | **Orphaned UI removal + exception narrowing + DELETE consistency.** Dropped orphaned `users-page.tsx` (the pre-P6d platform-invites UI; backend endpoints intact for future use). Narrowed `except Exception` in `services/{platform_invites,tenant_invites}.py` to `(AuthApiError, AuthRetryableError, httpx.HTTPError)`. `DELETE /api/platform/users/{user_id}/roles/{grant_id}` now validates `grant.auth_user_id == user_id` (404 on mismatch — parity with P5 workspace DELETE). Mechanical ruff isort cleanup in bootstrap.py + signup.py. |
+| Polish round 2 (#24) | **Race hardening on `grant_role` + `grant_workspace_role`.** `rbac/grants.py:grant_role` — replaced `ON CONFLICT DO NOTHING` with explicit pre-SELECT using `IS NOT DISTINCT FROM` (catches duplicates uniformly for both `workspace_id IS NULL` platform grants and NOT NULL workspace grants — closes the Postgres NULLS DISTINCT foot-gun). `services/workspace_role_grants.py:grant_workspace_role` — replaced pre-SELECT+INSERT with `INSERT ... ON CONFLICT DO NOTHING RETURNING` + fallback SELECT (closes the TOCTOU race window so concurrent identical grants both see success). |
 
 Backend authorization is **fully resolver/permission-driven** at both platform AND workspace scope, and consistent with RLS (same `0007` fns). Frontend is permission-keys-driven for nav, shells, route gates, and every admin surface. The MeResponse keeps the enum fields additively (LATE cleanup) so the legacy `tenant_memberships.role` / `platform_users.role` enum columns can still be read by per-page code that hasn't yet migrated — but every NEW gate (P6c + P6d) uses permissions.
 
@@ -43,12 +45,12 @@ Backend authorization is **fully resolver/permission-driven** at both platform A
 2. **Outstanding controller-run gate (deferred per user direction during the P6c/P6d sprint, "we can test later"):** ONE end-of-night full sweep `STARTUP_RECONCILE_TOLERANT=false make test-clean && STARTUP_RECONCILE_TOLERANT=false make check` from a clean DB to verify all four merges (#19, #20, #21, #22) together. Per-slice fast gates (typecheck + lint + focused pytest + vitest) all passed pre-merge; the slow full backend pytest sweep is the only outstanding verification.
 3. **🔒 LATE cleanup** (only after every backend enum read is gone — `/me` (P3b additive), onboarding/invite-accept/bootstrap still legitimately write the enum rows; `0008` downgrade restores the enum-reading OR-form so the enum columns must exist while `0008` is reversible): drop `platform_users.role` + `tenant_memberships.role` columns + the `platform_role`/`tenant_role` enum types via a new migration.
 4. **Legacy `users-page.tsx` cleanup** (P6d follow-up): the platform-invites UI in `apps/web/src/components/users-page.tsx` is no longer mounted by any route (replaced by `<PlatformUsersPage>` at `/platform/users`). Either fold platform-invite UI back into `<PlatformUsersPage>` as a tab/section, or delete the orphaned file once a replacement path for platform-invite management is decided.
-5. **Smaller backlog items** (each a one-shot, none blocking new feature work):
-   - **`gotrue` → `supabase_auth` migration:** supabase-py 2.x emits a `DeprecationWarning` saying `gotrue` is being replaced by `supabase_auth`. Migrate imports. Touches `services/signup.py` (the `from gotrue.errors import AuthApiError`).
-   - **Narrow `except Exception` blocks** in `services/platform_invites.py:90` and `services/tenant_invites.py:146` that currently swallow every exception into `EmailProviderUnavailableError`.
-   - **`grant_role` (`rbac/grants.py`) `ON CONFLICT DO NOTHING` + Postgres NULLS DISTINCT:** documented foot-gun for `workspace_id IS NULL` platform grants (existing call sites are safe; P4/P5 grant services use explicit SELECT-then-INSERT). Future fix: migrate to `UNIQUE NULLS NOT DISTINCT` (PG15+).
-   - **`DELETE /api/platform/users/{user_id}/roles/{grant_id}`** doesn't verify `grant.auth_user_id == user_id`. Harmless (grant_id is globally unique) but adding the check would be a small consistency polish (P4 follow-up). P5's workspace DELETE already does this.
-   - **P5 `grant_workspace_role` concurrent-duplicate-grant race:** explicit pre-SELECT + INSERT (no ON CONFLICT). Two concurrent identical grants → one wins, the other raises IntegrityError → 5xx. Acceptable today.
+5. **Smaller backlog items** (status as of 2026-05-23):
+   - ~~Narrow `except Exception` blocks in invite services~~ — **DRAINED by #23**.
+   - ~~`grant_role` (`rbac/grants.py`) `ON CONFLICT DO NOTHING` + Postgres NULLS DISTINCT~~ — **DRAINED by #24** (pre-SELECT pattern with `IS NOT DISTINCT FROM`).
+   - ~~`DELETE /api/platform/users/{user_id}/roles/{grant_id}` consistency polish~~ — **DRAINED by #23**.
+   - ~~P5 `grant_workspace_role` concurrent-duplicate-grant race~~ — **DRAINED by #24** (`INSERT ... ON CONFLICT DO NOTHING RETURNING` + fallback SELECT).
+   - **`gotrue` → `supabase_auth` migration** — STILL DEFERRED, now bigger-than-polish. Attempted during the #24 session; reverted because `supabase 2.10` still imports `gotrue` internally, so a naked import-swap would NOT remove the deprecation warning (it still fires from `supabase`'s `__init__.py`). The real fix requires upgrading `supabase` to `>=2.20` which transitively requires `pydantic >= 2.10` — current pin is `~= 2.9.0`, used pervasively across schemas. **Path forward:** dedicated PR for a coordinated `supabase + pydantic` major-minor upgrade with full backend pytest re-verification. ~1-2 hr of focused work; not blocking new-feature work.
 
 ### Pre-existing `main` debt (unchanged, not from any phase)
 
@@ -64,13 +66,9 @@ Browser/e2e smokes needing real `.env` + `make dev`/OrbStack + real inboxes.
 - `.env` includes `STARTUP_RECONCILE_TOLERANT=false` (required Settings field, no `Field` default).
 - GitHub Actions secrets for the `xtrusio-ci` managed Supabase project: `CI_DATABASE_URL`, `CI_SUPABASE_URL`, `CI_SUPABASE_ANON_KEY`, `CI_SUPABASE_SERVICE_ROLE_KEY`, `CI_SUPABASE_JWKS_URL`. CI gates advisory until set.
 
-### Branches on origin (can be deleted; merged or stale)
+### Branches on origin
 
-- `rbac-p6c-slice-1-roles-crud` — merged in #18
-- `rbac-p6c-slice-2-audit-log` — merged in #19
-- `rbac-p6c-slice-3-members-cleanup` — merged in #20
-- `rbac-p6d-backend` — merged in #21
-- `rbac-p6d-frontend` — content cherry-picked to main (PR #22 was incorrectly merged into rbac-p6d-backend instead of main due to a base-branch auto-retarget that didn't fire after #21 squashed; the cherry-pick `1b3b561` corrects the state on main)
+All feature/polish branches deleted post-merge (cleanup done 2026-05-23). `main` is the only branch.
 
 ---
 
