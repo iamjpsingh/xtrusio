@@ -111,7 +111,9 @@ async def delete_grant(
 ) -> Response:
     await require_permission(db, user.user_id, "platform.users.manage")
     try:
-        await revoke_platform_role_grant(db, actor_id=user.user_id, grant_id=grant_id)
+        await revoke_platform_role_grant(
+            db, actor_id=user.user_id, user_id=user_id, grant_id=grant_id
+        )
         await db.commit()
     except GrantNotFoundError as e:
         await db.rollback()

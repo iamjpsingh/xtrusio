@@ -16,7 +16,6 @@ import typer
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy import text as sa_text
-
 from supabase import create_client
 
 from ..core.config import get_settings

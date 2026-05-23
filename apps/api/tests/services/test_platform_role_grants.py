@@ -319,6 +319,7 @@ async def test_revoke_happy_path(
         await revoke_platform_role_grant(
             db_session,
             actor_id=existing_super_admin.id,
+            user_id=target_id,
             grant_id=grant_id,
         )
         await db_session.commit()
@@ -347,6 +348,7 @@ async def test_revoke_raises_grant_not_found(
         await revoke_platform_role_grant(
             db_session,
             actor_id=existing_super_admin.id,
+            user_id=existing_super_admin.id,
             grant_id=uuid4(),
         )
     await db_session.rollback()
@@ -382,6 +384,7 @@ async def test_revoke_raises_privilege_escalation(
             await revoke_platform_role_grant(
                 db_session,
                 actor_id=actor_id,
+                user_id=existing_super_admin.id,
                 grant_id=sa_grant_id,
             )
         await db_session.rollback()
