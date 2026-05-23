@@ -1,24 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Settings } from "lucide-react";
-import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
+import { createFileRoute, useParams } from "@tanstack/react-router";
+import { WorkspaceSettingsPage } from "@/components/workspace-settings-page";
 
 export const Route = createFileRoute("/_app/workspace/$workspaceId/settings")({
-  component: WorkspaceSettingsPage,
+  component: RouteComponent,
 });
 
-function WorkspaceSettingsPage() {
-  return (
-    <>
-      <PageHeader
-        title="Workspace settings"
-        description="Per-workspace configuration. Visible to anyone with workspace.settings.read."
-      />
-      <EmptyState
-        icon={Settings}
-        title="Settings ship in P6c"
-        description="Workspace-scoped settings ship in P6d."
-      />
-    </>
-  );
+function RouteComponent() {
+  const { workspaceId } = useParams({
+    from: "/_app/workspace/$workspaceId/settings",
+  });
+  return <WorkspaceSettingsPage workspaceId={workspaceId} />;
 }

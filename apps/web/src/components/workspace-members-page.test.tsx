@@ -56,6 +56,7 @@ vi.mock("@/lib/api", async () => {
     fetchTenantInvites: vi.fn(),
     postTenantInvite: vi.fn(),
     deleteTenantInvite: vi.fn(),
+    fetchWorkspaceMembers: vi.fn(),
   };
 });
 
@@ -64,6 +65,10 @@ import * as api from "@/lib/api";
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.fetchTenantInvites).mockResolvedValue({ items: [] });
+  vi.mocked(api.fetchWorkspaceMembers).mockResolvedValue({
+    items: [],
+    next_cursor: null,
+  });
 });
 
 function renderWith(qc: QueryClient) {
@@ -94,15 +99,17 @@ describe("<WorkspaceMembersPage />", () => {
     );
   });
 
-  it("shows the 'ships in P6d' notice", async () => {
+  it("shows the Members section header (formerly the ships-in-P6d notice)", async () => {
     vi.mocked(api.fetchMe).mockResolvedValue(ME_READ_ONLY);
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     renderWith(qc);
     await waitFor(() => {
-      expect(screen.getByText(/member listing ships in p6d/i)).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 2, name: /^members$/i })).toBeInTheDocument();
     });
+    // The placeholder notice from Slice 3 is gone.
+    expect(screen.queryByText(/ships in p6d/i)).toBeNull();
   });
 
   it("hides the Invite button when me lacks workspace.members.invite", async () => {
@@ -111,7 +118,7 @@ describe("<WorkspaceMembersPage />", () => {
       defaultOptions: { queries: { retry: false } },
     });
     renderWith(qc);
-    await waitFor(() => screen.getByText(/member listing ships in p6d/i));
+    await waitFor(() => screen.getByRole("heading", { level: 2, name: /^members$/i }));
     expect(screen.queryByRole("button", { name: /invite user/i })).toBeNull();
   });
 

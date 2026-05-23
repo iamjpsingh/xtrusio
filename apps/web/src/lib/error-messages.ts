@@ -21,6 +21,10 @@ const MESSAGES: Record<string, string> = {
   membership_not_found: "That user isn't a member of this workspace.",
   platform_user_not_found: "That user isn't a platform user.",
   "invalid cursor": "Couldn't load more events. Try refreshing.",
+  // P6d additions.
+  workspace_not_found: "We couldn't find that workspace.",
+  role_not_found: "That role no longer exists. Refresh the page.",
+  grant_not_found: "That grant has already been removed.",
 };
 
 export function errorMessage(code: string): string {
