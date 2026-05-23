@@ -40,6 +40,18 @@ export const platformNav: NavItem[] = [
     required_perm: "platform.clients.read",
   },
   {
+    to: "/platform/roles",
+    label: "Roles",
+    icon: Shield,
+    required_perm: "platform.roles.manage",
+  },
+  {
+    to: "/platform/audit-log",
+    label: "Audit log",
+    icon: ScrollText,
+    required_perm: "platform.audit.read",
+  },
+  {
     to: "/platform/settings",
     label: "Settings",
     icon: Settings,

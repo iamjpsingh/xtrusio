@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -11,26 +10,15 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-
-type Me = {
-  id: string;
-  email: string;
-  role: "super_admin" | "admin" | "editor";
-  is_active: boolean;
-};
+import { useMe } from "@/lib/me-adapter";
 
 export function UserMenu() {
   const { user, signOut } = useAuth();
-  const { data: me } = useQuery({
-    queryKey: ["me"],
-    queryFn: () => apiFetch<Me>("/api/me"),
-    enabled: Boolean(user),
-  });
+  const { me } = useMe();
 
   const initial = (me?.email ?? user?.email ?? "?").slice(0, 1).toUpperCase();
-  const role = me?.role;
+  const role = me?.platform?.role;
 
   return (
     <DropdownMenu>

@@ -4,12 +4,12 @@ import { useState } from "react";
 import {
   deleteTenantInvite,
   errorCode,
-  fetchMe,
   fetchTenantInvites,
   postTenantInvite,
   type TenantInvite,
 } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
+import { hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +109,7 @@ function InviteTenantDialog({
 export function TenantUsersPage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
   const qc = useQueryClient();
-  const { data: me } = useQuery({ queryKey: ["me"], queryFn: fetchMe });
+  const { me } = useMe();
   const myTenant = me?.tenants.find((t) => t.slug === slug);
   const tenantId = myTenant?.id ?? "";
   const { data: invites } = useQuery({
@@ -122,19 +122,18 @@ export function TenantUsersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenant-invites", tenantId] }),
   });
   if (!myTenant) return null;
-  const canInvite = myTenant.role === "owner" || myTenant.role === "admin";
+  const canInvite = hasWorkspacePerm(me, myTenant.id, "workspace.members.invite");
+  // "owner" is the workspace governance role; only owner may pick the
+  // "admin" invite role. The legacy invite contract still scopes role-picker
+  // options by inviter role, separate from the outer authorization gate.
+  const inviterRole: "owner" | "admin" = myTenant.role === "owner" ? "owner" : "admin";
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${myTenant.name} — Users`}
         description="Manage who has access to this workspace."
         action={
-          canInvite ? (
-            <InviteTenantDialog
-              tenantId={myTenant.id}
-              inviterRole={myTenant.role as "owner" | "admin"}
-            />
-          ) : null
+          canInvite ? <InviteTenantDialog tenantId={myTenant.id} inviterRole={inviterRole} /> : null
         }
       />
       <section>
