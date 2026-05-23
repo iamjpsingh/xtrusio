@@ -158,16 +158,14 @@ async def grant_workspace_role(
       3. actor must hold every perm in the target role under workspace_id
          (else PrivilegeEscalationError -> 403; defense-in-depth by 0009).
 
-    Idempotent under serial access: pre-SELECT returns the existing grant if
-    present, otherwise INSERT. Concurrent identical grants from two callers
-    will lose one to the `user_roles` UNIQUE (auth_user_id, role_id,
-    workspace_id) constraint — workspace_id is NOT NULL for workspace grants,
-    so the NULLS-DISTINCT trap doesn't apply and the loser raises IntegrityError
-    cleanly; the user-visible effect is a retryable 5xx. Acceptable today
-    because `workspace.members.manage` is rare and concurrent identical grants
-    are essentially zero in practice; a future hardening could switch to
-    `INSERT ... ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING
-    RETURNING ...` with a fallback SELECT.
+    Idempotent + concurrent-safe: uses ``INSERT ... ON CONFLICT DO NOTHING
+    RETURNING`` against the ``user_roles`` UNIQUE (auth_user_id, role_id,
+    workspace_id) constraint, with a fallback SELECT for the conflict case.
+    workspace_id is NOT NULL for workspace grants, so the NULLS-DISTINCT
+    trap doesn't apply and the UNIQUE catches concurrent identical grants
+    cleanly. Two simultaneous identical grants → one inserts, the other
+    falls through to the SELECT and returns the existing row; both callers
+    see success.
     """
     await _set_actor(db, actor_id)
     await _require_workspace_membership(db, workspace_id=workspace_id, user_id=target_user_id)
@@ -179,39 +177,40 @@ async def grant_workspace_role(
     )
     if missing is not None:
         raise PrivilegeEscalationError(missing)
-    existing = (
+    inserted = (
         (
             await db.execute(
                 text(
-                    "SELECT id, auth_user_id, role_id, workspace_id, granted_at, granted_by "
-                    "FROM user_roles WHERE auth_user_id = :u AND role_id = :r "
-                    "AND workspace_id = :w"
+                    "INSERT INTO user_roles "
+                    "(auth_user_id, role_id, workspace_id, granted_by) "
+                    "VALUES (:u, :r, :w, :g) "
+                    "ON CONFLICT (auth_user_id, role_id, workspace_id) DO NOTHING "
+                    "RETURNING id, auth_user_id, role_id, workspace_id, "
+                    "granted_at, granted_by"
                 ),
-                {"u": str(target_user_id), "r": str(role_id), "w": str(workspace_id)},
+                {
+                    "u": str(target_user_id),
+                    "r": str(role_id),
+                    "w": str(workspace_id),
+                    "g": str(actor_id),
+                },
             )
         )
         .mappings()
         .one_or_none()
     )
-    if existing is not None:
-        row = existing
+    if inserted is not None:
+        row = inserted
     else:
         row = (
             (
                 await db.execute(
                     text(
-                        "INSERT INTO user_roles "
-                        "(auth_user_id, role_id, workspace_id, granted_by) "
-                        "VALUES (:u, :r, :w, :g) "
-                        "RETURNING id, auth_user_id, role_id, workspace_id, "
-                        "granted_at, granted_by"
+                        "SELECT id, auth_user_id, role_id, workspace_id, granted_at, granted_by "
+                        "FROM user_roles WHERE auth_user_id = :u AND role_id = :r "
+                        "AND workspace_id = :w"
                     ),
-                    {
-                        "u": str(target_user_id),
-                        "r": str(role_id),
-                        "w": str(workspace_id),
-                        "g": str(actor_id),
-                    },
+                    {"u": str(target_user_id), "r": str(role_id), "w": str(workspace_id)},
                 )
             )
             .mappings()

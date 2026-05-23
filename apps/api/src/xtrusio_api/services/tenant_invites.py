@@ -11,6 +11,7 @@ import httpx
 from gotrue.errors import AuthApiError, AuthRetryableError
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from supabase import create_client
 
 from ..core.config import get_settings
