@@ -1,14 +1,24 @@
-"""POST /api/invites/accept — generic acceptance for both kinds."""
+"""POST /api/invites/accept — generic acceptance for both kinds.
 
-from __future__ import annotations
+PAR-A C2: invite ids are read from ``identity.app_metadata`` (service-role
+only writable). PAR-A H8: rate-limited at 10 req/IP/hour.
+
+Note on imports: this module deliberately does NOT use
+``from __future__ import annotations``. SlowAPI wraps the route via
+``functools.wraps``; FastAPI then resolves forward-referenced annotations
+using the OUTER wrapper's ``__globals__`` (slowapi.extension), which doesn't
+see this module's imports. Using runtime (non-deferred) annotations keeps
+``AuthIdentity`` as a concrete type at decoration time.
+"""
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
+from ..core.rate_limit import INVITE_ACCEPT_RATE, limiter
 from ..schemas.invite import AcceptInviteResult
 from ..services.invite_acceptance import (
     AlreadyProvisionedError,
@@ -24,7 +34,9 @@ router = APIRouter(prefix="/api/invites", tags=["invite-acceptance"])
 
 
 @router.post("/accept", response_model=AcceptInviteResult)
+@limiter.limit(INVITE_ACCEPT_RATE)
 async def accept(
+    request: Request,
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AcceptInviteResult:
@@ -33,7 +45,7 @@ async def accept(
             db,
             user_id=identity.user_id,
             email=identity.email,
-            user_metadata=identity.user_metadata,
+            app_metadata=identity.app_metadata,
         )
     except NoInviteError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "no_invite") from e

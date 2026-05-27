@@ -79,10 +79,7 @@ async def create_platform_invite(
     sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
 
     def _call() -> Any:
-        return sb.auth.admin.invite_user_by_email(  # type: ignore[call-arg]
-            email,
-            data={"platform_invite_id": str(invite_id), "platform_role": role.value},
-        )
+        return sb.auth.admin.invite_user_by_email(email)
 
     try:
         result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
@@ -99,6 +96,35 @@ async def create_platform_invite(
             invite.supabase_user_id = UUID(sb_user_id)
         except ValueError:
             invite.supabase_user_id = None
+
+    # PAR-A C2: write the invite claims to ``app_metadata`` (service-role
+    # only writable; the invitee can't forge it from their own session) via
+    # a second admin call. Previously we passed ``data=...`` to
+    # ``invite_user_by_email``, which writes ``user_metadata`` — that is
+    # writable by the user's own access token.
+    if isinstance(sb_user_id, str):
+
+        def _set_app_metadata() -> Any:
+            return sb.auth.admin.update_user_by_id(
+                sb_user_id,
+                {
+                    "app_metadata": {
+                        "platform_invite_id": str(invite_id),
+                        "platform_role": role.value,
+                    }
+                },
+            )
+
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(_set_app_metadata), timeout=cfg.supabase_timeout_sec
+            )
+        except TimeoutError as e:
+            await db.rollback()
+            raise EmailProviderUnavailableError() from e
+        except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
+            await db.rollback()
+            raise EmailProviderUnavailableError() from e
 
     await db.commit()
     await db.refresh(invite)

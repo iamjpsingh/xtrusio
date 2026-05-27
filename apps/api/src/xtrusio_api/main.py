@@ -7,9 +7,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.extension import _rate_limit_exceeded_handler
 
 from .core.config import get_settings
 from .core.db import SessionLocal
+from .core.rate_limit import limiter
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
@@ -52,6 +55,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Xtrusio API", version="0.0.0", lifespan=lifespan)
+
+# PAR-A H8: rate limiting (SlowAPI + Valkey).
+app.state.limiter = limiter
+# slowapi's _rate_limit_exceeded_handler signature is narrower than starlette's
+# expected ``(Request, Exception) -> Response``; cast is safe because Starlette
+# dispatches the registered class (``RateLimitExceeded``) to the matching
+# handler before the type signature is enforced.
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_allow_origins,

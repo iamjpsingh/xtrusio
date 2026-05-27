@@ -57,7 +57,10 @@ async def me(
     ]
 
     pending_invite = None
-    md = identity.user_metadata
+    # PAR-A C2: prefer ``app_metadata`` (service-role-only writable); fall
+    # back to ``user_metadata`` only when ``app_metadata`` doesn't carry the
+    # claim (covers in-flight invites issued before the migration).
+    md = {**identity.user_metadata, **identity.app_metadata}
     now = datetime.now(UTC)
 
     def _parse(raw: object) -> UUID | None:

@@ -1,13 +1,13 @@
-# HANDOFF — RBAC + RLS Re-architecture
+# HANDOFF — RBAC + RLS Re-architecture → PAR Remediation
 
-**Written:** 2026-05-19, updated 2026-05-23 (P6c + P6d MERGED + polish round MERGED — RBAC admin surface complete; foundation ready for first product feature).
-**Status:** **Backend RBAC re-architecture + Platform/Workspace RBAC admin + Frontend permission-driven shells + Platform/Workspace Roles CRUD UI + Audit log viewers + Workspace Members surface + Grant-management UIs + Workspace Settings UI + post-merge polish all COMPLETE & merged** — P1, P2, P3a, P3b, P3c, P6a, P3.5, type-the-tests, P4, P5, P6b, P6c (Slices 1+2+3), P6d (backend + frontend), and two polish PRs all in `main` (`564b11e`). The enum→resolver authorization cutover is finished; backend admin APIs are live; the frontend has permission-driven nav across two physically-separate Platform/Workspace shells; super_admins and workspace owners can do **every** RBAC admin action through the UI (list users/members, create/edit/delete roles, grant/revoke roles, read audit logs, rename workspaces); grant races are hardened. **The admin surface is complete; next phase is the first product feature.**
+**Written:** 2026-05-19, updated 2026-05-26 (audit findings verified + PAR remediation spec approved + PAR-A landed — pivot from "first product feature" to closing audit gaps before launch).
+**Status:** **RBAC admin surface complete + PAR-A (auth/security perimeter) landed** — all RBAC PRs (#1–#24) merged on `main`; the 2026-05-26 production audit identified **60 findings** (5 Critical / 15 High / 24 Medium / 16 Low), **96% verified accurate** against current code. PAR remediation spec approved (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md`) with 6 phases (A–F). **PAR-A merged this push** — JWT hardened (RS256 pinned, `iss`/`aud`/`alg` validated, required claims enforced), invite ids moved from user-writable `user_metadata` to admin-only `app_metadata`, SlowAPI rate limits on `/signup`/`/invites/accept`/`/onboarding/tenants` + a 60/min authenticated catch-all, `/signup` no longer enumerates (existing email → password-reset email; both paths return identical 202), `PrivilegeEscalationError` 403 body sanitized. **Next dispatch: PAR-B (DB pool + JWKS rotation + observability).**
 
 Read top to bottom before doing anything.
 
 ---
 
-## ⏩ RESUME HERE — 2026-05-23 (post-P6d)
+## ⏩ RESUME HERE — 2026-05-26 (post-PAR-A)
 
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#24 MERGED; `main` @ `564b11e`; single Alembic head `0009`; 0 open PRs)
 
@@ -31,31 +31,32 @@ Read top to bottom before doing anything.
 | P6d frontend (#22) | **Grant-management UIs + workspace settings + platform users list.** Shared `<RolePicker>` + `<GrantManagerDialog>` (Sheet; discriminated union on scope; revokes + grants with `qk` invalidation for parent list re-render). `<PlatformUsersPage>` at `/platform/users` (gated `platform.users.read`). `<WorkspaceMembersListPage>` embedded under Slice-3's invite UI at `/workspace/$wid/members` (gated `workspace.members.read` + `workspace.members.manage`). `<WorkspaceSettingsPage>` at `/workspace/$wid/settings` (gated `workspace.settings.{read,manage}`; Save disabled when name unchanged). 6 P4/P5 grant fetchers added to `lib/api.ts`; 7 new `qk` entries; 3 new error mappings. |
 | Polish round 1 (#23) | **Orphaned UI removal + exception narrowing + DELETE consistency.** Dropped orphaned `users-page.tsx` (the pre-P6d platform-invites UI; backend endpoints intact for future use). Narrowed `except Exception` in `services/{platform_invites,tenant_invites}.py` to `(AuthApiError, AuthRetryableError, httpx.HTTPError)`. `DELETE /api/platform/users/{user_id}/roles/{grant_id}` now validates `grant.auth_user_id == user_id` (404 on mismatch — parity with P5 workspace DELETE). Mechanical ruff isort cleanup in bootstrap.py + signup.py. |
 | Polish round 2 (#24) | **Race hardening on `grant_role` + `grant_workspace_role`.** `rbac/grants.py:grant_role` — replaced `ON CONFLICT DO NOTHING` with explicit pre-SELECT using `IS NOT DISTINCT FROM` (catches duplicates uniformly for both `workspace_id IS NULL` platform grants and NOT NULL workspace grants — closes the Postgres NULLS DISTINCT foot-gun). `services/workspace_role_grants.py:grant_workspace_role` — replaced pre-SELECT+INSERT with `INSERT ... ON CONFLICT DO NOTHING RETURNING` + fallback SELECT (closes the TOCTOU race window so concurrent identical grants both see success). |
+| PAR-A (this push) | **Auth/security perimeter (audit C1, C2, H8, M22).** JWT verification hardened — algorithms pinned to `RS256` only, header `alg` validated BEFORE JWKS lookup, required claims `exp/iat/aud/iss/sub` enforced, `iss` pinned to `<supabase_url>/auth/v1`, `aud` stays `"authenticated"`. Invite ids moved from `user_metadata` (user-writable via the Supabase JS client) to `app_metadata` (service-role-only writable) — closes the takeover surface where a leaked invite UUID + matching email = account hijack. SlowAPI rate limiting wired to Valkey (single code path, dev + prod): `/signup` 5/IP/hr, `/invites/accept` 10/IP/hr, `/onboarding/tenants` 5/user/hr, authenticated catch-all 60/user/min. `/signup` no longer enumerates — existing email triggers a Supabase password-reset email; both new and existing paths return identical `202 confirm_email_sent`. `PrivilegeEscalationError` 403 body sanitized — `detail` is the constant `"privilege_escalation"`; the missing perm key stays on the exception for server-side structlog only, never in the HTTP response. 5 new adversarial test files (`test_jwt_verification.py`, `test_invite_app_metadata.py`, `test_rate_limit.py`, `test_signup_no_enumeration.py`, `test_privilege_escalation_sanitized.py`); 8 existing tests updated. |
 
 Backend authorization is **fully resolver/permission-driven** at both platform AND workspace scope, and consistent with RLS (same `0007` fns). Frontend is permission-keys-driven for nav, shells, route gates, and every admin surface. The MeResponse keeps the enum fields additively (LATE cleanup) so the legacy `tenant_memberships.role` / `platform_users.role` enum columns can still be read by per-page code that hasn't yet migrated — but every NEW gate (P6c + P6d) uses permissions.
 
-### NEXT
+### NEXT — PAR remediation, phases B → F
 
-1. **First product feature (TBD by user).** The admin surface is complete. From now on, new features should use:
-   - `require_permission("<feature>.<action>")` on backend routes (add the perm key to `apps/api/src/xtrusio_api/rbac/catalog.py:CATALOG` + bind to relevant system roles in `SYSTEM_ROLE_PERMISSIONS`).
-   - `hasPlatformPerm()` / `hasWorkspacePerm()` from `@/lib/me-adapter` for the UI gate; `<Forbidden />` fallback per route.
-   - Tenancy: `workspace_id` scoping via existing RLS + service-layer filters; new tables FK to `tenants(id) ON DELETE CASCADE`.
-   - Audit: `core/audit.write_audit_event` for any mutation that should land in the audit log.
-   - New pages drop under `_app.platform.<feature>.tsx` or `_app.workspace.$workspaceId.<feature>.tsx` and inherit the shell.
-2. **Outstanding controller-run gate (deferred per user direction during the P6c/P6d sprint, "we can test later"):** ONE end-of-night full sweep `STARTUP_RECONCILE_TOLERANT=false make test-clean && STARTUP_RECONCILE_TOLERANT=false make check` from a clean DB to verify all four merges (#19, #20, #21, #22) together. Per-slice fast gates (typecheck + lint + focused pytest + vitest) all passed pre-merge; the slow full backend pytest sweep is the only outstanding verification.
-3. **🔒 LATE cleanup** (only after every backend enum read is gone — `/me` (P3b additive), onboarding/invite-accept/bootstrap still legitimately write the enum rows; `0008` downgrade restores the enum-reading OR-form so the enum columns must exist while `0008` is reversible): drop `platform_users.role` + `tenant_memberships.role` columns + the `platform_role`/`tenant_role` enum types via a new migration.
-4. **Legacy `users-page.tsx` cleanup** (P6d follow-up): the platform-invites UI in `apps/web/src/components/users-page.tsx` is no longer mounted by any route (replaced by `<PlatformUsersPage>` at `/platform/users`). Either fold platform-invite UI back into `<PlatformUsersPage>` as a tab/section, or delete the orphaned file once a replacement path for platform-invite management is decided.
-5. **Smaller backlog items** (status as of 2026-05-23):
-   - ~~Narrow `except Exception` blocks in invite services~~ — **DRAINED by #23**.
-   - ~~`grant_role` (`rbac/grants.py`) `ON CONFLICT DO NOTHING` + Postgres NULLS DISTINCT~~ — **DRAINED by #24** (pre-SELECT pattern with `IS NOT DISTINCT FROM`).
-   - ~~`DELETE /api/platform/users/{user_id}/roles/{grant_id}` consistency polish~~ — **DRAINED by #23**.
-   - ~~P5 `grant_workspace_role` concurrent-duplicate-grant race~~ — **DRAINED by #24** (`INSERT ... ON CONFLICT DO NOTHING RETURNING` + fallback SELECT).
-   - **`gotrue` → `supabase_auth` migration** — STILL DEFERRED, now bigger-than-polish. Attempted during the #24 session; reverted because `supabase 2.10` still imports `gotrue` internally, so a naked import-swap would NOT remove the deprecation warning (it still fires from `supabase`'s `__init__.py`). The real fix requires upgrading `supabase` to `>=2.20` which transitively requires `pydantic >= 2.10` — current pin is `~= 2.9.0`, used pervasively across schemas. **Path forward:** dedicated PR for a coordinated `supabase + pydantic` major-minor upgrade with full backend pytest re-verification. ~1-2 hr of focused work; not blocking new-feature work.
+The 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md`) covers 60 findings across 6 phases. PAR-A merged here. Five remaining:
 
-### Pre-existing `main` debt (unchanged, not from any phase)
+1. **PAR-B — DB pool + JWKS + observability** (next dispatch). Closes C3, H7, M13, M14, L1, L2, L16. Supavisor pooler in prod (port 6543, `poolclass=NullPool`) + sized pool in dev; `statement_timeout=5000` + `idle_in_transaction_session_timeout=10000` + asyncpg `statement_cache_size=0`; SQLAlchemy `checkin` listener resets `app.actor_id` and `app.bypass_priv_escalation`; JWKS hardened (module-level `httpx.AsyncClient`, refetch-on-unknown-kid, stale-grace fallback); global exception handler + structlog + request-ID middleware; `/health/live` + `/health/ready` split; explicit CORS allow lists with `max_age=600`; 1MB request-body cap. **Depends on PAR-A merge.**
+2. **PAR-C — RBAC defense-in-depth**. Migration `0010`: separate `xtrusio_reconciler` DB role (bypass GUC role-gated; `RECONCILE_DATABASE_URL` env var), trigger broadened to `INSERT OR UPDATE`, `granted_by NOT NULL` with system sentinel, CHECK pinning super_admin role id, workspace-owner floor trigger (`BEFORE DELETE` with `SELECT … FOR UPDATE` on owner roles), `set_updated_at()` gains `SET search_path`, `tenant_memberships` RLS split into per-action policies. `_set_actor` lifts to a FastAPI dependency. `grant_platform_role` wraps INSERT in `try/except IntegrityError → SingleSuperAdminError` (C5/M3). **Depends on PAR-B (checkin listener seam).**
+3. **PAR-D — Backend services + perf**. Caller-owns transaction convention across all services; invite-email outbox table + worker; `/me` batched perm query; `rbac_audit_log` indexes (`CONCURRENTLY`); IntegrityError inspection (`e.orig.constraint_name`) before mapping; cursor row-comparator + HMAC signing; onboarding `pg_advisory_xact_lock`; case-insensitive email lookup; reconcile under `pg_try_advisory_lock`; Valkey permission cache (30s TTL + invalidation on grant/revoke); polish (single-statement role UPDATE, `SELECT FOR UPDATE` on invite revoke, structured logging on Supabase delete failures, `get_settings` name unshadow). **Depends on PAR-C (perm-cache invalidation hooks tie into grant/revoke).**
+4. **PAR-E — Frontend correctness**. Cache + last-workspace clear on `SIGNED_OUT`; `apiFetch` AbortController + timeout + 401 refresh-or-signout; pagination migration to `useInfiniteQuery`; `qk` registry expansion (5 missing factories + tuple-shape reconciliation) + ESLint ban on inline queryKey literals; TanStack Router `beforeLoad` for perm gating; `<ScopedRolesPage>`/`<ScopedInviteDialog>`/`<ScopedGrantManagerBody>` dedup; accept-invite via router `loader`; Toaster lifted out of AuthGuard; `getSession()` `.catch` (M23) + module-scope session cache (L10); routeTree.gen.ts eslint ignore. **Parallels PAR-D (no shared files).**
+5. **PAR-F — CI + testing + migrations**. Ephemeral Postgres in CI (`services: postgres:` + SAVEPOINT rollback per test); Playwright smoke (sign-in → roles CRUD → audit log); MSW for component tests; OpenAPI codegen (full replace of `packages/api-types/src/*.ts` mirrors, drift gate in CI); `bootstrap.py` test via mocked Supabase admin; pip-audit + pnpm audit + Dependabot + gitleaks + CodeQL + coverage gate (70/60, monthly ratchet); migration 0008 ordering-assert; `docs/superpowers/migration-style.md` (CONCURRENTLY indexes, two-step NOT NULL, batched backfill); pre-push hook for mypy/typecheck; `mise.toml` patch-pin; `Tenant.created_by` ORM-level FK; `docker-compose.local.yml` for contributor-local Postgres. **Lands last; gates everything PAR-D/E shipped.**
 
-- Managed DB `platform_settings.signups_enabled` live state → `tests/routes/test_signup.py::{test_signup_status_default_false,test_signup_disabled_returns_403}` env-flaky (pass/fail by state).
-- Shared-DB mid-run pollution fragility → ALWAYS `make test-clean` before a gate run; serialized DB access.
+**Locked decisions (PAR spec §14):** Supavisor in prod / direct in dev; Valkey rate-limit backend in BOTH dev and prod (no in-memory fallback); 30s perm-cache TTL; brief-lock migration 0010 backfill (pre-launch DB); full OpenAPI codegen replace; Playwright on every push; 70/60 coverage with monthly ratchet.
+
+**🔒 LATE cleanup (unchanged from 2026-05-23):** drop `platform_users.role` + `tenant_memberships.role` enum columns + the `platform_role`/`tenant_role` enum types via a new migration — only after every backend enum read is gone and `0008` is no longer reversible.
+
+**Legacy `users-page.tsx` cleanup (P6d follow-up, unchanged):** orphan file in `apps/web/src/components/users-page.tsx`; superseded by `<PlatformUsersPage>` at `/platform/users`. Decide whether to fold platform-invite management into PlatformUsersPage as a tab/section or delete the orphan.
+
+**`gotrue` → `supabase_auth` migration (unchanged):** still deferred — requires coordinated `supabase + pydantic` major-minor upgrade. Not blocking PAR phases.
+
+### Pre-existing `main` debt (unchanged, not from any phase — all tracked under PAR-F or PAR-D)
+
+- Managed DB `platform_settings.signups_enabled` live state → `tests/routes/test_signup.py::{test_signup_status_default_false,test_signup_disabled_returns_403}` env-flaky (pass/fail by state). **Tracked: PAR-F M19** — quarantine via `@pytest.mark.xfail` then redesign with a per-test `platform_settings` fixture.
+- Shared-DB mid-run pollution fragility → ALWAYS `make test-clean` before a gate run; serialized DB access. **Tracked: PAR-F H12** — ephemeral Postgres `services: postgres:` in CI + SAVEPOINT-per-test rollback removes the shared-state assumption entirely.
 
 ### Still USER-DRIVEN, never agent-run
 
@@ -68,10 +69,18 @@ Browser/e2e smokes needing real `.env` + `make dev`/OrbStack + real inboxes.
 
 ### Branches on origin
 
-All feature/polish branches deleted post-merge (cleanup done 2026-05-23). `main` is the only branch.
+All feature/polish branches deleted post-merge. `par-a-auth-perimeter` branch retired this push (commits squash-pushed onto `main`). `main` is again the only branch.
 
 ---
 
 ## Durable record
 
-Specs: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (RBAC engine), `docs/superpowers/specs/2026-05-22-rbac-p6c-admin-uis-design.md` (P6c + P6d scope split). Plans: `docs/superpowers/plans/2026-05-1{7,8,9}-rbac-*.md` (P1, P6a, P2, P3a, P3b, P3c), `docs/superpowers/plans/2026-05-20-rbac-p4-platform-admin.md`, `docs/superpowers/plans/2026-05-20-type-the-tests.md`, `docs/superpowers/plans/2026-05-21-rbac-p5-workspace-admin.md`, `docs/superpowers/plans/2026-05-21-rbac-p6b-frontend-shells.md`, `docs/superpowers/plans/2026-05-22-rbac-p6c-slice-{1,2,3}-*.md`, `docs/superpowers/plans/2026-05-23-rbac-p6d-admin-surface-completion.md`. PR bodies live alongside as `docs/superpowers/PR-rbac-*-body.md`. Persistent memory at `~/.claude/projects/-Users-jpsingh-Developer-Projects-xtrusio/memory/` is machine-local (does NOT travel) — this HANDOFF + spec + plans are the cross-machine record.
+**RBAC specs:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (RBAC engine), `docs/superpowers/specs/2026-05-22-rbac-p6c-admin-uis-design.md` (P6c + P6d scope split).
+
+**PAR remediation spec (new, 2026-05-26):** `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` — 60-finding audit response in 6 phases (A–F). §14 lists the locked decisions; §11 the sequencing; §12 the per-phase acceptance gates. PAR-A merged on this push; PAR-B is the next dispatch.
+
+**RBAC plans:** `docs/superpowers/plans/2026-05-1{7,8,9}-rbac-*.md` (P1, P6a, P2, P3a, P3b, P3c), `docs/superpowers/plans/2026-05-20-rbac-p4-platform-admin.md`, `docs/superpowers/plans/2026-05-20-type-the-tests.md`, `docs/superpowers/plans/2026-05-21-rbac-p5-workspace-admin.md`, `docs/superpowers/plans/2026-05-21-rbac-p6b-frontend-shells.md`, `docs/superpowers/plans/2026-05-22-rbac-p6c-slice-{1,2,3}-*.md`, `docs/superpowers/plans/2026-05-23-rbac-p6d-admin-surface-completion.md`.
+
+**PR bodies:** alongside as `docs/superpowers/PR-rbac-*-body.md`.
+
+**Persistent memory** at `~/.claude/projects/-Users-jpsingh-Developer-Projects-xtrusio/memory/` is machine-local (does NOT travel) — this HANDOFF + specs + plans are the cross-machine record.

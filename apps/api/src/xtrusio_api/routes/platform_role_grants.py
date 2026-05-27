@@ -7,6 +7,7 @@ service layer (and are also defense-in-depth-enforced by the 0009 DB trigger).
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -33,6 +34,8 @@ from ..services.platform_role_grants import (
     list_platform_role_grants,
     revoke_platform_role_grant,
 )
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/platform/users", tags=["platform-role-grants"])
 
@@ -88,10 +91,18 @@ async def create_grant(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "role_scope_mismatch") from e
     except PrivilegeEscalationError as e:
         await db.rollback()
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            f"privilege_escalation: {e.missing_perm_key}",
-        ) from e
+        # PAR-A M22: sanitize the response body — the missing perm key is a
+        # leak of the internal RBAC graph (lets an attacker enumerate what
+        # they'd need to escalate). Keep the perm key on the exception for
+        # server-side logging only.
+        _log.warning(
+            "privilege_escalation",
+            extra={
+                "actor_id": str(user.user_id),
+                "missing_perm_key": e.missing_perm_key,
+            },
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     except SingleSuperAdminError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "single_super_admin_invariant") from e
@@ -123,8 +134,16 @@ async def delete_grant(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "role_scope_mismatch") from e
     except PrivilegeEscalationError as e:
         await db.rollback()
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            f"privilege_escalation: {e.missing_perm_key}",
-        ) from e
+        # PAR-A M22: sanitize the response body — the missing perm key is a
+        # leak of the internal RBAC graph (lets an attacker enumerate what
+        # they'd need to escalate). Keep the perm key on the exception for
+        # server-side logging only.
+        _log.warning(
+            "privilege_escalation",
+            extra={
+                "actor_id": str(user.user_id),
+                "missing_perm_key": e.missing_perm_key,
+            },
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     return Response(status_code=status.HTTP_204_NO_CONTENT)

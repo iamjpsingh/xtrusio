@@ -97,10 +97,11 @@ async def test_owner_invites_admin_full_flow(
     )
     await db_session.commit()
     try:
-        # 4. Invitee accepts.
+        # 4. Invitee accepts. PAR-A C2: invite ids live in app_metadata
+        # (service-role-only writable), not user_metadata.
         token = make_jwt(
             sub=invitee_id,
-            user_metadata={
+            app_metadata={
                 "tenant_invite_id": invite_id,
                 "tenant_id": str(tid),
                 "tenant_role": "admin",

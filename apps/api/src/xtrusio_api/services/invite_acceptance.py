@@ -120,10 +120,18 @@ async def _accept_tenant(
 
 
 async def accept_invite(
-    db: AsyncSession, *, user_id: UUID, email: str, user_metadata: dict[str, Any]
+    db: AsyncSession, *, user_id: UUID, email: str, app_metadata: dict[str, Any]
 ) -> dict[str, Any]:
-    platform_invite_id = user_metadata.get("platform_invite_id")
-    tenant_invite_id = user_metadata.get("tenant_invite_id")
+    """Read invite ids from ``app_metadata`` (PAR-A C2).
+
+    The token's ``user_metadata`` claim is writable by the user's own access
+    token (PUT /auth/v1/user) — accepting an invite id from there meant any
+    confirmed user could forge ``platform_invite_id`` / ``tenant_invite_id``
+    on themselves and self-promote. ``app_metadata`` is service-role-only
+    writable, so the invitee cannot forge it.
+    """
+    platform_invite_id = app_metadata.get("platform_invite_id")
+    tenant_invite_id = app_metadata.get("tenant_invite_id")
     if platform_invite_id:
         try:
             pid = UUID(str(platform_invite_id))

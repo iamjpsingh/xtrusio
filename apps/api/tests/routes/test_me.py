@@ -195,9 +195,10 @@ async def test_me_with_pending_platform_invite(
     )
     await db_session.commit()
     try:
+        # PAR-A C2: invite ids live in app_metadata (service-role only).
         token = make_jwt(
             sub=user_id,
-            user_metadata={"platform_invite_id": str(invite_id), "platform_role": "admin"},
+            app_metadata={"platform_invite_id": str(invite_id), "platform_role": "admin"},
         )
         r = await http_client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200

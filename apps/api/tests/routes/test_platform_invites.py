@@ -112,7 +112,10 @@ async def test_create_invite_happy_path(
     db_session: AsyncSession,
 ) -> None:
     token = make_jwt(sub=existing_super_admin.id)
-    mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
+    sb_uid = str(uuid4())
+    mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
+        user=MagicMock(id=sb_uid)
+    )
     r = await http_client.post(
         "/api/platform/users/invites",
         headers={"Authorization": f"Bearer {token}"},
@@ -122,11 +125,17 @@ async def test_create_invite_happy_path(
     body = r.json()
     assert body["email"] == "newadmin@example.com"
     assert body["role"] == "admin"
-    mock_supabase_admin.auth.admin.invite_user_by_email.assert_called_once()
-    args, kwargs = mock_supabase_admin.auth.admin.invite_user_by_email.call_args
-    assert args[0] == "newadmin@example.com"
-    assert kwargs["data"]["platform_invite_id"] == body["id"]
-    assert kwargs["data"]["platform_role"] == "admin"
+    # PAR-A C2: invite_user_by_email is called WITHOUT a ``data=`` kwarg
+    # (which would write to user_metadata); the claims are written to
+    # app_metadata via a follow-up update_user_by_id call.
+    mock_supabase_admin.auth.admin.invite_user_by_email.assert_called_once_with(
+        "newadmin@example.com"
+    )
+    mock_supabase_admin.auth.admin.update_user_by_id.assert_called_once()
+    upd_args, _ = mock_supabase_admin.auth.admin.update_user_by_id.call_args
+    assert upd_args[0] == sb_uid
+    assert upd_args[1]["app_metadata"]["platform_invite_id"] == body["id"]
+    assert upd_args[1]["app_metadata"]["platform_role"] == "admin"
     await db_session.execute(
         text("DELETE FROM platform_invites WHERE email = :e"), {"e": "newadmin@example.com"}
     )
