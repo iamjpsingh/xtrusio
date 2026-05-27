@@ -108,8 +108,11 @@ async def test_owner_invites_admin(
     mock_supabase_admin: MagicMock,
 ) -> None:
     user_id, tid = await _seed_owner(db_session)
+    sb_uid = str(uuid4())
     try:
-        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
+        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
+            user=MagicMock(id=sb_uid)
+        )
         token = make_jwt(sub=user_id)
         r = await http_client.post(
             f"/api/tenants/{tid}/invites",
@@ -120,12 +123,17 @@ async def test_owner_invites_admin(
         body = r.json()
         assert body["role"] == "admin"
         assert body["tenant_id"] == str(tid)
-        assert mock_supabase_admin.auth.admin.invite_user_by_email.called
-        args, kwargs = mock_supabase_admin.auth.admin.invite_user_by_email.call_args
-        assert args[0] == "alice@example.com"
-        assert kwargs["data"]["tenant_invite_id"] == body["id"]
-        assert kwargs["data"]["tenant_id"] == str(tid)
-        assert kwargs["data"]["tenant_role"] == "admin"
+        # PAR-A C2: invite_user_by_email is called without ``data=`` (which
+        # writes user_metadata); claims go to app_metadata via update_user_by_id.
+        mock_supabase_admin.auth.admin.invite_user_by_email.assert_called_once_with(
+            "alice@example.com"
+        )
+        mock_supabase_admin.auth.admin.update_user_by_id.assert_called_once()
+        upd_args, _ = mock_supabase_admin.auth.admin.update_user_by_id.call_args
+        assert upd_args[0] == sb_uid
+        assert upd_args[1]["app_metadata"]["tenant_invite_id"] == body["id"]
+        assert upd_args[1]["app_metadata"]["tenant_id"] == str(tid)
+        assert upd_args[1]["app_metadata"]["tenant_role"] == "admin"
     finally:
         await _cleanup(db_session, user_id)
 

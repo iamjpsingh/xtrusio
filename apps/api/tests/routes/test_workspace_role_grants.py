@@ -155,8 +155,8 @@ async def test_post_403_privilege_escalation(
         json={"role_id": str(owner_role)},
     )
     assert res.status_code == 403, res.text
-    assert res.json()["detail"].startswith("privilege_escalation:")
-    assert "workspace.roles.manage" in res.json()["detail"]
+    # PAR-A M22: sanitized body — no perm key leak.
+    assert res.json()["detail"] == "privilege_escalation"
 
 
 async def test_delete_204_happy(http_client: AsyncClient, make_jwt: Callable[..., str]) -> None:

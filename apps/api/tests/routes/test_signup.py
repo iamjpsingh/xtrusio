@@ -1,4 +1,10 @@
-"""Tests for /api/signup and /api/signup-status."""
+"""Tests for /api/signup and /api/signup-status.
+
+PAR-A H8: /signup no longer distinguishes "new email" from "email taken" in
+its response — the previous ``409 email_taken`` branch is replaced by a
+silent password-reset side effect (the legitimate account-holder still gets
+an actionable email, no signal leaks to the caller).
+"""
 
 from __future__ import annotations
 
@@ -96,12 +102,15 @@ async def test_signup_happy_path_calls_supabase(
         )
 
 
-async def test_signup_email_taken_returns_409(
+async def test_signup_email_taken_silently_sends_reset(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
     make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
+    """PAR-A H8: an email that already exists must NOT yield a 409 (oracle).
+    The response is identical to the happy path; the side-effect changes to a
+    password-reset email instead of an invite/confirmation."""
     token = make_jwt(sub=existing_super_admin.id)
     await http_client.put(
         "/api/platform/settings",
@@ -115,8 +124,13 @@ async def test_signup_email_taken_returns_409(
         r = await http_client.post(
             "/api/signup", json={"email": "taken@example.com", "password": "Password1!"}
         )
-        assert r.status_code == 409
-        assert r.json()["detail"] == "email_taken"
+        assert r.status_code == 202
+        assert r.json() == {"state": "confirm_email_sent"}
+        # Crucial: the public-API response is INDISTINGUISHABLE from the
+        # happy path; only the server side-effect differs.
+        mock_supabase_admin.auth.reset_password_for_email.assert_called_once_with(
+            "taken@example.com"
+        )
     finally:
         await http_client.put(
             "/api/platform/settings",

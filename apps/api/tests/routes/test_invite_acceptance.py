@@ -36,7 +36,7 @@ async def test_no_invite_in_metadata_returns_403(
     await _insert_auth_user(db_session, user_id, f"x-{user_id.hex[:8]}@example.com")
     await db_session.commit()
     try:
-        token = make_jwt(sub=user_id, user_metadata={})
+        token = make_jwt(sub=user_id, app_metadata={})
         r = await http_client.post(
             "/api/invites/accept", headers={"Authorization": f"Bearer {token}"}
         )
@@ -76,7 +76,7 @@ async def test_accept_platform_invite_happy_path(
     try:
         token = make_jwt(
             sub=user_id,
-            user_metadata={"platform_invite_id": str(invite_id), "platform_role": "admin"},
+            app_metadata={"platform_invite_id": str(invite_id), "platform_role": "admin"},
         )
         r = await http_client.post(
             "/api/invites/accept", headers={"Authorization": f"Bearer {token}"}
@@ -134,7 +134,7 @@ async def test_expired_invite_returns_403(
     try:
         token = make_jwt(
             sub=user_id,
-            user_metadata={"platform_invite_id": str(invite_id), "platform_role": "editor"},
+            app_metadata={"platform_invite_id": str(invite_id), "platform_role": "editor"},
         )
         r = await http_client.post(
             "/api/invites/accept", headers={"Authorization": f"Bearer {token}"}
@@ -200,7 +200,7 @@ async def test_accept_tenant_invite_happy_path(
     try:
         token = make_jwt(
             sub=user_id,
-            user_metadata={"tenant_invite_id": str(invite_id), "tenant_id": str(tid)},
+            app_metadata={"tenant_invite_id": str(invite_id), "tenant_id": str(tid)},
         )
         r = await http_client.post(
             "/api/invites/accept", headers={"Authorization": f"Bearer {token}"}

@@ -417,8 +417,10 @@ async def test_post_403_privilege_escalation(
             json={"role_id": str(custom_role_id)},
         )
         assert res.status_code == 403, res.text
-        assert res.json()["detail"].startswith("privilege_escalation:")
-        assert "platform.roles.manage" in res.json()["detail"]
+        # PAR-A M22: response body is the bare constant — the missing perm
+        # key stays server-side only (logged), never returned to the client
+        # (which would leak the internal RBAC graph).
+        assert res.json()["detail"] == "privilege_escalation"
     finally:
         await _cleanup_grant(actor_grant_id)
         await _cleanup_role(custom_role_id)

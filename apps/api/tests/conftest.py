@@ -122,24 +122,53 @@ def _patch_jwks(jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(_auth_mod, "_fetch_jwks", _fake_fetch)
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limiter() -> Iterator[None]:
+    """PAR-A H8: SlowAPI is wired to Valkey for the request path; disabling
+    it during functional tests prevents counter pollution in the shared
+    Valkey instance and avoids 429s in serial test runs that share an IP.
+
+    The DEDICATED rate-limit tests (test_rate_limit.py) read the limiter
+    *configuration* (route-limit registry), not its runtime behaviour, so
+    flipping ``enabled = False`` does not weaken those assertions.
+    """
+    from xtrusio_api.core.rate_limit import limiter
+
+    prev = limiter.enabled
+    limiter.enabled = False
+    try:
+        yield
+    finally:
+        limiter.enabled = prev
+
+
 @pytest.fixture
 def make_jwt(jwks_keypair: dict[str, Any]) -> Iterator[Callable[..., str]]:
-    """Factory: mint a Supabase-shaped JWT signed with the test private key."""
+    """Factory: mint a Supabase-shaped JWT signed with the test private key.
+
+    PAR-A C1: tokens MUST include ``iss`` (issuer pinned to
+    ``<supabase_url>/auth/v1``) and may include ``user_metadata`` or
+    ``app_metadata`` (the latter is what invite acceptance reads after C2)."""
+    from xtrusio_api.core.config import get_settings
 
     def _factory(
         *,
         sub: UUID,
         expired: bool = False,
         user_metadata: dict[str, Any] | None = None,
+        app_metadata: dict[str, Any] | None = None,
     ) -> str:
         now = int(time.time())
+        cfg = get_settings()
         payload: dict[str, Any] = {
             "sub": str(sub),
             "aud": "authenticated",
+            "iss": f"{cfg.supabase_url.rstrip('/')}/auth/v1",
             "role": "authenticated",
             "iat": now,
             "exp": now - 60 if expired else now + 3600,
             "user_metadata": user_metadata or {},
+            "app_metadata": app_metadata or {},
         }
         token: str = jwt.encode(
             payload,
