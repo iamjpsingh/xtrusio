@@ -63,4 +63,5 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "ml: marks tests requiring ML models (deselect with '-m \"not ml\"')",
     "perf: marks performance benchmarks (deselect with '-m \"not perf\"')",
+    "no_jwks_patch: opt out of the autouse JWKS-fetcher monkeypatch (PAR-B)",
 ]

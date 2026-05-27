@@ -108,18 +108,31 @@ def jwks_keypair() -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True)
-def _patch_jwks(jwks_keypair: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace the live JWKS fetcher with one that returns our test JWKS."""
+def _patch_jwks(
+    request: pytest.FixtureRequest,
+    jwks_keypair: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replace the live JWKS HTTP fetcher with one that returns our test JWKS.
+
+    PAR-B H7: patch the LOWER layer (``_fetch_jwks_uncached``) so the
+    in-process caching wrapper still runs — rotation/stale-grace tests need
+    that wrapper's behaviour. Tests that want full control over the cache
+    can mark themselves ``@pytest.mark.no_jwks_patch`` to opt out of this
+    autouse hook entirely.
+    """
     from xtrusio_api.core import auth as _auth_mod
 
     _auth_mod._JWKS_CACHE.clear()
+    if request.node.get_closest_marker("no_jwks_patch"):
+        return
 
     jwks: dict[str, Any] = jwks_keypair["jwks"]
 
-    async def _fake_fetch(url: str) -> dict[str, Any]:
+    async def _fake_uncached(url: str) -> dict[str, Any]:
         return jwks
 
-    monkeypatch.setattr(_auth_mod, "_fetch_jwks", _fake_fetch)
+    monkeypatch.setattr(_auth_mod, "_fetch_jwks_uncached", _fake_uncached)
 
 
 @pytest.fixture(autouse=True)

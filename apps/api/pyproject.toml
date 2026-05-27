@@ -17,6 +17,7 @@ dependencies = [
     "typer~=0.13.0",
     "slowapi~=0.1.9",
     "limits[redis]~=5.8.0",
+    "structlog~=24.4.0",
 ]
 
 [dependency-groups]
