@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     )
 
     process_role: str = Field(alias="XTRUSIO_PROCESS_ROLE")
+    # PAR-B: environment flag ("dev" / "prod" / "test"). Gates the prod-only
+    # pooler-hostname assertion and stricter logging in main.py.
+    env: str = Field(alias="XTRUSIO_ENV")
 
     database_url: str = Field(alias="DATABASE_URL")
     valkey_url: str = Field(alias="VALKEY_URL")
@@ -49,7 +52,23 @@ class Settings(BaseSettings):
     # Network / tuning — every environment-varying value comes from .env.
     jwks_ttl_sec: float = Field(alias="JWKS_TTL_SEC")
     jwks_fetch_timeout_sec: float = Field(alias="JWKS_FETCH_TIMEOUT_SEC")
+    # PAR-B H7: how long the verifier may serve a stale JWKS doc when the
+    # upstream fetch fails. Bounded blast radius for a key-rotation outage.
+    jwks_stale_grace_sec: float = Field(alias="JWKS_STALE_GRACE_SEC")
     supabase_timeout_sec: float = Field(alias="SUPABASE_TIMEOUT_SEC")
+
+    # PAR-B C3: server-side statement / idle-in-transaction timeouts pushed
+    # into the asyncpg connection via ``connect_args``. Read from .env so an
+    # operator can tune per-environment without code changes.
+    db_statement_timeout_ms: int = Field(alias="DB_STATEMENT_TIMEOUT_MS")
+    db_idle_in_tx_timeout_ms: int = Field(alias="DB_IDLE_IN_TX_TIMEOUT_MS")
+    db_pool_size: int = Field(alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(alias="DB_MAX_OVERFLOW")
+    db_pool_recycle_sec: int = Field(alias="DB_POOL_RECYCLE_SEC")
+    db_pool_timeout_sec: int = Field(alias="DB_POOL_TIMEOUT_SEC")
+
+    # PAR-B L16: hard cap on request body size before Pydantic.
+    max_request_body_bytes: int = Field(alias="MAX_REQUEST_BODY_BYTES")
 
     log_level: str = Field(alias="LOG_LEVEL")
 

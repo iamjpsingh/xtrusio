@@ -1,19 +1,38 @@
-"""FastAPI application entrypoint."""
+"""FastAPI application entrypoint.
+
+PAR-B operational hardening (M13, M14, L1, L2, L16):
+  - structlog configured first thing in the lifespan
+  - request-id middleware so every log line + error body carries the id
+  - body-size cap before Pydantic
+  - explicit CORS allow lists + max_age
+  - global exception handler so 500s share a stable response shape
+  - JWKS httpx client closed on shutdown
+  - prod-only warning when ``DATABASE_URL`` doesn't point at the pooler
+"""
 
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .core.auth import close_jwks_client
 from .core.config import get_settings
 from .core.db import SessionLocal
+from .core.logging import configure_logging, get_logger
+from .core.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from .core.rate_limit import limiter
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
+from .routes import health as health_routes
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
 from .routes import onboarding as onboarding_routes
@@ -36,27 +55,44 @@ from .routes import workspace_settings as workspace_settings_routes
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
+    log = get_logger(__name__)
     settings = get_settings()
+
+    # PAR-B C3: production sanity check. The direct-DB hostname can be retired
+    # by Supabase under-the-hood (paid projects are not exempt — observed
+    # 2026-05-26 on this project); warning at boot makes a misconfig visible
+    # in the very first log line rather than at first inbound request.
+    if settings.env == "prod" and ".pooler.supabase.com" not in settings.database_url:
+        log.warning(
+            "database_url_not_pooler",
+            hint="prod should point DATABASE_URL at *.pooler.supabase.com",
+        )
+
     try:
         async with SessionLocal() as _s:
             await reconcile_rbac(_s)
         async with SessionLocal() as _s:
             await reconcile_user_roles_from_enums(_s)
     except Exception:
-        import logging
-
-        log = logging.getLogger(__name__)
         if settings.startup_reconcile_tolerant:
-            log.exception("rbac reconcile on startup failed (tolerant mode, continuing)")
+            log.exception("rbac_reconcile_failed_tolerant")
         else:
-            log.exception("rbac reconcile on startup failed — failing fast")
+            log.exception("rbac_reconcile_failed_fail_fast")
             raise
-    yield
+
+    try:
+        yield
+    finally:
+        # PAR-B H7: close the JWKS httpx client cleanly on shutdown so asyncio
+        # doesn't warn about an unclosed transport in unit tests / hot reload.
+        await close_jwks_client()
 
 
 app = FastAPI(title="Xtrusio API", version="0.0.0", lifespan=lifespan)
 
-# PAR-A H8: rate limiting (SlowAPI + Valkey).
+# PAR-A H8: rate limiting (SlowAPI + Valkey). Order matters — the limiter must
+# be registered before route includes so decorated routes see ``app.state``.
 app.state.limiter = limiter
 # slowapi's _rate_limit_exceeded_handler signature is narrower than starlette's
 # expected ``(Request, Exception) -> Response``; cast is safe because Starlette
@@ -64,12 +100,69 @@ app.state.limiter = limiter
 # handler before the type signature is enforced.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
+
+# PAR-B M13: global exception handlers — every error response carries the
+# request_id so a user-reported error can be traced in logs without
+# guesswork. The handlers run AFTER the request-id middleware has populated
+# ``request.state.request_id``.
+@app.exception_handler(StarletteHTTPException)
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    rid: str | None = getattr(request.state, "request_id", None)
+    detail: Any = exc.detail
+    return JSONResponse(
+        {"detail": detail, "request_id": rid},
+        status_code=exc.status_code,
+        headers={"X-Request-ID": rid} if rid else None,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    rid: str | None = getattr(request.state, "request_id", None)
+    # PAR-B M13: ``exc.errors()`` can carry non-JSON-serialisable values
+    # (e.g. ``ValueError`` instances Pydantic threads through ``ctx``).
+    # ``jsonable_encoder`` turns them into a portable shape — same path
+    # FastAPI's stock validation handler uses.
+    return JSONResponse(
+        {"detail": jsonable_encoder(exc.errors()), "request_id": rid},
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        headers={"X-Request-ID": rid} if rid else None,
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    rid: str | None = getattr(request.state, "request_id", None)
+    log = get_logger(__name__)
+    log.exception("unhandled_exception", exc_type=type(exc).__name__, request_id=rid)
+    return JSONResponse(
+        {"detail": "internal_server_error", "request_id": rid},
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        headers={"X-Request-ID": rid} if rid else None,
+    )
+
+
+# Middleware order matters in Starlette (outermost added LAST executes
+# FIRST). We want request-id first so every other layer sees state.request_id;
+# then the body-size cap so 413s are also tagged. CORS runs as last-out so it
+# can observe and tag every response.
 app.add_middleware(
     CORSMiddleware,
+    # PAR-B M14: explicit allow lists, no wildcards; preflight cache 10 min;
+    # expose X-Request-ID so the SPA can pick it up for sentry breadcrumbs.
     allow_origins=get_settings().cors_allow_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
+    max_age=600,
 )
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=get_settings().max_request_body_bytes)
+app.add_middleware(RequestIdMiddleware)
+
+# Health probes register before any router that may itself be rate-limited so
+# the orchestrator's probes never trip a limit.
+app.include_router(health_routes.router)
+
 app.include_router(me_routes.router)
 app.include_router(tenants_routes.router)
 app.include_router(platform_settings_routes.router)
@@ -95,8 +188,3 @@ app.include_router(workspace_members_routes.router)
 app.include_router(workspace_role_grants_routes.router)
 app.include_router(workspace_settings_routes.router)
 app.include_router(workspace_audit_log_routes.router)
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
