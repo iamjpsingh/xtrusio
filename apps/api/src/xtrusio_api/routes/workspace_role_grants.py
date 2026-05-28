@@ -12,6 +12,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import CurrentUser, get_current_user
@@ -170,4 +171,14 @@ async def delete_grant(
     except OwnerFloorError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "owner_floor") from e
+    except IntegrityError as e:
+        # H10: the service-side count pre-check has a TOCTOU window; the 0010
+        # ``trg_user_roles_owner_floor`` trigger is the real serialiser. When
+        # the slower of two concurrent owner-revokes loses the FOR-UPDATE race,
+        # the trigger raises ``last_owner`` (check_violation) on DELETE. Map it
+        # to the same 409 the service-side OwnerFloorError uses.
+        await db.rollback()
+        if "last_owner" in str(e.orig):
+            raise HTTPException(status.HTTP_409_CONFLICT, "owner_floor") from e
+        raise
     return Response(status_code=status.HTTP_204_NO_CONTENT)

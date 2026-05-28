@@ -285,12 +285,14 @@ async def revoke_workspace_role_grant(
     if missing is not None:
         raise PrivilegeEscalationError(missing)
     # ≥1-owner floor: only matters if this grant is the workspace owner system
-    # role. Counting BEFORE the delete and requiring count > 1 enforces the
-    # invariant under any race: a concurrent revoke could only further reduce
-    # the count, but every revoke goes through this same pre-check on the same
-    # row (no two txns can both pass when count=2, because the second one sees
-    # count=1 after the first commit; READ COMMITTED is sufficient because the
-    # actor must also hold workspace.members.manage which is owner-only).
+    # role. This count-then-delete pre-check is the FRIENDLY guard (clean 409
+    # before touching the row), NOT the actual safety net: it has a TOCTOU
+    # window. ``workspace_admin`` also holds ``workspace.members.manage`` (it is
+    # NOT owner-only), so two admins can each revoke a different owner grant
+    # concurrently — both read count=2 here and both proceed. The real
+    # serialiser is the 0010 ``trg_user_roles_owner_floor`` BEFORE DELETE
+    # trigger, which takes ``SELECT … FOR UPDATE`` on the workspace owner role
+    # row and raises ``last_owner`` on the loser (mapped to 409 in the route).
     if grant["is_system"] and grant["key"] == "owner":
         owners = await _count_owner_grants(db, workspace_id=workspace_id)
         if owners <= 1:
