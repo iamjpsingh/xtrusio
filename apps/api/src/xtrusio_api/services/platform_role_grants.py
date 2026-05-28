@@ -24,6 +24,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.audit import write_audit_event
@@ -197,25 +198,35 @@ async def grant_platform_role(
     if existing is not None:
         row = existing
     else:
-        row = (
-            (
-                await db.execute(
-                    text(
-                        "INSERT INTO user_roles "
-                        "(auth_user_id, role_id, workspace_id, granted_by) "
-                        "VALUES (:u, :r, NULL, :g) "
-                        "RETURNING id, auth_user_id, role_id, granted_at, granted_by"
-                    ),
-                    {
-                        "u": str(target_user_id),
-                        "r": str(role_id),
-                        "g": str(actor_id),
-                    },
+        # C5/M3: the count pre-check above has a TOCTOU window — two concurrent
+        # super_admin grants can both pass it, then both INSERT. The 0006
+        # single-super_admin partial unique index (``user_roles_one_super_admin``)
+        # rejects the second at the DB; catch that race-to-500 and surface the
+        # same 409 the pre-check would have.
+        try:
+            row = (
+                (
+                    await db.execute(
+                        text(
+                            "INSERT INTO user_roles "
+                            "(auth_user_id, role_id, workspace_id, granted_by) "
+                            "VALUES (:u, :r, NULL, :g) "
+                            "RETURNING id, auth_user_id, role_id, granted_at, granted_by"
+                        ),
+                        {
+                            "u": str(target_user_id),
+                            "r": str(role_id),
+                            "g": str(actor_id),
+                        },
+                    )
                 )
+                .mappings()
+                .one()
             )
-            .mappings()
-            .one()
-        )
+        except IntegrityError as e:
+            if "user_roles_one_super_admin" in str(e.orig):
+                raise SingleSuperAdminError() from e
+            raise
     out = dict(row)
     await write_audit_event(
         db,
