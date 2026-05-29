@@ -18,9 +18,24 @@ class AlreadyHasMembershipError(Exception):
     pass
 
 
+# Advisory-lock namespace for onboarding (the two-int form keeps it distinct
+# from any other advisory lock, e.g. the reconcile lock). 0x4F4E = "ON".
+_ONBOARD_LOCK_NS = 0x4F4E
+
+
 async def create_tenant_with_owner(
     db: AsyncSession, *, user_id: UUID, workspace_name: str
 ) -> Tenant:
+    # PAR-D M6: serialise concurrent onboards for the SAME user. Two parallel
+    # POST /onboarding/tenants both passed the membership existence-check below
+    # and each created a tenant. A transaction-scoped advisory lock keyed on the
+    # user id makes the check-then-create atomic; it auto-releases at commit/
+    # rollback. Keyed per-user, so different users never block each other.
+    # ``user_id.int % 2**31`` fits a signed int4 (the two-int lock form).
+    await db.execute(
+        text("SELECT pg_advisory_xact_lock(:ns, :k)"),
+        {"ns": _ONBOARD_LOCK_NS, "k": user_id.int % (2**31)},
+    )
     existing = (
         await db.execute(select(TenantMembership).where(TenantMembership.user_id == user_id))
     ).scalar_one_or_none()

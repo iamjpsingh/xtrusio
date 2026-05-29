@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
+from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core.auth import close_jwks_client
@@ -30,6 +31,7 @@ from .core.config import get_settings
 from .core.db import SessionLocal
 from .core.logging import configure_logging, get_logger
 from .core.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .core.perm_cache import close_perm_cache
 from .core.rate_limit import limiter
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
 from .routes import health as health_routes
@@ -52,6 +54,11 @@ from .routes import workspace_role_grants as workspace_role_grants_routes
 from .routes import workspace_roles as workspace_roles_routes
 from .routes import workspace_settings as workspace_settings_routes
 
+# PAR-D M9: advisory-lock key gating the boot reconcile to a single process.
+# 0x52424143 = "RBAC". Reconcile is idempotent, so a missed lock only costs a
+# redundant pass (never correctness) if the pooler doesn't pin the session.
+_RECONCILE_LOCK_KEY = 0x52424143
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -70,10 +77,33 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         )
 
     try:
-        async with SessionLocal() as _s:
-            await reconcile_rbac(_s)
-        async with SessionLocal() as _s:
-            await reconcile_user_roles_from_enums(_s)
+        # PAR-D M9: gate the boot reconcile behind a session-level advisory lock
+        # held on a dedicated connection so only one process runs it when N
+        # workers boot together. The reconciles run on separate sessions (each
+        # self-commits); the lock connection stays open around both and is
+        # released in the finally.
+        async with SessionLocal() as lock_s:
+            got = bool(
+                (
+                    await lock_s.execute(
+                        text("SELECT pg_try_advisory_lock(:k)"),
+                        {"k": _RECONCILE_LOCK_KEY},
+                    )
+                ).scalar_one()
+            )
+            if not got:
+                log.info("rbac_reconcile_skipped_lock_held")
+            else:
+                try:
+                    async with SessionLocal() as _s:
+                        await reconcile_rbac(_s)
+                    async with SessionLocal() as _s:
+                        await reconcile_user_roles_from_enums(_s)
+                finally:
+                    await lock_s.execute(
+                        text("SELECT pg_advisory_unlock(:k)"),
+                        {"k": _RECONCILE_LOCK_KEY},
+                    )
     except Exception:
         if settings.startup_reconcile_tolerant:
             log.exception("rbac_reconcile_failed_tolerant")
@@ -87,6 +117,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # PAR-B H7: close the JWKS httpx client cleanly on shutdown so asyncio
         # doesn't warn about an unclosed transport in unit tests / hot reload.
         await close_jwks_client()
+        # PAR-D M16: close the Valkey perm-cache client likewise.
+        await close_perm_cache()
 
 
 app = FastAPI(title="Xtrusio API", version="0.0.0", lifespan=lifespan)

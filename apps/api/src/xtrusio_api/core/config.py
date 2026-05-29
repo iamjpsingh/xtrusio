@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     # cannot forge / tamper with an opaque cursor. No default — fail fast.
     cursor_hmac_key: str = Field(alias="CURSOR_HMAC_KEY")
 
+    # PAR-D M16: TTL (seconds) for the Valkey-backed effective-permission cache
+    # consumed by GET /me. Short by design — the authz gate (require_permission)
+    # is never cached, so this only bounds /me display staleness.
+    perm_cache_ttl_sec: int = Field(alias="PERM_CACHE_TTL_SEC")
+
     log_level: str = Field(alias="LOG_LEVEL")
 
     startup_reconcile_tolerant: bool = Field(alias="STARTUP_RECONCILE_TOLERANT")

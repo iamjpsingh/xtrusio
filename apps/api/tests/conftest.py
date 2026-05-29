@@ -135,6 +135,17 @@ def _patch_jwks(
     monkeypatch.setattr(_auth_mod, "_fetch_jwks_uncached", _fake_uncached)
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _clear_perm_cache() -> AsyncIterator[None]:
+    """PAR-D M16: drop the Valkey perm cache before each test so /me reads are
+    deterministic regardless of whether a real Valkey is up (clear_all is a
+    no-op when it's down) and cached perms never leak across tests."""
+    from xtrusio_api.core import perm_cache
+
+    await perm_cache.clear_all()
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _disable_rate_limiter() -> Iterator[None]:
     """PAR-A H8: SlowAPI is wired to Valkey for the request path; disabling

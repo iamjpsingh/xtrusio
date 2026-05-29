@@ -25,6 +25,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core import perm_cache
+
 
 async def grant_role(
     db: AsyncSession,
@@ -75,3 +77,6 @@ async def grant_role(
         ),
         {"u": auth_user_id, "r": role_id, "w": workspace_id, "g": granted_by},
     )
+    # PAR-D M16: the user's effective perms changed — drop the stale /me cache
+    # for the affected scope (platform when workspace_id is None).
+    await perm_cache.invalidate(auth_user_id, workspace_id)
