@@ -2,22 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from uuid import UUID
 
-import httpx
-from gotrue.errors import AuthApiError, AuthRetryableError
 from sqlalchemy import and_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from supabase import create_client
-
-from ..core.config import get_settings
 from ..core.permissions import require_permission
 from ..models.tenant_invite import TenantInvite
 from ..models.tenant_membership import TenantMembership, TenantRole
+from .invite_outbox import enqueue_invite_email
 from .invite_rules import can_invite
 
 _TTL_DAYS = 7
@@ -40,10 +34,6 @@ class InvitePendingError(Exception):
 
 
 class InviteAlreadyAcceptedError(Exception):
-    pass
-
-
-class EmailProviderUnavailableError(Exception):
     pass
 
 
@@ -127,51 +117,20 @@ async def create_tenant_invite(
     await db.flush()
     invite_id = invite.id
 
-    cfg = get_settings()
-    sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
-
-    def _call() -> Any:
-        return sb.auth.admin.invite_user_by_email(email)
-
-    try:
-        result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
-    except TimeoutError as e:
-        await db.rollback()
-        raise EmailProviderUnavailableError() from e
-    except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
-        await db.rollback()
-        raise EmailProviderUnavailableError() from e
-
-    # PAR-A C2: write invite claims to ``app_metadata`` (service-role only
-    # writable; the invitee can't forge it from their own session).
-    sb_user_id: str | None = getattr(getattr(result, "user", None), "id", None)
-    if isinstance(sb_user_id, str):
-
-        def _set_app_metadata() -> Any:
-            return sb.auth.admin.update_user_by_id(
-                sb_user_id,
-                {
-                    "app_metadata": {
-                        "tenant_invite_id": str(invite_id),
-                        "tenant_id": str(tenant_id),
-                        "tenant_role": role.value,
-                    }
-                },
-            )
-
-        try:
-            await asyncio.wait_for(
-                asyncio.to_thread(_set_app_metadata), timeout=cfg.supabase_timeout_sec
-            )
-        except TimeoutError as e:
-            await db.rollback()
-            raise EmailProviderUnavailableError() from e
-        except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
-            await db.rollback()
-            raise EmailProviderUnavailableError() from e
-
-    await db.commit()
-    await db.refresh(invite)
+    # PAR-D H5/M1: stage the invite email in the outbox (same tx as the invite
+    # row); the route commits and the worker sends it out of band. No
+    # supabase_user_id writeback — tenant invites don't track it (the invited
+    # email may belong to an already-existing Supabase user).
+    # PAR-A C2: app_metadata (service-role-only writable) carries the invite id.
+    await enqueue_invite_email(
+        db,
+        email=email,
+        app_metadata={
+            "tenant_invite_id": str(invite_id),
+            "tenant_id": str(tenant_id),
+            "tenant_role": role.value,
+        },
+    )
     return invite
 
 

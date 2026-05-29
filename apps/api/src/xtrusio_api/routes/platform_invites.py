@@ -18,7 +18,6 @@ from ..schemas.invite import (
     PlatformInvitesPage,
 )
 from ..services.platform_invites import (
-    EmailProviderUnavailableError,
     InviteAlreadyAcceptedError,
     InvitePendingError,
     UnsupportedInviteRoleError,
@@ -38,19 +37,26 @@ async def create(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformInviteResponse:
     await require_permission(db, user.user_id, "platform.users.invite")
+    # PAR-D M1: caller-owns-transaction — build the response from the live
+    # (pre-commit) ORM row, then commit; roll back on any typed error. PAR-D H5:
+    # the invite email is staged in the outbox and sent by the worker, so this
+    # path no longer makes a Supabase call (no synchronous email_provider 502).
     try:
         invite = await create_platform_invite(
             db, email=body.email, role=body.role, invited_by=user.user_id
         )
+        response = PlatformInviteResponse.model_validate(invite)
+        await db.commit()
     except UnsupportedInviteRoleError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unsupported_invite_role") from e
     except UserExistsError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "user_exists") from e
     except InvitePendingError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "invite_pending") from e
-    except EmailProviderUnavailableError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "email_provider_unavailable") from e
-    return PlatformInviteResponse.model_validate(invite)
+    return response
 
 
 @router.get("", response_model=PlatformInvitesPage)

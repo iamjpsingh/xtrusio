@@ -12,6 +12,7 @@ PAR-B operational hardening (M13, M14, L1, L2, L16):
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -31,6 +32,7 @@ from .core.config import get_settings
 from .core.db import SessionLocal
 from .core.logging import configure_logging, get_logger
 from .core.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .core.outbox_worker import run_outbox_worker
 from .core.perm_cache import close_perm_cache
 from .core.rate_limit import limiter
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
@@ -111,9 +113,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             log.exception("rbac_reconcile_failed_fail_fast")
             raise
 
+    # PAR-D H5: launch the in-process invite-email outbox worker. It polls the
+    # outbox and performs Supabase invite sends out of band of the request tx.
+    outbox_stop = asyncio.Event()
+    outbox_task = asyncio.create_task(run_outbox_worker(outbox_stop))
+
     try:
         yield
     finally:
+        # Stop the outbox worker cooperatively, then force-cancel if it overruns.
+        outbox_stop.set()
+        try:
+            await asyncio.wait_for(outbox_task, timeout=10.0)
+        except (TimeoutError, asyncio.CancelledError):
+            outbox_task.cancel()
         # PAR-B H7: close the JWKS httpx client cleanly on shutdown so asyncio
         # doesn't warn about an unclosed transport in unit tests / hot reload.
         await close_jwks_client()

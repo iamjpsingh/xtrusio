@@ -57,6 +57,11 @@ async def purge_test_data() -> dict[str, int]:
                 "tenant_invites",
                 "DELETE FROM tenant_invites WHERE email LIKE :pat",
             ),
+            (
+                # PAR-D H5: outbox rows are keyed only by their payload email.
+                "invite_email_outbox",
+                "DELETE FROM invite_email_outbox WHERE payload->>'email' LIKE :pat",
+            ),
         ]
 
         for label, sql in stmts:

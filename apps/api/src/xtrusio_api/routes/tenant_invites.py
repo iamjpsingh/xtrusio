@@ -17,7 +17,6 @@ from ..schemas.invite import (
     TenantInvitesPage,
 )
 from ..services.tenant_invites import (
-    EmailProviderUnavailableError,
     ForbiddenRoleError,
     InviteAlreadyAcceptedError,
     InvitePendingError,
@@ -38,6 +37,10 @@ async def create(
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> TenantInviteResponse:
+    # PAR-D M1: caller-owns-transaction — build the response from the live
+    # (pre-commit) ORM row, then commit; roll back on any typed error. PAR-D H5:
+    # the invite email is staged in the outbox + sent by the worker (no
+    # synchronous Supabase call here).
     try:
         invite = await create_tenant_invite(
             db,
@@ -46,17 +49,21 @@ async def create(
             email=body.email,
             role=body.role,
         )
+        response = TenantInviteResponse.model_validate(invite)
+        await db.commit()
     except NotAMemberError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
     except ForbiddenRoleError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "forbidden_role") from e
     except UserAlreadyMemberError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "user_already_member") from e
     except InvitePendingError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "invite_pending") from e
-    except EmailProviderUnavailableError as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "email_provider_unavailable") from e
-    return TenantInviteResponse.model_validate(invite)
+    return response
 
 
 @router.get("", response_model=TenantInvitesPage)
