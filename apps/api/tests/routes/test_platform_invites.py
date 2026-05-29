@@ -91,7 +91,7 @@ async def test_create_invite_platform_admin_succeeds(
         r = await http_client.post(
             "/api/platform/users/invites",
             headers={"Authorization": f"Bearer {token}"},
-            json={"email": "admin-invited@example.com", "role": "editor"},
+            json={"email": "admin-invited@example.com", "role": "admin"},
         )
         assert r.status_code == 201
         assert r.json()["email"] == "admin-invited@example.com"
@@ -100,6 +100,28 @@ async def test_create_invite_platform_admin_succeeds(
             {"e": "admin-invited@example.com"},
         )
         await db_session.commit()
+    finally:
+        await _drop_platform_user(db_session, user_id)
+
+
+async def test_create_editor_platform_invite_rejected_400(
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """PAR-D L5: 'editor' has no platform RBAC system role (accepting it would
+    create a roleless platform user), so the invite is rejected up front."""
+    user_id = await _seed_platform_user(db_session, role_key="admin")
+    try:
+        token = make_jwt(sub=user_id)
+        r = await http_client.post(
+            "/api/platform/users/invites",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"email": "editor-invited@example.com", "role": "editor"},
+        )
+        assert r.status_code == 400
+        assert r.json()["detail"] == "unsupported_invite_role"
     finally:
         await _drop_platform_user(db_session, user_id)
 
@@ -183,7 +205,7 @@ async def test_list_invites_returns_created(
     await http_client.post(
         "/api/platform/users/invites",
         headers={"Authorization": f"Bearer {token}"},
-        json={"email": "listed@example.com", "role": "editor"},
+        json={"email": "listed@example.com", "role": "admin"},
     )
     r = await http_client.get(
         "/api/platform/users/invites",
@@ -214,7 +236,7 @@ async def test_revoke_invite(
     r = await http_client.post(
         "/api/platform/users/invites",
         headers={"Authorization": f"Bearer {token}"},
-        json={"email": "rev@example.com", "role": "editor"},
+        json={"email": "rev@example.com", "role": "admin"},
     )
     invite_id = r.json()["id"]
     r = await http_client.delete(

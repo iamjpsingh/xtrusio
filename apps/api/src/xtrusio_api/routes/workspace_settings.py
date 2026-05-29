@@ -33,7 +33,7 @@ router = APIRouter(
 
 
 @router.get("", response_model=WorkspaceSettingsOut)
-async def get_settings(
+async def get_workspace_settings_route(
     workspace_id: UUID,
     user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],

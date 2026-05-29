@@ -60,8 +60,7 @@ async def list_workspace_members(
         }
         where = """
             WHERE tm.tenant_id = :wid
-              AND (tm.created_at < :ts
-                   OR (tm.created_at = :ts AND tm.id < :rid))
+              AND (tm.created_at, tm.id) < (:ts, :rid)
         """
         sql = base + where + group_order
     else:

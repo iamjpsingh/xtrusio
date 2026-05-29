@@ -43,7 +43,7 @@ async def list_workspace_audit_events(
         ts, rid = cursor
         params = {"wid": str(workspace_id), "ts": ts, "rid": rid, "lim": limit + 1}
         sql = base + (
-            "AND (r.created_at < :ts OR (r.created_at = :ts AND r.id < :rid)) "
+            "AND (r.created_at, r.id) < (:ts, :rid) "
             "ORDER BY r.created_at DESC, r.id DESC LIMIT :lim"
         )
     else:

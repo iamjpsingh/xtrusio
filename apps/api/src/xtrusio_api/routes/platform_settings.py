@@ -14,7 +14,7 @@ from ..schemas.platform_settings import (
     PlatformSettingsResponse,
     UpdatePlatformSettingsRequest,
 )
-from ..services.platform_settings import get_settings, update_settings
+from ..services.platform_settings import get_platform_settings, update_settings
 
 router = APIRouter(prefix="/api/platform/settings", tags=["platform-settings"])
 
@@ -25,7 +25,7 @@ async def read(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformSettingsResponse:
     await require_permission(db, user.user_id, "platform.settings.read")
-    row, email = await get_settings(db)
+    row, email = await get_platform_settings(db)
     return PlatformSettingsResponse(
         signups_enabled=row.signups_enabled,
         updated_at=row.updated_at,

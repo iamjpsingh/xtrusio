@@ -56,8 +56,7 @@ async def list_platform_users(
         ts, rid = cursor
         params = {"ts": ts, "rid": str(rid), "lim": limit + 1}
         where = """
-            WHERE pu.created_at < :ts
-               OR (pu.created_at = :ts AND pu.id < :rid)
+            WHERE (pu.created_at, pu.id) < (:ts, :rid)
         """
         sql = base + where + group_order
     else:

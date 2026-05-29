@@ -11,7 +11,7 @@ from ..models.platform_settings import PlatformSettings
 from ..models.platform_user import PlatformUser
 
 
-async def get_settings(db: AsyncSession) -> tuple[PlatformSettings, str | None]:
+async def get_platform_settings(db: AsyncSession) -> tuple[PlatformSettings, str | None]:
     row = (await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))).scalar_one()
     updated_by_email: str | None = None
     if row.updated_by is not None:
@@ -35,4 +35,4 @@ async def update_settings(
     row.updated_by = updated_by
     await db.commit()
     await db.refresh(row)
-    return await get_settings(db)
+    return await get_platform_settings(db)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,12 +40,7 @@ async def list_tenants(
     stmt = select(Tenant).order_by(Tenant.created_at.desc(), Tenant.id.desc())
     if decoded is not None:
         ts, rid = decoded
-        stmt = stmt.where(
-            or_(
-                Tenant.created_at < ts,
-                and_(Tenant.created_at == ts, Tenant.id < rid),
-            )
-        )
+        stmt = stmt.where(tuple_(Tenant.created_at, Tenant.id) < (ts, rid))
     stmt = stmt.limit(params.effective_limit + 1)
 
     rows = list((await db.execute(stmt)).scalars().all())

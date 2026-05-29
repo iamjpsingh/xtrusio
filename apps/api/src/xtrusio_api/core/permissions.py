@@ -85,6 +85,43 @@ async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]
     return list(rows)
 
 
+async def effective_workspace_perms_batch(
+    db: AsyncSession, user_id: UUID, workspace_ids: list[UUID]
+) -> dict[UUID, list[str]]:
+    """Effective workspace perms for MANY workspaces in ONE query (PAR-D H6).
+
+    Same catalog/grant graph as :func:`effective_workspace_perms`, but grouped
+    by ``workspace_id`` so ``/me`` resolves a 50-tenant user in a single round
+    trip instead of one query per tenant. Workspaces with no effective perms
+    are absent from the returned mapping (caller defaults to ``[]``).
+    """
+    if not workspace_ids:
+        return {}
+    rows = (
+        await db.execute(
+            text(
+                """
+                SELECT ur.workspace_id AS wid,
+                       array_agg(DISTINCT p.key ORDER BY p.key) AS perm_keys
+                FROM user_roles ur
+                JOIN roles r ON r.id = ur.role_id
+                            AND r.scope = 'workspace'
+                            AND r.workspace_id = ur.workspace_id
+                JOIN role_permissions rp ON rp.role_id = r.id
+                JOIN permissions p ON p.id = rp.permission_id
+                WHERE ur.auth_user_id = :u
+                  AND ur.workspace_id = ANY(:wids)
+                  AND p.scope = 'workspace'
+                  AND NOT p.is_deprecated
+                GROUP BY ur.workspace_id
+                """
+            ),
+            {"u": user_id, "wids": workspace_ids},
+        )
+    ).all()
+    return {row.wid: list(row.perm_keys) for row in rows}
+
+
 async def effective_workspace_perms(
     db: AsyncSession, user_id: UUID, workspace_id: UUID
 ) -> list[str]:
