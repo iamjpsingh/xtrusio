@@ -210,11 +210,14 @@ async def revoke_tenant_invite(
 ) -> None:
     await _load_membership(db, tenant_id=tenant_id, user_id=requester_id)
     await require_permission(db, requester_id, "workspace.members.manage", workspace_id=tenant_id)
+    # PAR-D L4: lock the invite row so two concurrent revokes serialise — the
+    # loser re-reads ``revoked_at`` set and no-ops idempotently instead of both
+    # racing past the early-return.
     invite = (
         await db.execute(
-            select(TenantInvite).where(
-                and_(TenantInvite.id == invite_id, TenantInvite.tenant_id == tenant_id)
-            )
+            select(TenantInvite)
+            .where(and_(TenantInvite.id == invite_id, TenantInvite.tenant_id == tenant_id))
+            .with_for_update()
         )
     ).scalar_one_or_none()
     if invite is None:

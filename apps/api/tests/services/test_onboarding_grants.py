@@ -34,6 +34,7 @@ async def test_onboarding_grants_owner_user_role() -> None:
                 s, user_id=uid, workspace_name="P3a Onboard Probe"
             )
             tid = tenant.id
+            await s.commit()  # PAR-D M1: service is now caller-owns-tx
         async with SessionLocal() as s:
             # legacy enum row STILL written (behaviour unchanged)
             m = (

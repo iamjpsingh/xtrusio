@@ -83,6 +83,7 @@ async def create_tenant_with_owner(
         key="owner",
         workspace_id=tenant.id,
     )
-    await db.commit()
-    await db.refresh(tenant)
+    # PAR-D M1: caller-owns-transaction — the route commits on success and rolls
+    # back on a typed error. ``tenant`` is flushed (id populated) but not yet
+    # committed; the route reads its attributes before committing.
     return tenant

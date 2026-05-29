@@ -33,6 +33,7 @@ async def update_settings(
     row = (await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))).scalar_one()
     row.signups_enabled = signups_enabled
     row.updated_by = updated_by
-    await db.commit()
-    await db.refresh(row)
+    # PAR-D M1: caller-owns-transaction — flush so the read-back below sees the
+    # change within this tx; the route commits.
+    await db.flush()
     return await get_platform_settings(db)

@@ -47,10 +47,15 @@ async def onboard(
         tenant = await create_tenant_with_owner(
             db, user_id=identity.user_id, workspace_name=body.workspace_name
         )
-    except AlreadyHasMembershipError as e:
-        raise HTTPException(status.HTTP_409_CONFLICT, "already_has_membership") from e
-    return CreateTenantResponse(
-        tenant=CreatedTenant(
-            id=tenant.id, slug=tenant.slug, name=tenant.name, role=TenantRole.OWNER
+        # PAR-D M1: build the response from the live (pre-commit) ORM attributes,
+        # then commit. Reading after commit would trip expire-on-commit reloads.
+        response = CreateTenantResponse(
+            tenant=CreatedTenant(
+                id=tenant.id, slug=tenant.slug, name=tenant.name, role=TenantRole.OWNER
+            )
         )
-    )
+        await db.commit()
+    except AlreadyHasMembershipError as e:
+        await db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "already_has_membership") from e
+    return response
