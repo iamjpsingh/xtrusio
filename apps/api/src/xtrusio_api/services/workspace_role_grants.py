@@ -25,6 +25,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core import perm_cache
 from ..core.audit import write_audit_event
 from ..core.pagination import encode_cursor
 
@@ -231,6 +232,7 @@ async def grant_workspace_role(
             "role_key": role["key"],
         },
     )
+    await perm_cache.invalidate(target_user_id, workspace_id)  # PAR-D M16
     return {**out, "role_key": role["key"]}
 
 
@@ -317,6 +319,7 @@ async def revoke_workspace_role_grant(
             "role_key": grant["key"],
         },
     )
+    await perm_cache.invalidate(user_id, workspace_id)  # PAR-D M16
 
 
 async def list_workspace_role_grants(

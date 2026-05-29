@@ -14,6 +14,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import perm_cache
+
 
 async def has_permission(
     db: AsyncSession, user_id: UUID, key: str, workspace_id: UUID | None = None
@@ -50,13 +52,7 @@ async def require_permission(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "permission_denied")
 
 
-async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]:
-    """Distinct, sorted platform permission keys the user effectively holds.
-
-    Resolves the same catalog/grant graph as `has_platform_perm` (a single
-    query, deprecated permissions excluded) so `/me` returns exactly what the
-    resolvers would authorize.
-    """
+async def _db_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]:
     rows = (
         (
             await db.execute(
@@ -85,16 +81,25 @@ async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]
     return list(rows)
 
 
-async def effective_workspace_perms_batch(
+async def effective_platform_perms(db: AsyncSession, user_id: UUID) -> list[str]:
+    """Distinct, sorted platform permission keys the user effectively holds.
+
+    Resolves the same catalog/grant graph as `has_platform_perm` (deprecated
+    permissions excluded) so `/me` returns exactly what the resolvers would
+    authorize. PAR-D M16: consults the Valkey cache first (display-only; the
+    authz gate is never cached). Cache errors fall through to the DB.
+    """
+    cached = await perm_cache.get_platform(user_id)
+    if cached is not None:
+        return cached
+    perms = await _db_platform_perms(db, user_id)
+    await perm_cache.set_platform(user_id, perms)
+    return perms
+
+
+async def _db_workspace_perms_batch(
     db: AsyncSession, user_id: UUID, workspace_ids: list[UUID]
 ) -> dict[UUID, list[str]]:
-    """Effective workspace perms for MANY workspaces in ONE query (PAR-D H6).
-
-    Same catalog/grant graph as :func:`effective_workspace_perms`, but grouped
-    by ``workspace_id`` so ``/me`` resolves a 50-tenant user in a single round
-    trip instead of one query per tenant. Workspaces with no effective perms
-    are absent from the returned mapping (caller defaults to ``[]``).
-    """
     if not workspace_ids:
         return {}
     rows = (
@@ -122,36 +127,42 @@ async def effective_workspace_perms_batch(
     return {row.wid: list(row.perm_keys) for row in rows}
 
 
+async def effective_workspace_perms_batch(
+    db: AsyncSession, user_id: UUID, workspace_ids: list[UUID]
+) -> dict[UUID, list[str]]:
+    """Effective workspace perms for MANY workspaces in ONE query (PAR-D H6).
+
+    Same catalog/grant graph as :func:`effective_workspace_perms`, grouped by
+    ``workspace_id`` so ``/me`` resolves a 50-tenant user in one round trip.
+    Workspaces with no effective perms are absent from the returned mapping.
+
+    PAR-D M16: per-workspace Valkey cache. Cache hits short-circuit; misses are
+    resolved with one DB query and written back (the no-perm result is cached as
+    ``[]`` so an empty workspace doesn't re-query every call). Cache errors fall
+    through to the DB transparently.
+    """
+    if not workspace_ids:
+        return {}
+    hits = await perm_cache.get_workspaces(user_id, workspace_ids)
+    missing = [w for w in workspace_ids if w not in hits]
+    if missing:
+        db_res = await _db_workspace_perms_batch(db, user_id, missing)
+        # Cache every missing workspace, including the no-perm ones as [].
+        payload = {w: db_res.get(w, []) for w in missing}
+        await perm_cache.set_workspaces(user_id, payload)
+        hits = {**hits, **payload}
+    # Preserve the "absent = no perms" contract: drop empty lists from the result.
+    return {w: p for w, p in hits.items() if p}
+
+
 async def effective_workspace_perms(
     db: AsyncSession, user_id: UUID, workspace_id: UUID
 ) -> list[str]:
     """Distinct, sorted workspace permission keys the user holds in `workspace_id`.
 
-    Mirrors `has_workspace_perm` (single query, deprecated permissions excluded).
+    Mirrors `has_workspace_perm` (deprecated permissions excluded). Delegates to
+    the batched, cached path so there is a single cache code path (PAR-D M16).
     """
-    rows = (
-        (
-            await db.execute(
-                text(
-                    """
-                SELECT DISTINCT p.key
-                FROM user_roles ur
-                JOIN roles r ON r.id = ur.role_id
-                            AND r.scope = 'workspace'
-                            AND r.workspace_id = :t
-                JOIN role_permissions rp ON rp.role_id = r.id
-                JOIN permissions p ON p.id = rp.permission_id
-                WHERE ur.auth_user_id = :u
-                  AND ur.workspace_id = :t
-                  AND p.scope = 'workspace'
-                  AND NOT p.is_deprecated
-                ORDER BY p.key
-                """
-                ),
-                {"u": user_id, "t": workspace_id},
-            )
-        )
-        .scalars()
-        .all()
+    return (await effective_workspace_perms_batch(db, user_id, [workspace_id])).get(
+        workspace_id, []
     )
-    return list(rows)

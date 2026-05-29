@@ -17,6 +17,10 @@ dependencies = [
     "typer~=0.13.0",
     "slowapi~=0.1.9",
     "limits[redis]~=5.8.0",
+    # PAR-D M16: async Valkey/Redis client for the /me permission cache. Already
+    # present transitively via limits[redis]; pinned explicitly since we import
+    # redis.asyncio directly in core/perm_cache.py.
+    "redis~=7.4.0",
     "structlog~=24.4.0",
 ]
 
