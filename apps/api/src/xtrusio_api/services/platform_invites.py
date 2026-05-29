@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from uuid import UUID
 
 import httpx
@@ -18,6 +17,7 @@ from ..core.config import get_settings
 from ..core.logging import get_logger
 from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformRole, PlatformUser
+from .invite_outbox import enqueue_invite_email
 
 _TTL_DAYS = 7
 _log = get_logger(__name__)
@@ -42,10 +42,6 @@ class InvitePendingError(Exception):
 
 
 class InviteAlreadyAcceptedError(Exception):
-    pass
-
-
-class EmailProviderUnavailableError(Exception):
     pass
 
 
@@ -93,59 +89,17 @@ async def create_platform_invite(
     await db.flush()
     invite_id = invite.id
 
-    cfg = get_settings()
-    sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
-
-    def _call() -> Any:
-        return sb.auth.admin.invite_user_by_email(email)
-
-    try:
-        result = await asyncio.wait_for(asyncio.to_thread(_call), timeout=cfg.supabase_timeout_sec)
-    except TimeoutError as e:
-        await db.rollback()
-        raise EmailProviderUnavailableError() from e
-    except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
-        await db.rollback()
-        raise EmailProviderUnavailableError() from e
-
-    sb_user_id: str | None = getattr(getattr(result, "user", None), "id", None)
-    if isinstance(sb_user_id, str):
-        try:
-            invite.supabase_user_id = UUID(sb_user_id)
-        except ValueError:
-            invite.supabase_user_id = None
-
-    # PAR-A C2: write the invite claims to ``app_metadata`` (service-role
-    # only writable; the invitee can't forge it from their own session) via
-    # a second admin call. Previously we passed ``data=...`` to
-    # ``invite_user_by_email``, which writes ``user_metadata`` — that is
-    # writable by the user's own access token.
-    if isinstance(sb_user_id, str):
-
-        def _set_app_metadata() -> Any:
-            return sb.auth.admin.update_user_by_id(
-                sb_user_id,
-                {
-                    "app_metadata": {
-                        "platform_invite_id": str(invite_id),
-                        "platform_role": role.value,
-                    }
-                },
-            )
-
-        try:
-            await asyncio.wait_for(
-                asyncio.to_thread(_set_app_metadata), timeout=cfg.supabase_timeout_sec
-            )
-        except TimeoutError as e:
-            await db.rollback()
-            raise EmailProviderUnavailableError() from e
-        except (AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
-            await db.rollback()
-            raise EmailProviderUnavailableError() from e
-
-    await db.commit()
-    await db.refresh(invite)
+    # PAR-D H5: stage the invite email in the outbox (same tx as the invite row).
+    # The Supabase calls (invite_user_by_email + app_metadata write) happen out
+    # of band in the worker, which writes supabase_user_id back onto this invite
+    # row on success. PAR-D M1: no commit here — the route owns the transaction.
+    # PAR-A C2: app_metadata (service-role-only writable) carries the invite id.
+    await enqueue_invite_email(
+        db,
+        email=email,
+        app_metadata={"platform_invite_id": str(invite_id), "platform_role": role.value},
+        writeback={"table": "platform_invites", "id": str(invite_id)},
+    )
     return invite
 
 

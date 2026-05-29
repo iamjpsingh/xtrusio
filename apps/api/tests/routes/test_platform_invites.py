@@ -147,17 +147,27 @@ async def test_create_invite_happy_path(
     body = r.json()
     assert body["email"] == "newadmin@example.com"
     assert body["role"] == "admin"
-    # PAR-A C2: invite_user_by_email is called WITHOUT a ``data=`` kwarg
-    # (which would write to user_metadata); the claims are written to
-    # app_metadata via a follow-up update_user_by_id call.
-    mock_supabase_admin.auth.admin.invite_user_by_email.assert_called_once_with(
-        "newadmin@example.com"
+    # PAR-D H5: create no longer calls Supabase on the request path — it stages
+    # an outbox row (the worker sends it out of band). Assert the row was
+    # enqueued with the right app_metadata + writeback, and Supabase was untouched.
+    mock_supabase_admin.auth.admin.invite_user_by_email.assert_not_called()
+    payload = (
+        await db_session.execute(
+            text(
+                "SELECT payload FROM invite_email_outbox "
+                "WHERE payload->>'email' = :e ORDER BY created_at DESC LIMIT 1"
+            ),
+            {"e": "newadmin@example.com"},
+        )
+    ).scalar_one()
+    assert payload["email"] == "newadmin@example.com"
+    assert payload["app_metadata"]["platform_invite_id"] == body["id"]
+    assert payload["app_metadata"]["platform_role"] == "admin"
+    assert payload["writeback"] == {"table": "platform_invites", "id": body["id"]}
+    await db_session.execute(
+        text("DELETE FROM invite_email_outbox WHERE payload->>'email' = :e"),
+        {"e": "newadmin@example.com"},
     )
-    mock_supabase_admin.auth.admin.update_user_by_id.assert_called_once()
-    upd_args, _ = mock_supabase_admin.auth.admin.update_user_by_id.call_args
-    assert upd_args[0] == sb_uid
-    assert upd_args[1]["app_metadata"]["platform_invite_id"] == body["id"]
-    assert upd_args[1]["app_metadata"]["platform_role"] == "admin"
     await db_session.execute(
         text("DELETE FROM platform_invites WHERE email = :e"), {"e": "newadmin@example.com"}
     )
@@ -239,6 +249,14 @@ async def test_revoke_invite(
         json={"email": "rev@example.com", "role": "admin"},
     )
     invite_id = r.json()["id"]
+    # PAR-D H5: the outbox worker (not run in tests) sets supabase_user_id after
+    # sending. Simulate the post-send state so revoke performs the Supabase
+    # auth-user cleanup (which keys off supabase_user_id).
+    await db_session.execute(
+        text("UPDATE platform_invites SET supabase_user_id = CAST(:sid AS uuid) WHERE id = :id"),
+        {"sid": sb_uid, "id": invite_id},
+    )
+    await db_session.commit()
     r = await http_client.delete(
         f"/api/platform/users/invites/{invite_id}",
         headers={"Authorization": f"Bearer {token}"},
@@ -288,6 +306,7 @@ async def test_list_platform_invites_paginates(
                 role=PlatformRole.ADMIN,
                 invited_by=existing_super_admin.id,
             )
+        await s.commit()  # PAR-D M1: service is now caller-owns-tx
 
     token = make_jwt(sub=existing_super_admin.id)
     headers = {"Authorization": f"Bearer {token}"}

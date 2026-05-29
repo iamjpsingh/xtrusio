@@ -123,17 +123,29 @@ async def test_owner_invites_admin(
         body = r.json()
         assert body["role"] == "admin"
         assert body["tenant_id"] == str(tid)
-        # PAR-A C2: invite_user_by_email is called without ``data=`` (which
-        # writes user_metadata); claims go to app_metadata via update_user_by_id.
-        mock_supabase_admin.auth.admin.invite_user_by_email.assert_called_once_with(
-            "alice@example.com"
+        # PAR-D H5: create stages an outbox row instead of calling Supabase on
+        # the request path. Assert the enqueued app_metadata + that Supabase was
+        # untouched. (Tenant invites carry no writeback — no supabase_user_id.)
+        mock_supabase_admin.auth.admin.invite_user_by_email.assert_not_called()
+        payload = (
+            await db_session.execute(
+                text(
+                    "SELECT payload FROM invite_email_outbox "
+                    "WHERE payload->>'email' = :e ORDER BY created_at DESC LIMIT 1"
+                ),
+                {"e": "alice@example.com"},
+            )
+        ).scalar_one()
+        assert payload["email"] == "alice@example.com"
+        assert payload["app_metadata"]["tenant_invite_id"] == body["id"]
+        assert payload["app_metadata"]["tenant_id"] == str(tid)
+        assert payload["app_metadata"]["tenant_role"] == "admin"
+        assert "writeback" not in payload
+        await db_session.execute(
+            text("DELETE FROM invite_email_outbox WHERE payload->>'email' = :e"),
+            {"e": "alice@example.com"},
         )
-        mock_supabase_admin.auth.admin.update_user_by_id.assert_called_once()
-        upd_args, _ = mock_supabase_admin.auth.admin.update_user_by_id.call_args
-        assert upd_args[0] == sb_uid
-        assert upd_args[1]["app_metadata"]["tenant_invite_id"] == body["id"]
-        assert upd_args[1]["app_metadata"]["tenant_id"] == str(tid)
-        assert upd_args[1]["app_metadata"]["tenant_role"] == "admin"
+        await db_session.commit()
     finally:
         await _cleanup(db_session, user_id)
 
@@ -296,6 +308,7 @@ async def test_list_tenant_invites_paginates(
                 email=f"paginv-{i}-{uuid4().hex[:6]}@example.com",
                 role=TenantRole.ADMIN,
             )
+        await db_session.commit()  # PAR-D M1: service is now caller-owns-tx
 
         token = make_jwt(sub=user_id)
         headers = {"Authorization": f"Bearer {token}"}

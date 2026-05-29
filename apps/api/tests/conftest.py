@@ -245,5 +245,7 @@ def mock_supabase_admin(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
 
     monkeypatch.setattr("xtrusio_api.services.signup.create_client", _factory)
     monkeypatch.setattr("xtrusio_api.services.platform_invites.create_client", _factory)
-    monkeypatch.setattr("xtrusio_api.services.tenant_invites.create_client", _factory)
+    # PAR-D H5: tenant_invites no longer calls Supabase on the request path (the
+    # invite email is sent by the outbox worker), so it no longer imports
+    # create_client — nothing to patch there.
     yield mock_client

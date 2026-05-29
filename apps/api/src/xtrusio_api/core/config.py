@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     # is never cached, so this only bounds /me display staleness.
     perm_cache_ttl_sec: int = Field(alias="PERM_CACHE_TTL_SEC")
 
+    # PAR-D H5: poll interval (seconds) for the in-process invite-email outbox
+    # worker that sends invite emails out of band of the request transaction.
+    outbox_poll_sec: float = Field(alias="OUTBOX_POLL_SEC")
+
     log_level: str = Field(alias="LOG_LEVEL")
 
     startup_reconcile_tolerant: bool = Field(alias="STARTUP_RECONCILE_TOLERANT")
