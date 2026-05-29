@@ -41,6 +41,19 @@ class AlreadyProvisionedError(Exception):
     pass
 
 
+def _is_provisioning_conflict(e: IntegrityError, *constraint_names: str) -> bool:
+    """PAR-D M2: only treat an IntegrityError as 'already provisioned' when it
+    is one of the EXPECTED uniqueness conflicts (the principal already exists).
+
+    Mapping every IntegrityError to AlreadyProvisionedError lied about
+    unrelated constraint violations (e.g. the workspace single-owner index) —
+    masking real bugs as a benign 409. Inspect ``constraint_name`` (asyncpg
+    surfaces it on ``e.orig``) and re-raise anything unexpected.
+    """
+    constraint = getattr(e.orig, "constraint_name", None) or str(e.orig)
+    return any(name in constraint for name in constraint_names)
+
+
 async def _accept_platform(
     db: AsyncSession, *, user_id: UUID, email: str, invite_id: UUID
 ) -> dict[str, Any]:
@@ -72,7 +85,9 @@ async def _accept_platform(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise AlreadyProvisionedError() from e
+        if _is_provisioning_conflict(e, "platform_users_pkey", "platform_users_email_key"):
+            raise AlreadyProvisionedError() from e
+        raise
     return {"kind": "platform", "role": invite.role.value, "tenant_id": None}
 
 
@@ -111,7 +126,11 @@ async def _accept_tenant(
         await db.commit()
     except IntegrityError as e:
         await db.rollback()
-        raise AlreadyProvisionedError() from e
+        if _is_provisioning_conflict(
+            e, "tenant_memberships_tenant_id_user_id_key", "tenant_memberships_pkey"
+        ):
+            raise AlreadyProvisionedError() from e
+        raise
     return {
         "kind": "tenant",
         "role": invite.role.value,

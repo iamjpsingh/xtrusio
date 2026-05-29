@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
-from ..core.permissions import effective_platform_perms, effective_workspace_perms
+from ..core.permissions import effective_platform_perms, effective_workspace_perms_batch
 from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformUser
 from ..models.tenant import Tenant
@@ -45,13 +45,18 @@ async def me(
             .order_by(Tenant.created_at.desc())
         )
     ).all()
+    # PAR-D H6: one batched query for all tenants' perms instead of N sequential
+    # round-trips (a 50-tenant user was ~50 x ~10ms cold).
+    perms_by_ws = await effective_workspace_perms_batch(
+        db, identity.user_id, [t.id for _, t in rows]
+    )
     tenants = [
         TenantContext(
             id=t.id,
             slug=t.slug,
             name=t.name,
             role=m.role,
-            permissions=await effective_workspace_perms(db, identity.user_id, t.id),
+            permissions=perms_by_ws.get(t.id, []),
         )
         for m, t in rows
     ]

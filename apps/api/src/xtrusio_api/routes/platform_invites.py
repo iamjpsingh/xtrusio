@@ -21,6 +21,7 @@ from ..services.platform_invites import (
     EmailProviderUnavailableError,
     InviteAlreadyAcceptedError,
     InvitePendingError,
+    UnsupportedInviteRoleError,
     UserExistsError,
     create_platform_invite,
     list_platform_invites,
@@ -41,6 +42,8 @@ async def create(
         invite = await create_platform_invite(
             db, email=body.email, role=body.role, invited_by=user.user_id
         )
+    except UnsupportedInviteRoleError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "unsupported_invite_role") from e
     except UserExistsError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, "user_exists") from e
     except InvitePendingError as e:

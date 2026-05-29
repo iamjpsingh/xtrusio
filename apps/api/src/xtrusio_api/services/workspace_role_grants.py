@@ -347,7 +347,7 @@ async def list_workspace_role_grants(
             "lim": limit + 1,
         }
         sql = base + (
-            "AND (ur.granted_at < :ts OR (ur.granted_at = :ts AND ur.id < :rid)) "
+            "AND (ur.granted_at, ur.id) < (:ts, :rid) "
             "ORDER BY ur.granted_at DESC, ur.id DESC LIMIT :lim"
         )
     else:

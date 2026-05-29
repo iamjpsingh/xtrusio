@@ -70,6 +70,10 @@ class Settings(BaseSettings):
     # PAR-B L16: hard cap on request body size before Pydantic.
     max_request_body_bytes: int = Field(alias="MAX_REQUEST_BODY_BYTES")
 
+    # PAR-D M5: secret key used to HMAC-sign pagination cursors so a client
+    # cannot forge / tamper with an opaque cursor. No default — fail fast.
+    cursor_hmac_key: str = Field(alias="CURSOR_HMAC_KEY")
+
     log_level: str = Field(alias="LOG_LEVEL")
 
     startup_reconcile_tolerant: bool = Field(alias="STARTUP_RECONCILE_TOLERANT")

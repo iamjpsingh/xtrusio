@@ -9,7 +9,7 @@ from uuid import UUID
 
 import httpx
 from gotrue.errors import AuthApiError, AuthRetryableError
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import and_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
@@ -91,7 +91,7 @@ async def create_tenant_invite(
                 SELECT 1
                 FROM tenant_memberships m
                 JOIN auth.users u ON u.id = m.user_id
-                WHERE m.tenant_id = :tid AND u.email = :email
+                WHERE m.tenant_id = :tid AND lower(u.email) = lower(:email)
                 LIMIT 1
                 """
             ),
@@ -194,12 +194,7 @@ async def list_tenant_invites(
     )
     if cursor is not None:
         ts, rid = cursor
-        stmt = stmt.where(
-            or_(
-                TenantInvite.created_at < ts,
-                and_(TenantInvite.created_at == ts, TenantInvite.id < rid),
-            )
-        )
+        stmt = stmt.where(tuple_(TenantInvite.created_at, TenantInvite.id) < (ts, rid))
     stmt = stmt.limit(limit + 1)
     rows = list((await db.execute(stmt)).scalars().all())
     next_cursor: str | None = None

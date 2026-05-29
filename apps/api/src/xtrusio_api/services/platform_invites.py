@@ -3,23 +3,34 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
 import httpx
 from gotrue.errors import AuthApiError, AuthRetryableError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
 
 from ..core.config import get_settings
+from ..core.logging import get_logger
 from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformRole, PlatformUser
 
 _TTL_DAYS = 7
+_log = get_logger(__name__)
+
+
+class UnsupportedInviteRoleError(Exception):
+    """PAR-D L5: the requested platform invite role has no RBAC system role and
+    cannot be granted on acceptance (the legacy 'editor' platform role). Surfaced
+    as a 400 instead of silently provisioning a roleless platform user."""
+
+    def __init__(self, role: str) -> None:
+        super().__init__(f"unsupported platform invite role: {role}")
+        self.role = role
 
 
 class UserExistsError(Exception):
@@ -45,6 +56,13 @@ async def create_platform_invite(
     role: PlatformRole,
     invited_by: UUID,
 ) -> PlatformInvite:
+    # PAR-D L5: only 'admin' maps to a platform RBAC system role. 'editor' is a
+    # legacy enum value with no system role (accepting it would create a
+    # roleless platform_user — a silent dead path); 'super_admin' is
+    # bootstrap-only and never invitable. Reject both up front.
+    if role != PlatformRole.ADMIN:
+        raise UnsupportedInviteRoleError(role.value)
+
     existing_pu = (
         await db.execute(select(PlatformUser).where(PlatformUser.email == email))
     ).scalar_one_or_none()
@@ -150,10 +168,20 @@ async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
         cfg = get_settings()
         sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
         sb_user_id = str(invite.supabase_user_id)
-        with contextlib.suppress(Exception):
+        # PAR-D L6: best-effort, but NOT silent. A failed delete leaves an
+        # unconfirmed auth.users orphan; log it at WARN so it's visible (and
+        # reconcilable) rather than swallowed by suppress(Exception).
+        try:
             await asyncio.wait_for(
                 asyncio.to_thread(lambda: sb.auth.admin.delete_user(sb_user_id)),
                 timeout=cfg.supabase_timeout_sec,
+            )
+        except (TimeoutError, AuthApiError, AuthRetryableError, httpx.HTTPError) as e:
+            _log.warning(
+                "supabase_invite_user_delete_failed",
+                supabase_user_id=sb_user_id,
+                invite_id=str(invite_id),
+                error=str(e),
             )
 
 
@@ -170,12 +198,7 @@ async def list_platform_invites(
     )
     if cursor is not None:
         ts, rid = cursor
-        stmt = stmt.where(
-            or_(
-                PlatformInvite.created_at < ts,
-                and_(PlatformInvite.created_at == ts, PlatformInvite.id < rid),
-            )
-        )
+        stmt = stmt.where(tuple_(PlatformInvite.created_at, PlatformInvite.id) < (ts, rid))
     stmt = stmt.limit(limit + 1)
     rows = list((await db.execute(stmt)).scalars().all())
     next_cursor: str | None = None

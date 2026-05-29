@@ -207,7 +207,7 @@ async def list_workspace_roles(
         ts, rid = cursor
         params = {"wid": str(workspace_id), "ts": ts, "rid": str(rid), "lim": limit + 1}
         sql = base + (
-            "AND (r.created_at < :ts OR (r.created_at = :ts AND r.id < :rid)) "
+            "AND (r.created_at, r.id) < (:ts, :rid) "
             "ORDER BY r.created_at DESC, r.id DESC LIMIT :lim"
         )
     else:
@@ -255,15 +255,14 @@ async def update_workspace_role(
     }
     if permission_keys is not None:
         await _validate_perm_keys(db, scope="workspace", keys=permission_keys)
-    if name is not None:
+    # PAR-D L3: single UPDATE for both fields (one updated_at, one row touch).
+    if name is not None or description is not None:
         await db.execute(
-            text("UPDATE roles SET name = :n, updated_at = now() WHERE id = :id"),
-            {"n": name, "id": str(role_id)},
-        )
-    if description is not None:
-        await db.execute(
-            text("UPDATE roles SET description = :d, updated_at = now() WHERE id = :id"),
-            {"d": description, "id": str(role_id)},
+            text(
+                "UPDATE roles SET name = COALESCE(:n, name), "
+                "description = COALESCE(:d, description), updated_at = now() WHERE id = :id"
+            ),
+            {"n": name, "d": description, "id": str(role_id)},
         )
     if permission_keys is not None:
         await db.execute(
