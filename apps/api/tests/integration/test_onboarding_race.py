@@ -51,6 +51,7 @@ async def test_concurrent_onboard_creates_exactly_one_tenant() -> None:
             async with SessionLocal() as s:
                 try:
                     await create_tenant_with_owner(s, user_id=uid, workspace_name=name)
+                    await s.commit()  # PAR-D M1: caller owns the tx
                     return "ok"
                 except AlreadyHasMembershipError:
                     await s.rollback()
@@ -82,6 +83,7 @@ async def test_sequential_second_onboard_rejected() -> None:
     try:
         async with SessionLocal() as s:
             await create_tenant_with_owner(s, user_id=uid, workspace_name="First WS")
+            await s.commit()  # PAR-D M1: caller owns the tx
         async with SessionLocal() as s:
             with pytest.raises(AlreadyHasMembershipError):
                 await create_tenant_with_owner(s, user_id=uid, workspace_name="Second WS")

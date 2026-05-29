@@ -43,8 +43,11 @@ async def update(
     row, email = await update_settings(
         db, signups_enabled=body.signups_enabled, updated_by=user.user_id
     )
-    return PlatformSettingsResponse(
+    # PAR-D M1: build the response from live (pre-commit) values, then commit.
+    response = PlatformSettingsResponse(
         signups_enabled=row.signups_enabled,
         updated_at=row.updated_at,
         updated_by_email=email,
     )
+    await db.commit()
+    return response

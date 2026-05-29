@@ -40,6 +40,8 @@ async def accept(
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AcceptInviteResult:
+    # PAR-D M1: caller-owns-transaction — commit on success, roll back on any
+    # typed error so the request never leaves an open/half-applied tx.
     try:
         result = await accept_invite(
             db,
@@ -47,16 +49,23 @@ async def accept(
             email=identity.email,
             app_metadata=identity.app_metadata,
         )
+        await db.commit()
     except NoInviteError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "no_invite") from e
     except InviteRevokedError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "invite_revoked") from e
     except InviteExpiredError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "invite_expired") from e
     except InviteAlreadyAcceptedError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "invite_already_accepted") from e
     except AlreadyProvisionedError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "already_provisioned") from e
     except EmailMismatchError as e:
+        await db.rollback()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "email_mismatch") from e
     return AcceptInviteResult.model_validate(result)

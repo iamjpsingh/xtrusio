@@ -47,6 +47,7 @@ async def test_accept_platform_invite_also_grants_user_role() -> None:
     try:
         async with SessionLocal() as s:
             out = await _accept_platform(s, user_id=uid, email=email, invite_id=invite_id)
+            await s.commit()  # PAR-D M1: service is now caller-owns-tx
         assert out["kind"] == "platform"
         assert out["role"] == "admin"
         async with SessionLocal() as s:
@@ -128,6 +129,7 @@ async def test_accept_tenant_invite_also_grants_user_role() -> None:
     try:
         async with SessionLocal() as s:
             out = await _accept_tenant(s, user_id=uid, email=email, invite_id=invite_id)
+            await s.commit()  # PAR-D M1: service is now caller-owns-tx
         assert out["kind"] == "tenant"
         assert out["role"] == "editor"
         async with SessionLocal() as s:

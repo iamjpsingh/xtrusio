@@ -81,10 +81,12 @@ async def _accept_platform(
     if invite.role.value == "admin":
         await grant_role(db, auth_user_id=user_id, scope="platform", key="admin")
     invite.accepted_at = datetime.now(UTC)
+    # PAR-D M1: caller-owns-transaction — flush (not commit) so a uniqueness
+    # conflict still surfaces as AlreadyProvisioned here; the route commits on
+    # success and rolls back on any raised error.
     try:
-        await db.commit()
+        await db.flush()
     except IntegrityError as e:
-        await db.rollback()
         if _is_provisioning_conflict(e, "platform_users_pkey", "platform_users_email_key"):
             raise AlreadyProvisionedError() from e
         raise
@@ -122,10 +124,10 @@ async def _accept_tenant(
         workspace_id=invite.tenant_id,
     )
     invite.accepted_at = datetime.now(UTC)
+    # PAR-D M1: flush (not commit); the route owns commit/rollback.
     try:
-        await db.commit()
+        await db.flush()
     except IntegrityError as e:
-        await db.rollback()
         if _is_provisioning_conflict(
             e, "tenant_memberships_tenant_id_user_id_key", "tenant_memberships_pkey"
         ):

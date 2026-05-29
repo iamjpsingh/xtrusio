@@ -151,7 +151,9 @@ async def create_platform_invite(
 
 async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
     invite = (
-        await db.execute(select(PlatformInvite).where(PlatformInvite.id == invite_id))
+        await db.execute(
+            select(PlatformInvite).where(PlatformInvite.id == invite_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if invite is None:
         return  # idempotent: revoking an unknown/already-deleted invite is a 204 no-op
