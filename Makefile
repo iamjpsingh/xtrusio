@@ -1,92 +1,56 @@
 SHELL := /bin/bash
-.PHONY: help install env env-force supabase-start supabase-stop supabase-status valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test check clean migrate migrate-down create-platform-owner
+.PHONY: help install redis-up redis-down redis-logs api worker web dev lint format typecheck test check clean migrate migrate-new create-platform-owner
 
 help:
 	@echo "Xtrusio dev Makefile"
 	@echo ""
-	@echo "  make install         - install JS + Python dependencies"
-	@echo "  make env             - generate .env from supabase status (refuses if .env exists)"
-	@echo "  make env-force       - regenerate .env, overwriting if it exists"
-	@echo "  make db-up           - start Supabase stack + xtrusio-valkey"
-	@echo "  make db-down         - stop Supabase stack + xtrusio-valkey"
-	@echo "  make db-logs         - tail Valkey logs (Supabase logs: \`supabase logs\`)"
-	@echo "  make supabase-start  - Supabase only"
-	@echo "  make supabase-stop   - Supabase only"
-	@echo "  make supabase-status - print Supabase service URLs + keys"
-	@echo "  make valkey-up       - Valkey only"
-	@echo "  make valkey-down     - Valkey only"
-	@echo "  make api             - run FastAPI dev server (XTRUSIO_PROCESS_ROLE=api)"
-	@echo "  make worker          - placeholder; real worker added in later plans"
-	@echo "  make web             - run Vite dev server"
-	@echo "  make dev             - bring up DBs + API + web in parallel"
-	@echo "  make lint            - lint Python + JS"
-	@echo "  make format          - format Python + JS"
-	@echo "  make typecheck       - mypy + tsc"
-	@echo "  make test            - run all tests (Python + JS)"
-	@echo "  make check           - lint + typecheck + test"
-	@echo "  make clean           - remove caches and venvs"
+	@echo "  make install              - install JS + Python dependencies"
+	@echo "  make redis-up             - start xtrusio-redis (optional, for workers)"
+	@echo "  make redis-down           - stop xtrusio-redis"
+	@echo "  make redis-logs           - tail Redis logs"
+	@echo "  make api                  - run FastAPI dev server against managed Supabase dev project"
+	@echo "  make worker               - run arq worker"
+	@echo "  make web                  - run Vite dev server"
+	@echo "  make dev                  - run api + web in parallel"
+	@echo "  make migrate              - apply migrations to the project in DATABASE_URL"
+	@echo "  make migrate-new name=... - create a new SQL migration file"
+	@echo "  make lint                 - lint Python + JS"
+	@echo "  make format               - format Python + JS"
+	@echo "  make typecheck            - mypy + tsc"
+	@echo "  make test                 - run all tests (Python + JS)"
+	@echo "  make check                - lint + typecheck + test"
+	@echo "  make create-platform-owner email=... password=...  [force=true]"
+	@echo "  make clean                - remove caches and venvs"
+	@echo ""
+	@echo "First-time setup: create a Supabase project at supabase.com, copy"
+	@echo "credentials into .env (see .env.example), then 'make migrate'."
 
 install:
 	pnpm install
 	uv sync --all-packages
 
-env:
-	@if [ -f .env ]; then \
-		echo "ERROR: .env already exists. Use 'make env-force' to overwrite, or edit it manually."; \
-		exit 1; \
-	fi
-	@./scripts/generate-env.sh > .env
-	@echo "Wrote .env with live Supabase keys."
+redis-up:
+	docker compose up -d redis
+	@echo "Waiting for xtrusio-redis to be healthy..."
+	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-redis 2>/dev/null | grep -q healthy; do sleep 1; done
+	@echo "Redis ready (host :6379)."
 
-env-force:
-	@./scripts/generate-env.sh > .env
-	@echo "Regenerated .env (existing values overwritten)."
-
-supabase-start:
-	supabase start
-
-supabase-stop:
-	supabase stop
-
-supabase-status:
-	supabase status
-
-valkey-up:
-	docker compose up -d valkey
-	@echo "Waiting for xtrusio-valkey to be healthy..."
-	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-valkey 2>/dev/null | grep -q healthy; do sleep 1; done
-	@echo "Valkey ready (host :63792)."
-
-valkey-down:
+redis-down:
 	docker compose down
 
-db-up: supabase-start valkey-up
-	@echo ""
-	@echo "All services up:"
-	@echo "  Supabase API     http://localhost:54321"
-	@echo "  Supabase DB      postgresql://postgres:postgres@localhost:54322/postgres"
-	@echo "  Supabase Studio  http://localhost:54323"
-	@echo "  Inbucket (mail)  http://localhost:54324"
-	@echo "  Valkey           localhost:63792"
-	@echo ""
-	@echo "Run 'make supabase-status' for anon/service-role keys."
-
-db-down: supabase-stop valkey-down
-
-db-logs:
-	docker compose logs -f valkey
+redis-logs:
+	docker compose logs -f redis
 
 api:
 	XTRUSIO_PROCESS_ROLE=api uv run uvicorn xtrusio_api.main:app --reload --port 8000 --app-dir apps/api/src
 
 worker:
-	@echo "worker target is a placeholder until later plans add Dramatiq/Prefect."
-	@echo "Run 'XTRUSIO_PROCESS_ROLE=worker uv run python -c \"print(\\\"worker shell ready\\\")\"' for now."
+	XTRUSIO_PROCESS_ROLE=worker uv run --directory apps/api arq xtrusio_api.workers.main.WorkerSettings
 
 web:
 	pnpm --filter @xtrusio/web dev
 
-dev: db-up
+dev:
 	@trap 'kill 0' INT TERM; \
 	$(MAKE) api & \
 	$(MAKE) web & \
@@ -115,8 +79,12 @@ check: lint typecheck test
 migrate:
 	uv run --directory apps/api alembic upgrade head
 
-migrate-down:
-	uv run --directory apps/api alembic downgrade -1
+migrate-new:
+	@if [ -z "$(name)" ]; then \
+		echo "Usage: make migrate-new name=add_some_table"; \
+		exit 1; \
+	fi
+	uv run --directory apps/api alembic revision -m "$(name)"
 
 create-platform-owner:
 	@if [ -z "$(email)" ] || [ -z "$(password)" ]; then \

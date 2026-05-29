@@ -1,9 +1,9 @@
 name: xtrusio
 
-# Note: Postgres + GoTrue + Realtime + PostgREST + Studio are managed by the
-# Supabase CLI (`supabase start`), which spawns its own Docker containers on
-# its own internal network. This file owns ONLY services that Supabase CLI
-# does not provide — currently just Valkey for caches/queues.
+# Local dev runs against managed Supabase (supabase.com) — there is no
+# local Postgres / GoTrue / Realtime / Storage / Studio container. The
+# only optional local dependency is Redis, used by arq workers. A remote
+# Redis (e.g. Upstash) works the same; running locally is just convenient.
 
 networks:
   xtrusio-net:
@@ -11,24 +11,23 @@ networks:
     driver: bridge
 
 services:
-  valkey:
-    container_name: xtrusio-valkey
-    image: valkey/valkey:8
+  redis:
+    container_name: xtrusio-redis
+    image: redis:7-alpine
     restart: unless-stopped
     networks:
       - xtrusio-net
     ports:
-      # Host:Container — non-default host port to avoid colliding with other Redis/Valkey
-      - "63792:6379"
-    command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
     volumes:
-      - xtrusio-valkey-data:/data
+      - xtrusio-redis-data:/data
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
 
 volumes:
-  xtrusio-valkey-data:
-    name: xtrusio-valkey-data
+  xtrusio-redis-data:
+    name: xtrusio-redis-data
