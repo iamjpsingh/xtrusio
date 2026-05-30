@@ -1,7 +1,9 @@
-"""JWT validation + auth dependencies (RS256 via JWKS).
+"""JWT validation + auth dependencies (asymmetric JWKS — ES256/RS256).
 
-PAR-A C1: algorithms pinned to RS256 (no ES256/RS384/RS512); ``alg`` validated
-from the JWT header BEFORE the JWKS lookup; ``iss``/``aud``/``exp``/``iat``/``sub``
+PAR-A C1: algorithms pinned to the asymmetric allow-list ``_ALLOWED_ALGS``
+(ES256 — Supabase's modern default — and RS256; no HS256/none/symmetric);
+``alg`` validated from the JWT header BEFORE the JWKS lookup;
+``iss``/``aud``/``exp``/``iat``/``sub``
 are required claims; ``iss`` is pinned to ``f"{supabase_url}/auth/v1"``;
 ``aud`` is pinned to ``"authenticated"`` (the Supabase default).
 
@@ -32,7 +34,8 @@ from uuid import UUID
 
 import httpx
 from fastapi import Depends, Header, HTTPException, Request, status
-from jose import JWTError, jwt
+from jose import jwt
+from jose.exceptions import JOSEError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +44,13 @@ from .config import get_settings
 from .db import get_db
 
 _AUDIENCE = "authenticated"
+# Accepted JWT signing algorithms. Supabase's modern asymmetric JWTs default to
+# ES256 (P-256 EC keys); older projects use RS256. Both are asymmetric and safe
+# — the security control is excluding symmetric/none algorithms (HS256, none),
+# which enable the public-key-as-HMAC-secret confusion attack. We pin to this
+# asymmetric allow-list rather than a single alg so real Supabase tokens
+# (ES256 here) verify while downgrade/confusion is still blocked.
+_ALLOWED_ALGS = ("ES256", "RS256")
 _REQUIRED_CLAIMS = ("exp", "iat", "aud", "iss", "sub")
 # python-jose uses ``require_<claim>: True`` keys rather than a ``require`` list;
 # translate once at import time so ``_decode_jwt`` can pass it verbatim.
@@ -136,7 +146,8 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     Hardened (PAR-A C1):
       - ``alg`` validated against the *header* before the JWKS lookup —
         an attacker who controls the header can no longer suggest a weaker
-        algorithm; only RS256 is accepted.
+        algorithm; only the asymmetric ``_ALLOWED_ALGS`` (ES256/RS256) are
+        accepted (no HS256/none).
       - Required claims enforced via the JWT lib's ``options["require"]``
         list (exp, iat, aud, iss, sub).
       - Issuer pinned to ``<supabase_url>/auth/v1``.
@@ -145,9 +156,9 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     """
     try:
         header = jwt.get_unverified_header(token)
-    except JWTError as e:
+    except JOSEError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token header: {e}") from e
-    if header.get("alg") != "RS256":
+    if header.get("alg") not in _ALLOWED_ALGS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
     kid = header.get("kid")
     if not kid:
@@ -170,20 +181,20 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
         key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
         if key is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no matching jwks key")
-    # Also defensively check the key alg metadata — RS256 only.
+    # Also defensively check the key alg metadata — asymmetric allow-list only.
     key_alg = key.get("alg")
-    if key_alg is not None and key_alg != "RS256":
+    if key_alg is not None and key_alg not in _ALLOWED_ALGS:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
     try:
         payload: dict[str, Any] = jwt.decode(
             token,
             key,
-            algorithms=["RS256"],
+            algorithms=list(_ALLOWED_ALGS),
             audience=_AUDIENCE,
             issuer=_issuer(),
             options=_JWT_OPTIONS,
         )
-    except JWTError as e:
+    except JOSEError as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e
     return payload
 
