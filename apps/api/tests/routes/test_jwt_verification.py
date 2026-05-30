@@ -71,11 +71,13 @@ async def test_es256_forged_alg_in_header_rejected(
     jwks_keypair: dict[str, Any],
     existing_super_admin: PlatformUser,
 ) -> None:
-    """Pre-PAR-A the verifier picked ``alg`` from the JWKS doc, ignoring the
-    header. With C1 the header MUST be RS256 — anything else 401s before we
-    even look up the key."""
+    """A token whose header ``alg`` doesn't match its actual signature/key is
+    rejected. ES256 is an accepted algorithm (Supabase's default), but this
+    token *claims* ES256 in the header while being RSA-signed under an RSA JWKS
+    key — so verification fails and we 401. (Pre-PAR-A the verifier picked
+    ``alg`` from the JWKS doc, ignoring the header entirely.)"""
     # Mint a token with the header alg overridden to ES256 (the body is still
-    # RSA-signed; the wrong header alg alone is what we're checking).
+    # RSA-signed; the header-vs-signature mismatch is what we're checking).
     bad = _mint(
         jwks_keypair=jwks_keypair,
         sub=existing_super_admin.id,
