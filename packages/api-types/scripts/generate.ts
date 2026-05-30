@@ -11,8 +11,13 @@
 //      `generated/openapi.d.ts`.
 //
 // Determinism: `openapi-typescript` is deterministic for a fixed input schema,
-// so re-running with an unchanged backend produces a byte-identical file. The
-// CI drift gate (.github/workflows/api-types-drift.yml) relies on this.
+// but its raw output is NOT prettier-formatted, whereas the committed file is
+// (the pre-commit prettier hook formats it). So the final step here runs
+// prettier on the output — otherwise a fresh `generate` (raw) would never match
+// the committed (formatted) bytes and the CI drift gate
+// (.github/workflows/api-types-drift.yml) would fail on every run. With the
+// prettier step, generation is idempotent: regen -> `git diff --exit-code` is
+// clean.
 //
 // Run via:  pnpm api-types:generate   (from the repo root)
 
@@ -85,7 +90,23 @@ async function main(): Promise<void> {
 
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(outFile, banner + astToString(ast), "utf8");
+
+  // Format with the repo's prettier so the bytes match what the pre-commit
+  // hook would produce — keeps `generate` idempotent for the drift gate.
+  formatFile(outFile);
   process.stdout.write(`Wrote ${outFile}\n`);
+}
+
+/** Run the repo's prettier over a file (same config the pre-commit hook uses). */
+function formatFile(file: string): void {
+  const result = spawnSync("pnpm", ["exec", "prettier", "--write", file], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr ?? "");
+    throw new Error(`prettier failed to format ${file} (exit ${result.status}).`);
+  }
 }
 
 main().catch((err: unknown) => {
