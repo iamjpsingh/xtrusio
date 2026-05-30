@@ -16,7 +16,7 @@
     "api-types:generate": "set -a; . ./.env; set +a; pnpm --filter @xtrusio/api-types run generate"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
+    "turbo": "^2.9.16",
     "typescript": "^5.5.0",
     "prettier": "^3.3.0"
   }
