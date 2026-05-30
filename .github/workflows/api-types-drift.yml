@@ -1,0 +1,82 @@
+name: api-types-drift
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Regenerating from the OpenAPI schema shares no DB state (app.openapi() only
+# introspects routes — the lifespan never runs on import), so this can run free
+# and cancel superseded runs. It is NOT part of the serialized `ci-test-db`
+# group.
+concurrency:
+  group: api-types-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # F.3 (H13): regenerate packages/api-types/generated/openapi.d.ts from the
+  # FastAPI OpenAPI schema and fail if it differs from the committed file.
+  # Drift here == "a Pydantic schema changed without `pnpm api-types:generate`".
+  # ---------------------------------------------------------------------------
+  drift:
+    name: openapi-typescript drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # The app import only needs Settings to validate — `app.openapi()` does
+      # NOT open a DB connection. These are placeholder values (ephemeral, not a
+      # real Supabase project) that satisfy Settings validation, mirroring the
+      # ci.yml ephemeral block.
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+      SUPABASE_URL: "https://ephemeral.example.supabase.co"
+      SUPABASE_ANON_KEY: "ci-ephemeral-anon-key"
+      SUPABASE_SERVICE_ROLE_KEY: "ci-ephemeral-service-role-key"
+      SUPABASE_JWKS_URL: "https://ephemeral.example.supabase.co/auth/v1/.well-known/jwks.json"
+      SUPABASE_TIMEOUT_SEC: "10"
+      JWKS_TTL_SEC: "300"
+      JWKS_FETCH_TIMEOUT_SEC: "5"
+      API_HOST: "127.0.0.1"
+      API_PORT: "8000"
+      CORS_ALLOW_ORIGINS: "http://localhost:5173"
+      XTRUSIO_PROCESS_ROLE: "api"
+      STARTUP_RECONCILE_TOLERANT: "false"
+      LOG_LEVEL: "INFO"
+      WEB_APP_URL: "http://localhost:5173"
+      VALKEY_URL: "redis://localhost:6379/0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # pnpm version is read from `packageManager` in package.json.
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: make install
+
+      - name: Regenerate api-types from the OpenAPI schema
+        # The root `api-types:generate` script sources the repo-root `.env`; in
+        # CI there is no `.env`, so run the package generator directly with the
+        # env block above already exported into the job environment.
+        run: pnpm --filter @xtrusio/api-types run generate
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code packages/api-types/generated/; then
+            echo "::error::packages/api-types/generated/openapi.d.ts is stale."
+            echo "::error::Run \`pnpm api-types:generate\` and commit the result."
+            exit 1
+          fi

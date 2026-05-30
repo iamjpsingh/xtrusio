@@ -32,5 +32,11 @@ htmlcov/
 build/
 *.tsbuildinfo
 
+# Frontend test/coverage artifacts (vitest v8 coverage + Playwright reports)
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
 # Supabase CLI local artifacts (project uses managed Supabase, no local stack)
 supabase/

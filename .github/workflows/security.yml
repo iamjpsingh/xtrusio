@@ -146,19 +146,15 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Frontend coverage gate (authoritative). Conservative 60% floor to start;
-  # ratchet up via PR.
-  #
-  # NOTE: the actual vitest coverage config (the `@vitest/coverage-v8` devDep +
-  # the `coverage.thresholds` block in apps/web/vitest.config.ts) is owned by
-  # the PAR-F frontend half. Until that lands this job is advisory
-  # (continue-on-error) so it doesn't block on missing coverage tooling. Flip
-  # continue-on-error off once the frontend coverage config is committed.
+  # ratchet up via PR. The `@vitest/coverage-v8` devDep + the
+  # `coverage.thresholds` block in apps/web/vitest.config.ts landed with the
+  # PAR-F frontend half, so this gate is now enforcing (no continue-on-error).
+  # Local measurement at landing time: ~74% statements / ~88% branches.
   # ---------------------------------------------------------------------------
   frontend-coverage:
-    name: frontend coverage (>=60%, advisory until FE config lands)
+    name: frontend coverage (>=60%)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

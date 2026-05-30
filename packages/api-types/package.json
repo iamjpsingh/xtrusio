@@ -11,9 +11,12 @@
   "scripts": {
     "lint": "echo 'no source yet'",
     "typecheck": "tsc -b --noEmit",
-    "test": "echo 'no tests yet'"
+    "test": "echo 'no tests yet'",
+    "generate": "tsx scripts/generate.ts"
   },
   "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "tsx": "^4.22.0",
     "typescript": "^5.5.0"
   }
 }

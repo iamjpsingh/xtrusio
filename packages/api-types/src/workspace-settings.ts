@@ -1,15 +1,10 @@
 // packages/api-types/src/workspace-settings.ts
-// Mirror of apps/api/src/xtrusio_api/schemas/workspace_settings.py. P6d MVP
-// only exposes `name` as mutable; slug/timestamps are read-only.
+//
+// Thin re-exports of the generated OpenAPI workspace-settings schemas (F.3,
+// finding H13). P6d MVP only exposes `name` as mutable; slug/timestamps are
+// read-only.
 
-export type WorkspaceSettingsOut = {
-  id: string;
-  slug: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-};
+import type { components } from "../generated/openapi";
 
-export type WorkspaceSettingsUpdate = {
-  name: string;
-};
+export type WorkspaceSettingsOut = components["schemas"]["WorkspaceSettingsOut"];
+export type WorkspaceSettingsUpdate = components["schemas"]["WorkspaceSettingsUpdate"];

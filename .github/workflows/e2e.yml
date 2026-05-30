@@ -1,0 +1,69 @@
+name: e2e
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# E2E shares no CI DB state at the workflow level (it drives a real Supabase
+# project via the browser), so superseded runs can be cancelled.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Playwright admin smoke (F.2, finding H13): sign in -> list roles -> create a
+  # role -> audit log shows the create -> delete the role -> sign out.
+  #
+  # ADVISORY until the secrets/env below exist. The spec itself skips when the
+  # admin credentials are absent (test.skip), so this job currently no-ops
+  # rather than failing — it becomes a hard gate once the secrets are populated
+  # and `continue-on-error` is removed.
+  # ---------------------------------------------------------------------------
+  playwright:
+    name: playwright admin smoke (advisory until secrets exist)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+
+    env:
+      # The web app the browser drives. Set E2E_BASE_URL as a repo variable to
+      # point at a deployed preview, or leave it for the dev server below.
+      E2E_BASE_URL: ${{ vars.E2E_BASE_URL || 'http://localhost:5173' }}
+      # Login for an account that can manage platform roles + read the audit
+      # log. NEVER hardcoded — supplied via repo secrets. The spec self-skips if
+      # these are empty.
+      E2E_ADMIN_EMAIL: ${{ secrets.E2E_ADMIN_EMAIL }}
+      E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+      # The dev web server reads these from the environment (see vite.config.ts
+      # / lib/supabase.ts / lib/api.ts). Point at the e2e Supabase + API.
+      WEB_DEV_PORT: "5173"
+      VITE_SUPABASE_URL: ${{ secrets.E2E_VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.E2E_VITE_SUPABASE_ANON_KEY }}
+      VITE_API_BASE_URL: ${{ vars.E2E_VITE_API_BASE_URL || 'http://localhost:8000' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @xtrusio/web exec playwright install --with-deps chromium
+
+      - name: Run admin smoke
+        # The spec self-skips when E2E_ADMIN_* are empty, so this is a no-op
+        # until the secrets exist. Wire a real backend (deployed preview or a
+        # `make dev` background step) before treating it as a hard gate.
+        run: pnpm --filter @xtrusio/web test:e2e

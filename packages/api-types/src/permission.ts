@@ -1,17 +1,15 @@
 // packages/api-types/src/permission.ts
-// Mirror of apps/api/src/xtrusio_api/schemas/permission.py. Frontend fetches
-// /api/permissions/catalog once per session (staleTime: Infinity); the data
-// only changes with a backend deploy.
+//
+// Thin re-exports of the generated OpenAPI permission-catalog schemas (F.3,
+// finding H13). `PermissionScope` has no standalone OpenAPI schema (the backend
+// inlines it as an enum on `PermissionDef.scope`), so it stays hand-written as
+// a UI convenience alias derived from the generated `PermissionDef`.
 
-export type PermissionScope = "platform" | "workspace";
+import type { components } from "../generated/openapi";
 
-export type PermissionDef = {
-  scope: PermissionScope;
-  key: string;
-  category: string;
-  description: string;
-};
+export type PermissionDef = components["schemas"]["PermissionDef"];
 
-export type PermissionsCatalog = {
-  items: PermissionDef[];
-};
+/** Derived from the generated `PermissionDef.scope` enum so it never drifts. */
+export type PermissionScope = PermissionDef["scope"];
+
+export type PermissionsCatalog = components["schemas"]["PermissionsCatalog"];
