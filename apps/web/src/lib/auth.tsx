@@ -1,8 +1,13 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+// apps/web/src/lib/auth.tsx
+//
+// Thin React surface over the Zustand auth store (lib/auth-store.ts). The
+// session itself lives in the store with a single module-level subscription;
+// this file only exposes the existing `useAuth()` hook + `<AuthProvider>` so
+// consumers (AuthGuard, sign-in page, user menu, __root) stay unchanged.
+import { type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
-import { queryClient } from "./query-client";
-import { clearLastWorkspace } from "./last-workspace";
+import { initAuth, useAuthStore } from "./auth-store";
 
 type AuthState = {
   user: User | null;
@@ -12,78 +17,37 @@ type AuthState = {
   signOut: () => Promise<void>;
 };
 
-const AuthContext = createContext<AuthState | null>(null);
+// Initialise the store as soon as the auth module is first imported (once).
+initAuth();
 
+/**
+ * Kept as a passthrough so the existing `<AuthProvider>` in __root.tsx and the
+ * component tree are unchanged. The store self-initialises (see initAuth above),
+ * so there is no provider state to hold.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth
-      .getSession()
-      .then(({ data }) => {
-        if (!mounted) return;
-        setSession(data.session);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        // M23: corrupted Supabase localStorage / decryption failure must not
-        // hang the app on "Loading…" forever. Treat it as signed-out.
-        console.warn("getSession failed", err);
-        if (!mounted) return;
-        setSession(null);
-        setLoading(false);
-      });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, s) => {
-      // H1: drop every cached query + the last-workspace pin on sign-out so a
-      // subsequent sign-in as a different user never sees the prior user's
-      // `me`/lists. On a *different-user* sign-in, also clear (defense in depth).
-      if (event === "SIGNED_OUT") {
-        queryClient.clear();
-        clearLastWorkspace();
-      }
-      if (event === "SIGNED_IN" && s?.user.id !== session?.user.id) {
-        queryClient.clear();
-      }
-      setSession(s);
-      setLoading(false);
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-    // Mount-once subscription: re-subscribing on every `session` change would
-    // tear down + recreate the Supabase listener and re-run getSession. The
-    // closure's `session?.user.id` read is an intentional "previous user" probe.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const value = useMemo<AuthState>(
-    () => ({
-      user: session?.user ?? null,
-      session,
-      loading,
-      signIn: async (email: string, password: string) => {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        return { error: error?.message ?? null };
-      },
-      signOut: async () => {
-        await supabase.auth.signOut();
-      },
-    }),
-    [session, loading],
-  );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <>{children}</>;
 }
 
+async function signIn(email: string, password: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  return { error: error?.message ?? null };
+}
+
+async function signOut(): Promise<void> {
+  await supabase.auth.signOut();
+}
+
+/** Read the current auth state from the store. Re-renders only when the
+ * session/status slice changes — never on unrelated renders. */
 export function useAuth(): AuthState {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
+  const session = useAuthStore((s) => s.session);
+  const status = useAuthStore((s) => s.status);
+  return {
+    user: session?.user ?? null,
+    session,
+    loading: status === "loading",
+    signIn,
+    signOut,
+  };
 }

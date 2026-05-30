@@ -30,9 +30,7 @@ describe("SignUpPage", () => {
   it("renders disabled message when signups_enabled=false", async () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: false });
     renderPage();
-    await waitFor(() =>
-      expect(screen.getByText(/sign-up unavailable/i)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/sign-up unavailable/i)).toBeTruthy());
   });
 
   it("renders form when enabled, submits, shows confirmation screen", async () => {
@@ -42,7 +40,7 @@ describe("SignUpPage", () => {
     renderPage();
     await waitFor(() => screen.getByLabelText(/email/i));
     await user.type(screen.getByLabelText(/email/i), "alice@example.com");
-    await user.type(screen.getByLabelText(/password/i), "Password1!");
+    await user.type(screen.getByLabelText("Password"), "Password1!");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
     await waitFor(() => expect(screen.getByText(/check your email/i)).toBeTruthy());
     expect(postSignup).toHaveBeenCalledWith("alice@example.com", "Password1!");
@@ -61,7 +59,7 @@ describe("SignUpPage", () => {
     renderPage();
     await waitFor(() => screen.getByLabelText(/email/i));
     await user.type(screen.getByLabelText(/email/i), "bob@example.com");
-    await user.type(screen.getByLabelText(/password/i), "Password1!");
+    await user.type(screen.getByLabelText("Password"), "Password1!");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
     await waitFor(() =>
       expect(screen.getByText("Signups are currently disabled.")).toBeInTheDocument(),
