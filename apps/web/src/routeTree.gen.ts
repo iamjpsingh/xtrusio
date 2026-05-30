@@ -14,6 +14,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppPlatformIndexRouteImport } from './routes/_app.platform.index'
 import { Route as AppWorkspaceWorkspaceIdRouteImport } from './routes/_app.workspace.$workspaceId'
@@ -51,6 +52,11 @@ const AcceptInviteRoute = AcceptInviteRouteImport.update({
 } as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppPlatformRoute = AppPlatformRouteImport.update({
@@ -131,7 +137,7 @@ const AppPlatformClientsSlugUsersRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppRouteWithChildren
+  '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
@@ -152,7 +158,7 @@ export interface FileRoutesByFullPath {
   '/platform/clients/$slug/users': typeof AppPlatformClientsSlugUsersRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof AppRouteWithChildren
+  '/': typeof IndexRoute
   '/accept-invite': typeof AcceptInviteRoute
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
@@ -172,6 +178,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/accept-invite': typeof AcceptInviteRoute
   '/onboarding': typeof OnboardingRoute
@@ -235,6 +242,7 @@ export interface FileRouteTypes {
     | '/platform/clients/$slug/users'
   id:
     | '__root__'
+    | '/'
     | '/_app'
     | '/accept-invite'
     | '/onboarding'
@@ -257,6 +265,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AcceptInviteRoute: typeof AcceptInviteRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -299,6 +308,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/platform': {
@@ -470,6 +486,7 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AcceptInviteRoute: AcceptInviteRoute,
   OnboardingRoute: OnboardingRoute,
