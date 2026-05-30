@@ -1,114 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
 import type { MeResponse } from "@xtrusio/api-types";
 import type { TenantInvite } from "@/lib/api";
-import { deleteTenantInvite, errorCode, fetchTenantInvites, postTenantInvite } from "@/lib/api";
-import { errorMessage } from "@/lib/error-messages";
+import { deleteTenantInvite, fetchTenantInvites } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { findTenant, getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { PageHeader } from "@/components/page-header";
 import { Forbidden } from "@/components/forbidden";
+import { ScopedInviteDialog } from "@/components/scoped-invite-dialog";
 import { WorkspaceMembersListPage } from "@/components/workspace-members-list-page";
 
-type InviteRole = "admin" | "editor" | "read_only";
-
-function InviteDialog({
-  workspaceId,
-  canPickAdmin,
-}: {
-  workspaceId: string;
-  canPickAdmin: boolean;
-}) {
-  const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<InviteRole>(canPickAdmin ? "admin" : "editor");
-  const [open, setOpen] = useState(false);
-  const allowed: InviteRole[] = canPickAdmin
-    ? ["admin", "editor", "read_only"]
-    : ["editor", "read_only"];
-  const m = useMutation({
-    mutationFn: () => postTenantInvite(workspaceId, email, role),
-    onSuccess: async () => {
-      await qc.invalidateQueries({
-        queryKey: qk.workspaceInvites(workspaceId),
-      });
-      setOpen(false);
-      setEmail("");
-      setRole(canPickAdmin ? "admin" : "editor");
-    },
-  });
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Invite user</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite a user to this workspace</DialogTitle>
-        </DialogHeader>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            m.mutate();
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
-              <SelectTrigger id="role">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allowed.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {m.error ? (
-            <p className="text-sm text-destructive">{errorMessage(errorCode(m.error))}</p>
-          ) : null}
-          <Button type="submit" disabled={m.isPending} className="w-full">
-            {m.isPending ? "Sending…" : "Send invite"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export function WorkspaceMembersPage({ workspaceId }: { workspaceId: string }) {
+  // Deep-link fallback; the route's beforeLoad gate is the primary guard.
   const { me } = useMe();
   if (!hasWorkspacePerm(me, workspaceId, "workspace.members.read")) {
     return <Forbidden landingPath={getDefaultLandingPath(me)} />;
@@ -140,7 +44,13 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
         title={`${tenant?.name ?? "Workspace"} — Members`}
         description="People with access to this workspace. Invite new members, list pending invites, and manage existing members' roles."
         action={
-          canInvite ? <InviteDialog workspaceId={workspaceId} canPickAdmin={canPickAdmin} /> : null
+          canInvite ? (
+            <ScopedInviteDialog
+              targetId={workspaceId}
+              canPickAdmin={canPickAdmin}
+              invalidateKey={qk.workspaceInvites(workspaceId)}
+            />
+          ) : null
         }
       />
       <section>

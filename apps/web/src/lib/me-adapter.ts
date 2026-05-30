@@ -7,6 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { MeResponse, PermissionKey, TenantContext } from "@xtrusio/api-types";
 import { fetchMe } from "./api";
+import { qk } from "./query-keys";
 
 export function hasPlatformPerm(me: MeResponse | null, key: PermissionKey): boolean {
   if (!me) return false;
@@ -45,7 +46,7 @@ export function getDefaultLandingPath(me: MeResponse | null): string {
 /** Shared `useQuery(['me'])` hook so every consumer reuses the same cache entry. */
 export function useMe(): { me: MeResponse | null; isLoading: boolean } {
   const { data, isLoading } = useQuery({
-    queryKey: ["me"],
+    queryKey: qk.me(),
     queryFn: fetchMe,
     refetchOnWindowFocus: false,
   });

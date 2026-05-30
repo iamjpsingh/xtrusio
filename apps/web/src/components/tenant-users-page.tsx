@@ -1,110 +1,11 @@
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import {
-  deleteTenantInvite,
-  errorCode,
-  fetchTenantInvites,
-  postTenantInvite,
-  type TenantInvite,
-} from "@/lib/api";
-import { errorMessage } from "@/lib/error-messages";
+import { deleteTenantInvite, fetchTenantInvites, type TenantInvite } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import { hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { PageHeader } from "@/components/page-header";
-
-type TenantRole = "admin" | "editor" | "read_only";
-
-function InviteTenantDialog({
-  tenantId,
-  inviterRole,
-}: {
-  tenantId: string;
-  inviterRole: "owner" | "admin";
-}) {
-  const qc = useQueryClient();
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<TenantRole>(inviterRole === "owner" ? "admin" : "editor");
-  const [open, setOpen] = useState(false);
-  const allowed: TenantRole[] =
-    inviterRole === "owner" ? ["admin", "editor", "read_only"] : ["editor", "read_only"];
-  const m = useMutation({
-    mutationFn: () => postTenantInvite(tenantId, email, role),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["tenant-invites", tenantId] });
-      setOpen(false);
-      setEmail("");
-      setRole(inviterRole === "owner" ? "admin" : "editor");
-    },
-  });
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Invite user</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Invite a user to this workspace</DialogTitle>
-        </DialogHeader>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            m.mutate();
-          }}
-          className="space-y-4"
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="role">Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as TenantRole)}>
-              <SelectTrigger id="role">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {allowed.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {m.error ? (
-            <p className="text-sm text-destructive">{errorMessage(errorCode(m.error))}</p>
-          ) : null}
-          <Button type="submit" disabled={m.isPending} className="w-full">
-            {m.isPending ? "Sending…" : "Send invite"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { ScopedInviteDialog } from "@/components/scoped-invite-dialog";
 
 export function TenantUsersPage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
@@ -113,27 +14,32 @@ export function TenantUsersPage() {
   const myTenant = me?.tenants.find((t) => t.slug === slug);
   const tenantId = myTenant?.id ?? "";
   const { data: invites } = useQuery({
-    queryKey: ["tenant-invites", tenantId],
+    queryKey: qk.tenantInvites(tenantId),
     queryFn: () => fetchTenantInvites(tenantId),
     enabled: !!myTenant,
   });
   const revoke = useMutation({
     mutationFn: (id: string) => deleteTenantInvite(tenantId, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenant-invites", tenantId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.tenantInvites(tenantId) }),
   });
   if (!myTenant) return null;
   const canInvite = hasWorkspacePerm(me, myTenant.id, "workspace.members.invite");
   // "owner" is the workspace governance role; only owner may pick the
-  // "admin" invite role. The legacy invite contract still scopes role-picker
-  // options by inviter role, separate from the outer authorization gate.
-  const inviterRole: "owner" | "admin" = myTenant.role === "owner" ? "owner" : "admin";
+  // "admin" invite role. This mirrors the workspace-members invite contract.
+  const canPickAdmin = myTenant.role === "owner";
   return (
     <div className="space-y-6">
       <PageHeader
         title={`${myTenant.name} — Users`}
         description="Manage who has access to this workspace."
         action={
-          canInvite ? <InviteTenantDialog tenantId={myTenant.id} inviterRole={inviterRole} /> : null
+          canInvite ? (
+            <ScopedInviteDialog
+              targetId={myTenant.id}
+              canPickAdmin={canPickAdmin}
+              invalidateKey={qk.tenantInvites(myTenant.id)}
+            />
+          ) : null
         }
       />
       <section>

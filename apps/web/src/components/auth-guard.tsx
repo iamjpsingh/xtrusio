@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { fetchMe } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
+import { readLastWorkspace } from "@/lib/last-workspace";
 import { resolveRoute } from "@/lib/route-resolver";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
@@ -16,13 +18,19 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const { data: me, isLoading: meLoading } = useQuery({
-    queryKey: ["me"],
+    queryKey: qk.me(),
     queryFn: fetchMe,
     enabled: !!auth.session,
     refetchOnWindowFocus: false,
   });
 
-  const decision = resolveRoute({ session: auth.session ? "s" : null, me: me ?? null }, pathname);
+  // L9: read the last-workspace pin once here and pass it into the pure
+  // resolver, instead of the resolver reading localStorage on every render.
+  const decision = resolveRoute(
+    { session: auth.session ? "s" : null, me: me ?? null },
+    pathname,
+    readLastWorkspace(),
+  );
 
   useEffect(() => {
     if (decision.kind === "redirect" && pathname !== decision.to) {

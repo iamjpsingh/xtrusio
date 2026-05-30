@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
@@ -13,7 +13,10 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, fetchMe } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
+import { queryClient } from "@/lib/query-client";
+import { getDefaultLandingPath, hasPlatformPerm } from "@/lib/me-adapter";
 import { CreateClientDialog } from "@/components/create-client-dialog";
 
 type Tenant = {
@@ -26,12 +29,18 @@ type Tenant = {
 };
 
 export const Route = createFileRoute("/_app/platform/clients")({
+  beforeLoad: async () => {
+    const me = await queryClient.ensureQueryData({ queryKey: qk.me(), queryFn: fetchMe });
+    if (!hasPlatformPerm(me, "platform.clients.read")) {
+      throw redirect({ to: getDefaultLandingPath(me) });
+    }
+  },
   component: ClientsRoute,
 });
 
 function ClientsRoute() {
   const { data, isLoading } = useQuery({
-    queryKey: ["tenants"],
+    queryKey: qk.tenants(),
     queryFn: () => apiFetch<Tenant[]>("/api/tenants"),
   });
 

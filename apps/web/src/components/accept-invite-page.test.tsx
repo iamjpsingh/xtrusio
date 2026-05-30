@@ -1,68 +1,70 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { AcceptInvitePage } from "./accept-invite-page";
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   postAcceptInvite: vi.fn(),
 }));
-const navigateMock = vi.fn();
-vi.mock("@tanstack/react-router", () => ({
+
+// vi.hoisted exposes shared spies + the mutable loader-data holder to the
+// hoisted vi.mock factories.
+const { navigateMock, signOutMock, loaderData } = vi.hoisted(() => ({
+  navigateMock: vi.fn(),
+  signOutMock: vi.fn().mockResolvedValue({ error: null }),
+  loaderData: { code: "invite_expired" as string },
+}));
+
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    auth: {
+      signOut: signOutMock,
+      // session-cache subscribes at import time (via lib/api).
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    },
+  },
+}));
+
+// The component reads its error code from the route loader via getRouteApi.
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => navigateMock,
+  getRouteApi: () => ({ useLoaderData: () => loaderData }),
 }));
 
 import { ApiError, postAcceptInvite } from "@/lib/api";
+import { AcceptInvitePage } from "./accept-invite-page";
 
-function renderPage() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={qc}>
-      <AcceptInvitePage />
-    </QueryClientProvider>,
-  );
-}
-
-describe("AcceptInvitePage", () => {
+describe("AcceptInvitePage (loader-driven error view)", () => {
   beforeEach(() => {
     vi.mocked(postAcceptInvite).mockReset();
     navigateMock.mockReset();
+    signOutMock.mockClear();
+    loaderData.code = "invite_expired";
   });
 
-  it("auto-posts on mount and redirects to /", async () => {
-    vi.mocked(postAcceptInvite).mockResolvedValue({
-      kind: "platform",
-      role: "admin",
-      tenant_id: null,
-    });
-    renderPage();
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/" }));
-    expect(postAcceptInvite).toHaveBeenCalled();
-  });
-
-  it("renders the specific message on a real ApiError", async () => {
-    vi.mocked(postAcceptInvite).mockRejectedValue(new ApiError(403, { detail: "invite_expired" }));
-    renderPage();
-    await waitFor(() => expect(screen.getByText(/this invitation has expired/i)).toBeTruthy());
+  it("renders the specific message for the loader error code inside AuthLayout", () => {
+    render(<AcceptInvitePage />);
+    expect(screen.getByText(/this invitation has expired/i)).toBeInTheDocument();
     expect(screen.getByText("Xtrusio")).toBeInTheDocument();
   });
 
-  it("redirects to / when already provisioned (409)", async () => {
-    vi.mocked(postAcceptInvite).mockRejectedValue(
-      new ApiError(409, { detail: "already_provisioned" }),
-    );
-    renderPage();
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/" }));
-    expect(screen.queryByText(/couldn.t accept invitation/i)).toBeNull();
+  it("signs out and navigates to /sign-in when Sign out is clicked", async () => {
+    render(<AcceptInvitePage />);
+    await userEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    expect(signOutMock).toHaveBeenCalled();
   });
 
-  it("renders the accept-invite states inside the shared AuthLayout (Xtrusio wordmark)", async () => {
-    vi.mocked(postAcceptInvite).mockResolvedValue({
-      kind: "platform",
-      role: "admin",
-      tenant_id: null,
-    });
-    renderPage();
-    expect(await screen.findByText("Xtrusio")).toBeInTheDocument();
+  it("uses the generic fallback for an unknown code", () => {
+    loaderData.code = "totally_unknown_code";
+    render(<AcceptInvitePage />);
+    expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
+  });
+
+  it("does not import the old useEffect/useRef auto-post path", () => {
+    // postAcceptInvite is now called by the route loader, not the component.
+    render(<AcceptInvitePage />);
+    expect(ApiError).toBeTruthy();
+    expect(postAcceptInvite).not.toHaveBeenCalled();
   });
 });

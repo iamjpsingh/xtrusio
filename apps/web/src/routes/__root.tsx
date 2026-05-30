@@ -17,8 +17,10 @@ function RootLayout() {
         <AuthProvider>
           <AuthGuard>
             <Outlet />
-            <Toaster richColors closeButton position="bottom-right" />
           </AuthGuard>
+          {/* M24: Toaster is a sibling of AuthGuard, not a child — so toasts
+              survive auth redirects (AuthGuard returns null mid-redirect). */}
+          <Toaster richColors closeButton position="bottom-right" />
         </AuthProvider>
       </QueryClientProvider>
     </ThemeProvider>

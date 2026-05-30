@@ -8,12 +8,9 @@
 // View gate: workspace.members.read.
 // Manage-roles gate: workspace.members.manage.
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import type {
-  WorkspaceMemberListItem,
-  WorkspaceMembersPage as WorkspaceMembersPageType,
-} from "@xtrusio/api-types";
+import type { WorkspaceMemberListItem } from "@xtrusio/api-types";
 import { fetchWorkspaceMembers } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
@@ -45,22 +42,21 @@ function formatDate(iso: string): string {
 }
 
 function Body({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [pages, setPages] = useState<WorkspaceMembersPageType[]>([]);
   const [selected, setSelected] = useState<WorkspaceMemberListItem | null>(null);
 
-  const query = useQuery({
-    queryKey: qk.workspaceMembersWithCursor(workspaceId, cursor),
-    queryFn: async () => {
-      const page = await fetchWorkspaceMembers(workspaceId, cursor);
-      setPages((prev) => (cursor === null ? [page] : [...prev, page]));
-      return page;
-    },
+  // H3: useInfiniteQuery owns the page accumulator (no setState in queryFn).
+  const query = useInfiniteQuery({
+    queryKey: qk.workspaceMembers(workspaceId),
+    queryFn: ({ pageParam }) => fetchWorkspaceMembers(workspaceId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
 
-  const members = useMemo<WorkspaceMemberListItem[]>(() => pages.flatMap((p) => p.items), [pages]);
-  const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
-  const lastCursor = lastPage ? lastPage.next_cursor : null;
+  const members = useMemo<WorkspaceMemberListItem[]>(
+    () => query.data?.pages.flatMap((p) => p.items) ?? [],
+    [query.data],
+  );
+  const nextCursor = query.hasNextPage ? "more" : null;
 
   return (
     <section className="space-y-3">
@@ -110,9 +106,9 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
         </Table>
       )}
       <LoadMoreButton
-        nextCursor={lastCursor}
-        pending={query.isFetching}
-        onClick={() => setCursor(lastCursor)}
+        nextCursor={nextCursor}
+        pending={query.isFetchingNextPage}
+        onClick={() => void query.fetchNextPage()}
       />
       {selected ? (
         <GrantManagerDialog

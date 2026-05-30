@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { resolveSession } from "./session-cache";
 import type {
   AuditEventsPage,
   MeResponse,
@@ -25,35 +26,57 @@ if (!baseUrl) {
   throw new Error("VITE_API_BASE_URL must be set in .env");
 }
 
+/** Default per-request timeout. Overridable via apiFetch's 4th argument. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
 export class ApiError extends Error {
+  /**
+   * Structured backend error code (the top-level body key, e.g. `detail`),
+   * NOT a stringification of the whole body. `.message` is the code or
+   * `API <status>` — never raw JSON (L8/H2).
+   */
+  readonly code: string | null;
+
   constructor(
     public status: number,
     public body: unknown,
   ) {
-    super(`API ${status}: ${JSON.stringify(body)}`);
+    const code = ApiError.codeFromBody(body);
+    super(code ?? `API ${status}`);
+    this.name = "ApiError";
+    this.code = code;
   }
 
-  /** The backend error code from a FastAPI `{ "detail": "<code>" }` body, if present. */
-  get code(): string | null {
-    if (typeof this.body === "object" && this.body !== null && "detail" in this.body) {
-      const d = (this.body as Record<string, unknown>).detail;
+  private static codeFromBody(body: unknown): string | null {
+    if (typeof body === "object" && body !== null && "detail" in body) {
+      const d = (body as Record<string, unknown>).detail;
       return typeof d === "string" ? d : null;
     }
     return null;
   }
 }
 
-/** Extract a backend error code from a thrown value (ApiError.detail, else Error.message). */
+/**
+ * Thrown when a 401 could not be recovered by a token refresh. The
+ * AuthProvider's SIGNED_OUT branch handles the redirect (cleared cache +
+ * auth-state); callers generally don't need to special-case this.
+ */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("session_expired");
+    this.name = "SessionExpiredError";
+  }
+}
+
+/** Extract a backend error code from a thrown value (ApiError.code, else Error.message). */
 export function errorCode(e: unknown): string {
   if (e instanceof ApiError) return e.code ?? "";
   if (e instanceof Error) return e.message;
   return "";
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+async function authHeaders(init?: RequestInit): Promise<Headers> {
+  const session = await resolveSession();
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -61,13 +84,82 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   if (session?.access_token) {
     headers.set("Authorization", `Bearer ${session.access_token}`);
   }
-  const res = await fetch(`${baseUrl}${path}`, { ...init, headers });
+  return headers;
+}
+
+/**
+ * Issue a single request with an AbortController-backed timeout. Returns the
+ * raw Response (caller decides how to parse). `signal` is honoured separately
+ * from the timeout so external aborts still propagate.
+ */
+async function rawRequest(path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(`${baseUrl}${path}`, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Core fetch wrapper (H2/L8/L10):
+ * - AbortController-backed timeout (default 20s, override via 4th arg).
+ * - On 401: refresh the session once and retry. If refresh fails, sign out and
+ *   throw SessionExpiredError. The `retried` guard prevents infinite loops.
+ * - Reads the access token from the module session cache, not getSession().
+ */
+async function performFetch(
+  path: string,
+  init: RequestInit | undefined,
+  timeoutMs: number,
+  retried: boolean,
+): Promise<Response> {
+  const headers = await authHeaders(init);
+  const res = await rawRequest(path, { ...init, headers }, timeoutMs);
+
+  if (res.status === 401 && !retried) {
+    const { error } = await supabase.auth.refreshSession();
+    if (error) {
+      await supabase.auth.signOut();
+      throw new SessionExpiredError();
+    }
+    return performFetch(path, init, timeoutMs, true);
+  }
+  return res;
+}
+
+/**
+ * Fetch a JSON body. Use `apiFetchVoid` for 204/DELETE endpoints — this overload
+ * always parses a JSON response and never returns `undefined` (L8 fix).
+ */
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<T> {
+  const res = await performFetch(path, init, timeoutMs, false);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body);
   }
-  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+/**
+ * Fetch an endpoint that returns no body (204 / DELETE). Returns `Promise<void>`
+ * with an honest type — never `undefined as T` (L8).
+ */
+export async function apiFetchVoid(
+  path: string,
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
+): Promise<void> {
+  const res = await performFetch(path, init, timeoutMs, false);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body);
+  }
 }
 
 export async function fetchMe(): Promise<MeResponse> {
@@ -147,7 +239,7 @@ export async function fetchPlatformInvites(): Promise<{ items: PlatformInvite[] 
 }
 
 export async function deletePlatformInvite(id: string): Promise<void> {
-  await apiFetch(`/api/platform/users/invites/${id}`, { method: "DELETE" });
+  await apiFetchVoid(`/api/platform/users/invites/${id}`, { method: "DELETE" });
 }
 
 export async function postTenantInvite(
@@ -166,7 +258,7 @@ export async function fetchTenantInvites(tenantId: string): Promise<{ items: Ten
 }
 
 export async function deleteTenantInvite(tenantId: string, id: string): Promise<void> {
-  await apiFetch(`/api/tenants/${tenantId}/invites/${id}`, { method: "DELETE" });
+  await apiFetchVoid(`/api/tenants/${tenantId}/invites/${id}`, { method: "DELETE" });
 }
 
 export async function postAcceptInvite(): Promise<{
@@ -208,7 +300,7 @@ export async function patchPlatformRole(
 }
 
 export async function deletePlatformRole(id: string): Promise<void> {
-  await apiFetch(`/api/platform/roles/${id}`, { method: "DELETE" });
+  await apiFetchVoid(`/api/platform/roles/${id}`, { method: "DELETE" });
 }
 
 // ----- Workspace role CRUD (consumes P5 routes) -----
@@ -243,7 +335,7 @@ export async function patchWorkspaceRole(
 }
 
 export async function deleteWorkspaceRole(workspaceId: string, id: string): Promise<void> {
-  await apiFetch(`/api/workspaces/${workspaceId}/roles/${id}`, {
+  await apiFetchVoid(`/api/workspaces/${workspaceId}/roles/${id}`, {
     method: "DELETE",
   });
 }
@@ -317,7 +409,7 @@ export async function postPlatformRoleGrant(
 }
 
 export async function deletePlatformRoleGrant(userId: string, grantId: string): Promise<void> {
-  await apiFetch(`/api/platform/users/${userId}/roles/${grantId}`, { method: "DELETE" });
+  await apiFetchVoid(`/api/platform/users/${userId}/roles/${grantId}`, { method: "DELETE" });
 }
 
 // ----- Workspace role grants (P5) -----
@@ -349,7 +441,7 @@ export async function deleteWorkspaceRoleGrant(
   userId: string,
   grantId: string,
 ): Promise<void> {
-  await apiFetch(`/api/workspaces/${workspaceId}/members/${userId}/roles/${grantId}`, {
+  await apiFetchVoid(`/api/workspaces/${workspaceId}/members/${userId}/roles/${grantId}`, {
     method: "DELETE",
   });
 }

@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { errorCode, postOnboarding } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import { errorMessage } from "@/lib/error-messages";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ export function OnboardingPage() {
   const m = useMutation({
     mutationFn: () => postOnboarding(workspaceName),
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: qk.me() });
       navigate({ to: "/" });
     },
   });

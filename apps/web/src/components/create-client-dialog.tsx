@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ApiError, apiFetch } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 
 type CreateBody = { slug: string; name: string };
 type Tenant = {
@@ -38,7 +39,7 @@ export function CreateClientDialog({ trigger }: { trigger: React.ReactNode }) {
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["tenants"] });
+      void qc.invalidateQueries({ queryKey: qk.tenants() });
       setOpen(false);
       setSlug("");
       setName("");

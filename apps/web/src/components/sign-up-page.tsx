@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { errorCode, fetchSignupStatus, postSignup } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import { errorMessage } from "@/lib/error-messages";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label";
 
 export function SignUpPage() {
   const { data: status, isLoading } = useQuery({
-    queryKey: ["signup-status"],
+    queryKey: qk.signupStatus(),
     queryFn: fetchSignupStatus,
   });
   const [email, setEmail] = useState("");
@@ -23,7 +24,10 @@ export function SignUpPage() {
   if (isLoading) return null;
   if (status && !status.signups_enabled) {
     return (
-      <AuthLayout title="Sign-up unavailable" subtitle="Public client signup is currently turned off">
+      <AuthLayout
+        title="Sign-up unavailable"
+        subtitle="Public client signup is currently turned off"
+      >
         <p className="text-center text-sm text-muted-foreground">
           Contact your administrator for an invitation.
         </p>
