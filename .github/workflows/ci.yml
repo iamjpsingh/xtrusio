@@ -5,23 +5,46 @@ on:
   push:
     branches: [main]
 
-concurrency:
-  # All jobs that touch the shared CI Supabase project serialise here.
-  # Do NOT cancel in progress: a half-cleaned DB is worse than a slow queue.
-  group: ci-test-db
-  cancel-in-progress: false
-
 jobs:
-  check:
+  # ---------------------------------------------------------------------------
+  # Static gate + the Supabase-free test subset on an EPHEMERAL Postgres.
+  # No shared state -> safe to cancel superseded runs (F.1 / H12).
+  # ---------------------------------------------------------------------------
+  static-and-ephemeral:
+    name: lint • typecheck • ephemeral-PG tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
+    concurrency:
+      group: ci-ephemeral-${{ github.ref }}
+      cancel-in-progress: true
+
+    services:
+      postgres:
+        # pgvector image == postgres:16 + the `vector` extension migration 0000
+        # creates. Plain postgres:16 lacks `vector`; everything else (pgcrypto,
+        # citext) ships in both. See .github/ci/ephemeral-db-bootstrap.sql.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      # Supabase test project (xtrusio-ci) — all secrets configured in repo settings.
-      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
-      SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
-      SUPABASE_JWKS_URL: ${{ secrets.CI_SUPABASE_JWKS_URL }}
+      # Ephemeral Postgres — NOT a real Supabase project. The Supabase-specific
+      # env values only need to satisfy Settings validation; the tests selected
+      # here (`-m 'not requires_supabase'`) never exercise auth/JWT/JWKS.
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/postgres
+      SUPABASE_URL: "https://ephemeral.example.supabase.co"
+      SUPABASE_ANON_KEY: "ci-ephemeral-anon-key"
+      SUPABASE_SERVICE_ROLE_KEY: "ci-ephemeral-service-role-key"
+      SUPABASE_JWKS_URL: "https://ephemeral.example.supabase.co/auth/v1/.well-known/jwks.json"
       SUPABASE_TIMEOUT_SEC: "10"
       JWKS_TTL_SEC: "300"
       JWKS_FETCH_TIMEOUT_SEC: "5"
@@ -32,7 +55,6 @@ jobs:
       STARTUP_RECONCILE_TOLERANT: "false"
       LOG_LEVEL: "INFO"
       WEB_APP_URL: "http://localhost:5173"
-      # CI does not run Valkey; the URL only needs to satisfy Settings validation.
       VALKEY_URL: "redis://localhost:6379/0"
 
     steps:
@@ -63,11 +85,13 @@ jobs:
       - name: Install
         run: make install
 
-      - name: Migrate test DB (idempotent)
-        run: make migrate
+      - name: Prepare ephemeral DB (auth schema + extensions stub)
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -f .github/ci/ephemeral-db-bootstrap.sql
 
-      - name: Pre-test cleanup
-        run: make test-clean
+      - name: Migrate (ephemeral PG)
+        run: make migrate
 
       - name: Lint
         run: make lint
@@ -75,8 +99,71 @@ jobs:
       - name: Typecheck
         run: make typecheck
 
-      - name: Test (backend + frontend)
-        run: make test
+      - name: Backend tests (Supabase-free subset, on ephemeral PG)
+        run: uv run pytest apps/api/tests -m "not requires_supabase"
+
+      - name: Frontend tests
+        run: pnpm exec turbo run test
+
+  # ---------------------------------------------------------------------------
+  # Supabase-dependent tests (auth schema, real JWT/JWKS, multi-connection
+  # concurrency) against the managed `xtrusio-ci` project. This job DOES share a
+  # DB, so it stays SERIALIZED and NEVER cancels mid-run — a half-cleaned shared
+  # DB is worse than a slow queue (preserved H12 rationale).
+  # ---------------------------------------------------------------------------
+  supabase-test:
+    name: supabase-dependent tests (managed xtrusio-ci)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: ci-test-db
+      cancel-in-progress: false
+
+    env:
+      # Supabase test project (xtrusio-ci) — all secrets configured in repo settings.
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_JWKS_URL: ${{ secrets.CI_SUPABASE_JWKS_URL }}
+      SUPABASE_TIMEOUT_SEC: "10"
+      JWKS_TTL_SEC: "300"
+      JWKS_FETCH_TIMEOUT_SEC: "5"
+      API_HOST: "127.0.0.1"
+      API_PORT: "8000"
+      CORS_ALLOW_ORIGINS: "http://localhost:5173"
+      XTRUSIO_PROCESS_ROLE: "api"
+      STARTUP_RECONCILE_TOLERANT: "false"
+      LOG_LEVEL: "INFO"
+      WEB_APP_URL: "http://localhost:5173"
+      # CI does not run Valkey; the URL only needs to satisfy Settings validation.
+      VALKEY_URL: "redis://localhost:6379/0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: make install
+
+      - name: Migrate test DB (idempotent)
+        run: make migrate
+
+      - name: Pre-test cleanup
+        run: make test-clean
+
+      - name: Backend tests (Supabase-dependent subset)
+        run: uv run pytest apps/api/tests -m "requires_supabase"
 
       - name: Post-test cleanup (best-effort)
         if: always()

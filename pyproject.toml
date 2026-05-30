@@ -64,4 +64,10 @@ markers = [
     "ml: marks tests requiring ML models (deselect with '-m \"not ml\"')",
     "perf: marks performance benchmarks (deselect with '-m \"not perf\"')",
     "no_jwks_patch: opt out of the autouse JWKS-fetcher monkeypatch (PAR-B)",
+    # PAR-F F.1: tests that need the managed Supabase project (auth schema,
+    # real JWT/JWKS, multi-connection concurrency). Auto-applied by the root
+    # conftest's pytest_collection_modifyitems — do not set by hand. The
+    # ephemeral-Postgres CI job runs `-m 'not requires_supabase'`; the
+    # supabase-test job runs `-m requires_supabase`.
+    "requires_supabase: needs the managed Supabase project (auto-applied)",
 ]

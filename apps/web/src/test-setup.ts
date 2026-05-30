@@ -1,5 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 
+// NOTE on MSW (F.2, finding H13): the MSW node server is NOT started globally
+// here. Starting `setupServer().listen()` for the WHOLE suite perturbs the
+// timing of a few pre-existing Radix-dropdown tests that don't touch the
+// network. Instead, each MSW-converted test file opts in via
+// `installMswServer()` from src/test/msw/install.ts, so only those files get
+// the interceptor and every untouched test keeps its exact prior behaviour.
+
 // jsdom doesn't ship ResizeObserver / matchMedia / scrollIntoView / scrollTo;
 // Radix UI and TanStack Router need them. Provide minimal mocks here so
 // component tests don't crash on layout-effect APIs.

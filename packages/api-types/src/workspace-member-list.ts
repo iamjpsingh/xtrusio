@@ -1,19 +1,12 @@
 // packages/api-types/src/workspace-member-list.ts
-// Mirror of apps/api/src/xtrusio_api/schemas/workspace_member_list.py.
-// email can be null when the auth.users row has been hard-deleted (the
-// service uses a LEFT JOIN so the membership row still surfaces).
+//
+// Thin re-exports of the generated OpenAPI workspace-members-list schemas (F.3,
+// finding H13). `email` can be null when the auth.users row has been
+// hard-deleted (the service uses a LEFT JOIN so the membership row still
+// surfaces). The backend Pydantic model is `WorkspaceMemberListItemOut`; the
+// public name is kept as `WorkspaceMemberListItem` for existing consumers.
 
-import type { TenantRole } from "./me";
+import type { components } from "../generated/openapi";
 
-export type WorkspaceMemberListItem = {
-  user_id: string;
-  email: string | null;
-  role: TenantRole;
-  joined_at: string;
-  granted_role_count: number;
-};
-
-export type WorkspaceMembersPage = {
-  items: WorkspaceMemberListItem[];
-  next_cursor: string | null;
-};
+export type WorkspaceMemberListItem = components["schemas"]["WorkspaceMemberListItemOut"];
+export type WorkspaceMembersPage = components["schemas"]["WorkspaceMembersPage"];

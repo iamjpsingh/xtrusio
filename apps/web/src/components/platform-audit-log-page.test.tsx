@@ -1,53 +1,33 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  RouterContextProvider,
-  createMemoryHistory,
-  createRouter,
-} from "@tanstack/react-router";
+import { RouterContextProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuditEventOut, MeResponse } from "@xtrusio/api-types";
+import { HttpResponse, http } from "msw";
+import { describe, expect, it } from "vitest";
+import type { AuditEventsPage, MeResponse } from "@xtrusio/api-types";
 import { routeTree } from "@/routeTree.gen";
+import { server } from "@/test/msw/server";
+import { installMswServer } from "@/test/msw/install";
+import { auditEventCreate, auditEventDelete, meSuperAdmin } from "@/test/msw/fixtures";
 import { PlatformAuditLogPage } from "./platform-audit-log-page";
 
-const ME_WITH: MeResponse = {
-  user_id: "u-1",
-  email: "super@xtrusio.com",
-  platform: { role: "super_admin", is_active: true },
-  platform_permissions: ["platform.audit.read"],
-  tenants: [],
-  pending_invite: null,
-};
-const ME_WITHOUT: MeResponse = { ...ME_WITH, platform_permissions: [] };
+// MSW-based (F.2): drive the page through the genuine `apiFetch` → network path.
+// `resolveSession` is mocked so `apiFetch` reads a deterministic token without
+// touching Supabase.
+vi.mock("@/lib/session-cache", () => ({
+  resolveSession: vi.fn().mockResolvedValue({ access_token: "test-tok" }),
+  getCachedSession: vi.fn().mockReturnValue({ access_token: "test-tok" }),
+}));
 
-const EV1: AuditEventOut = {
-  id: 1,
-  actor_auth_user_id: "u-1",
-  actor_email: "ana@acme.com",
-  action: "platform_role.create",
-  target_type: "role",
-  target_id: "tid-1",
-  scope: "platform",
-  workspace_id: null,
-  before: null,
-  after: { key: "dispatcher" },
-  created_at: "2026-05-22T10:00:00Z",
-};
-const EV2: AuditEventOut = { ...EV1, id: 2, action: "platform_role.update" };
+installMswServer();
 
-vi.mock("@/lib/api", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return {
-    ...actual,
-    fetchMe: vi.fn(),
-    fetchPlatformAuditLog: vi.fn(),
-  };
-});
+const API = "http://api.test.invalid";
 
-import * as api from "@/lib/api";
+const EV_UPDATE = { ...auditEventCreate, id: 2, action: "platform_role.update" };
 
-beforeEach(() => vi.clearAllMocks());
+function meWithout(): MeResponse {
+  return { ...meSuperAdmin, platform_permissions: [] };
+}
 
 function renderWith(qc: QueryClient) {
   const router = createRouter({
@@ -63,30 +43,29 @@ function renderWith(qc: QueryClient) {
   );
 }
 
+function newClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 describe("<PlatformAuditLogPage />", () => {
   it("renders <Forbidden /> when me lacks platform.audit.read", async () => {
-    vi.mocked(api.fetchMe).mockResolvedValue(ME_WITHOUT);
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    renderWith(qc);
+    server.use(http.get(`${API}/api/me`, () => HttpResponse.json(meWithout())));
+    renderWith(newClient());
     await waitFor(() =>
-      expect(
-        screen.getByText(/don't have access|don't have permission/i),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/don't have access|don't have permission/i)).toBeInTheDocument(),
     );
   });
 
   it("renders the first page of events", async () => {
-    vi.mocked(api.fetchMe).mockResolvedValue(ME_WITH);
-    vi.mocked(api.fetchPlatformAuditLog).mockResolvedValue({
-      items: [EV1, EV2],
-      next_cursor: "next-1",
-    });
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    renderWith(qc);
+    server.use(
+      http.get(`${API}/api/platform/audit-log`, () =>
+        HttpResponse.json<AuditEventsPage>({
+          items: [auditEventCreate, EV_UPDATE],
+          next_cursor: "next-1",
+        }),
+      ),
+    );
+    renderWith(newClient());
     await waitFor(() => {
       expect(screen.getByText("platform_role.create")).toBeInTheDocument();
       expect(screen.getByText("platform_role.update")).toBeInTheDocument();
@@ -94,41 +73,45 @@ describe("<PlatformAuditLogPage />", () => {
   });
 
   it("accumulates pages when Load more is clicked", async () => {
-    vi.mocked(api.fetchMe).mockResolvedValue(ME_WITH);
-    vi.mocked(api.fetchPlatformAuditLog)
-      .mockResolvedValueOnce({ items: [EV1], next_cursor: "next-1" })
-      .mockResolvedValueOnce({
-        items: [{ ...EV2, action: "platform_role.delete" }],
-        next_cursor: null,
-      });
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    renderWith(qc);
+    // Cursor-paged handler: page 1 (no cursor) -> create + next_cursor; page 2
+    // (cursor=next-1) -> delete + null. Verifies the cursor is actually round-
+    // tripped through `apiFetch` query-string building.
+    server.use(
+      http.get(`${API}/api/platform/audit-log`, ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get("cursor");
+        if (cursor === "next-1") {
+          return HttpResponse.json<AuditEventsPage>({
+            items: [auditEventDelete],
+            next_cursor: null,
+          });
+        }
+        return HttpResponse.json<AuditEventsPage>({
+          items: [auditEventCreate],
+          next_cursor: "next-1",
+        });
+      }),
+    );
+    renderWith(newClient());
     await waitFor(() => screen.getByText("platform_role.create"));
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
     await waitFor(() => {
       expect(screen.getByText("platform_role.create")).toBeInTheDocument();
       expect(screen.getByText("platform_role.delete")).toBeInTheDocument();
     });
-    expect(api.fetchPlatformAuditLog).toHaveBeenCalledTimes(2);
-    expect(api.fetchPlatformAuditLog).toHaveBeenLastCalledWith("next-1");
   });
 
   it("opens the drawer with the clicked event", async () => {
-    vi.mocked(api.fetchMe).mockResolvedValue(ME_WITH);
-    vi.mocked(api.fetchPlatformAuditLog).mockResolvedValue({
-      items: [EV1],
-      next_cursor: null,
-    });
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    renderWith(qc);
+    server.use(
+      http.get(`${API}/api/platform/audit-log`, () =>
+        HttpResponse.json<AuditEventsPage>({
+          items: [auditEventCreate],
+          next_cursor: null,
+        }),
+      ),
+    );
+    renderWith(newClient());
     await waitFor(() => screen.getByText("platform_role.create"));
     await userEvent.click(screen.getByText("platform_role.create"));
-    await waitFor(() =>
-      expect(screen.getByText(/"key": "dispatcher"/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(/"key": "auditor"/)).toBeInTheDocument());
   });
 });

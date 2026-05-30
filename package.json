@@ -12,7 +12,8 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "api-types:generate": "set -a; . ./.env; set +a; pnpm --filter @xtrusio/api-types run generate"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

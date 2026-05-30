@@ -1,7 +1,12 @@
 [tools]
-node = "22"
-python = "3.12"
-pnpm = "10"
+# Pinned to exact patch versions (PAR-F F.10 / L13) to avoid surprise
+# reinstalls and keep every contributor + CI on the same toolchain. These match
+# the currently-installed, known-good versions. `packageManager` in
+# package.json (pnpm@10.0.0) and `.nvmrc` (node major 22, read by CI) stay
+# consistent with these pins.
+node = "22.22.2"
+python = "3.12.13"
+pnpm = "10.0.0"
 
 [env]
 # Default process role for shells that don't override.
