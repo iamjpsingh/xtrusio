@@ -118,21 +118,30 @@ def _reset_session_gucs(dbapi_conn: Any, _record: Any) -> None:
 
     On the pooler ``NullPool`` branch this fires too but is effectively a
     no-op since every checkin closes the underlying connection.
+
+    Defensive: ``checkin`` also fires when a connection is being INVALIDATED
+    after a fault (e.g. the server terminated it), in which case ``dbapi_conn``
+    is ``None``. We must not touch it then — the whole body is guarded so a
+    reset on a dead/None connection never masks the original error with an
+    ``AttributeError``.
     """
-    cur = dbapi_conn.cursor()
+    if dbapi_conn is None:
+        return
     try:
-        # asyncpg's sync cursor rejects multi-statement SQL — issue each
-        # RESET separately. Custom GUCs that were never set are a no-op for
-        # RESET in Postgres, so we don't need to gate on prior SET.
-        cur.execute("RESET app.actor_id")
-        cur.execute("RESET app.bypass_priv_escalation")
+        cur = dbapi_conn.cursor()
+        try:
+            # asyncpg's sync cursor rejects multi-statement SQL — issue each
+            # RESET separately. Custom GUCs that were never set are a no-op for
+            # RESET in Postgres, so we don't need to gate on prior SET.
+            cur.execute("RESET app.actor_id")
+            cur.execute("RESET app.bypass_priv_escalation")
+        finally:
+            cur.close()
     except Exception:
-        # The connection may already be closing during shutdown / faults.
-        # Swallow defensively — the connection is on its way back to the
-        # pool (or being discarded) either way.
+        # The connection may already be closing / invalidated during shutdown
+        # or after a fault. Swallow defensively — it's on its way back to the
+        # pool (or being discarded) either way, and the GUCs die with it.
         pass
-    finally:
-        cur.close()
 
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)

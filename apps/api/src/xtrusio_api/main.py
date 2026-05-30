@@ -93,6 +93,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     )
                 ).scalar_one()
             )
+            # End the lock session's transaction immediately. ``pg_try_advisory_lock``
+            # is SESSION-scoped — the lock is held on the CONNECTION until we unlock
+            # or the session closes, NOT tied to this transaction. Committing now means
+            # the lock connection sits plain-idle (not idle-IN-TRANSACTION) while the
+            # reconcile runs. Otherwise, on slow managed Postgres the reconcile can
+            # exceed ``idle_in_transaction_session_timeout`` and the server terminates
+            # this idle lock connection, so the later pg_advisory_unlock hits a closed
+            # connection (regression introduced with the M9 lock in PAR-D slice 2a).
+            await lock_s.commit()
             if not got:
                 log.info("rbac_reconcile_skipped_lock_held")
             else:
@@ -106,6 +115,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                         text("SELECT pg_advisory_unlock(:k)"),
                         {"k": _RECONCILE_LOCK_KEY},
                     )
+                    await lock_s.commit()
     except Exception:
         if settings.startup_reconcile_tolerant:
             log.exception("rbac_reconcile_failed_tolerant")
