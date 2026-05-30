@@ -11,6 +11,24 @@ Read top to bottom before doing anything.
 
 ## ⏩ RESUME HERE — 2026-05-30 (PAR-F complete — PAR remediation done except operator-blocked PAR-C slice 2)
 
+### ⚠️ POST-AUDIT REALITY CHECK — the security spec was ~95% "done" but the APP DID NOT WORK
+
+The 2026-05-26 audit is a **security/correctness** spec — it has zero findings about whether you can log in, whether routing works, or UI/UX. Worse, the audit itself introduced **regressions** that broke the usable app. These are NOT spec findings; they're product-breaking bugs found by actually running the app:
+
+| # | Bug | Cause | Status |
+|---|---|---|---|
+| 1 | **Login 401 for everyone** | PAR-A pinned JWT verify to **RS256**; this project issues **ES256** tokens → every `/me` rejected | ✅ Fixed (branch `fix-login-es256-and-auth-store`: ES256 allow-list + `JOSEError` catch + `test_es256_jwt.py`) |
+| 2 | **App wouldn't boot** | PAR-D M9 lock held idle-in-tx > 10s timeout; structlog `add_logger_name` crash; checkin None-cursor | ✅ Fixed & merged (#55) |
+| 3 | **"Not Found" after login** | `/` had no route; AuthGuard raced a redirect | ✅ Fixed & merged (#56), re-simplified on branch (removed a redirect-loop the first fix added) |
+| 4 | **`GET /me 401` storm** | queryClient retried 4xx | ✅ Fixed (#56) |
+| 5 | **App blanks to "Loading…" on tab switch** | PAR-E `onAuthStateChange` compared a stale-closure `session` → cleared the query cache on every focus event | ✅ Fixed on branch (Zustand store) |
+| 6 | **Signup form ugly / no spacing** | plain inputs, no label gap | ✅ Fixed on branch (matched sign-in styling) |
+| 7 | **Auth architecture fragile** | session hand-rolled in `useEffect`+`useState` → bugs 3/4/5 all came from here | ✅ Re-architected on branch: **Zustand store** (single source of truth, single subscription, no stale closures); `me` stays a TanStack Query; `lib/auth.tsx` is a thin reader |
+
+Bugs 1, 5, 6, 7 are on branch **`fix-login-es256-and-auth-store`** (pushed, NOT yet merged — pending real-UI verification + the test suite needs updating for the new auth store; user tests the live app first). Requires a `make dev` restart (new `zustand` dep). Bugs 2, 3, 4 merged (#55, #56).
+
+**Still remaining for a usable product (NOT in any spec):** real UI/UX polish (SaaS-grade spacing, skeleton loaders, consistent error/empty states), end-to-end flow verification against the running app, onboarding/email-confirm polish. **Plus the one remaining spec item: PAR-C slice 2 (C4/H9/M15), blocked on operator DB-role provisioning.**
+
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#33 + boot-hotfix #55 MERGED; `main` @ `55b23bf`; single Alembic head `0012`; Dependabot PRs #34–#54 open/untriaged)
 
 **Boot hotfix (#55, `55b23bf`) — app startup was broken on `main`; now fixed.** Three stacked bugs surfaced when the boot reconcile hit slow managed Postgres: (1) **regression from PAR-D slice 2a / M9** — the `pg_try_advisory_lock` session was held idle-IN-TRANSACTION during the per-row reconcile, exceeding `idle_in_transaction_session_timeout` (10s) so the server killed the lock connection and `pg_advisory_unlock` hit a closed connection; fixed by committing the lock session right after acquiring (session-level locks survive commits on the same connection). (2) `core/logging.py` — `structlog.stdlib.add_logger_name` reads `logger.name` which `PrintLogger` lacks, so **every** structlog emission crashed in dev+prod (hidden because the happy path never logs); dropped it, bind `logger=<name>` in `get_logger`, `format_exc_info` prod-only. (3) `core/db.py` — the `checkin` GUC-reset listener called `.cursor()` on a `None` (invalidated) connection; guarded. **Resolves the `test_lifespan` isolation failure PAR-F flagged.** Verified: app boots to `Application startup complete` against managed Supabase; new `tests/core/test_logging_robustness.py`; mypy/ruff green.
