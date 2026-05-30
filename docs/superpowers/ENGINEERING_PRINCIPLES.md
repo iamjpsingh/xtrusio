@@ -78,6 +78,7 @@ A grep gate in CI (see .github/workflows/ci.yml) and as a local pre-commit hook 
 - **Every external call has a timeout.** httpx clients, LLM SDKs, Supabase clients — none can block indefinitely.
 - **Idempotent writes where possible.** Use idempotency keys for any mutation that might be retried (Dramatiq retries, browser double-clicks, network retries).
 - **Migrations are reversible.** Every Alembic migration has a working `downgrade()`. PRs without it fail review.
+- **Migrations on populated tables follow the lock-safe patterns** in [`migration-style.md`](./migration-style.md) — `CREATE INDEX CONCURRENTLY`, two-step `NOT NULL`, batched backfills, and ordering guards for data-dependent migrations.
 
 ---
 
@@ -108,7 +109,14 @@ A grep gate in CI (see .github/workflows/ci.yml) and as a local pre-commit hook 
 - **Tests are first-class code.** Same lint rules, same naming standards, same review bar.
 - **Test behavior, not implementation.** Refactoring should not break tests unless behavior changed.
 - **Test the unhappy paths.** Every endpoint has a test for: unauthenticated, unauthorized, validation error, not found, success.
-- **Don't mock what you don't own** unless it's slow or expensive. Tests run against either a Postgres test container OR a dedicated managed-Supabase test project (`xtrusio-ci`) — never against dev or prod. Per-run isolation comes from the `_cleanup` fixture purging `@example.com` rows; CI uses `concurrency: ci-test-db` so only one job hits the DB at a time. Mock only third-party LLM APIs and email senders.
+- **Don't mock what you don't own** unless it's slow or expensive. Tests run against either a Postgres test container OR a dedicated managed-Supabase test project (`xtrusio-ci`) — never against dev or prod. Per-run isolation comes from the `_cleanup` fixture purging `@example.com` rows. CI is partitioned (PAR-F F.1): the Supabase-free test subset (`-m "not requires_supabase"`) runs on an **ephemeral Postgres** service with `cancel-in-progress: true`; the Supabase-dependent subset (auth schema, real JWT/JWKS, multi-connection concurrency) runs against the shared `xtrusio-ci` project under `concurrency: ci-test-db` (serialized, never cancelled mid-run). Mock only third-party LLM APIs and email senders.
+
+---
+
+## 8a. Local development runtime
+
+- **Default: managed Supabase.** Dev hits a managed Supabase project directly (Postgres + Auth + Realtime). There is no local Supabase stack — `supabase start` is not used. The only optional local container is Valkey (`make db-up`).
+- **Opt-in: local Postgres.** Contributors who can't or won't provision a Supabase project can run a throwaway Postgres locally via `docker-compose.local.yml` + `make dev-local`. This brings up a `postgres:16`-compatible (pgvector) container on a published port and is intended for running migrations and the Supabase-free test subset (`uv run pytest apps/api/tests -m "not requires_supabase"`). It does **not** provide Supabase's `auth`/GoTrue, real JWT/JWKS, or Realtime — the Supabase-dependent tests and the full auth flow still require a managed project. The managed-Supabase path remains the supported default; local Postgres is a convenience, not a parallel supported runtime.
 
 ---
 

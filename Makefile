@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-.PHONY: help install valkey-up valkey-down db-up db-down db-logs api worker web dev lint format typecheck test test-clean check clean migrate migrate-down rbac-seed create-platform-owner
+.PHONY: help install valkey-up valkey-down db-up db-down db-logs dev-local dev-local-down api worker web dev lint format typecheck test test-cov test-clean check clean migrate migrate-down rbac-seed create-platform-owner
 
 # API bind host/port come from .env (no hardcoded values in the Makefile).
 # Surgically extract just these two keys; never source the whole .env (its
@@ -28,6 +28,8 @@ help:
 	@echo "  make format          - format Python + JS"
 	@echo "  make typecheck       - mypy + tsc"
 	@echo "  make test            - run all tests (Python + JS)"
+	@echo "  make test-cov        - backend tests with coverage gate (>=70%); not in 'check'"
+	@echo "  make dev-local       - OPT-IN local Postgres (pgvector) for non-Supabase dev"
 	@echo "  make check           - lint + typecheck + test"
 	@echo "  make clean           - remove caches and venvs"
 	@echo ""
@@ -38,6 +40,10 @@ help:
 install:
 	pnpm install
 	uv sync --all-packages
+	@# Install BOTH git hook types (pre-commit + pre-push). The hook types come
+	@# from default_install_hook_types in .pre-commit-config.yaml (PAR-F F.9).
+	@# Best-effort: don't fail `make install` in CI where the hooks aren't wanted.
+	-uv run pre-commit install 2>/dev/null || true
 
 valkey-up:
 	docker compose up -d valkey
@@ -59,6 +65,21 @@ db-down: valkey-down
 
 db-logs:
 	docker compose logs -f valkey
+
+dev-local:
+	@echo "Starting OPT-IN local Postgres (pgvector) on host port 5433..."
+	@echo "DEFAULT dev runtime is managed Supabase — this is a convenience for"
+	@echo "contributors without a Supabase project. See ENGINEERING_PRINCIPLES §8a."
+	docker compose -f docker-compose.local.yml up -d postgres-local
+	@echo "Waiting for xtrusio-postgres-local to be healthy..."
+	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-postgres-local 2>/dev/null | grep -q healthy; do sleep 1; done
+	@echo ""
+	@echo "Local Postgres ready. Point DATABASE_URL at it, then 'make migrate':"
+	@echo "  DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/postgres"
+	@echo "Supabase-free tests:  uv run pytest apps/api/tests -m 'not requires_supabase'"
+
+dev-local-down:
+	docker compose -f docker-compose.local.yml down
 
 api:
 	@if [ -z "$(API_HOST)" ] || [ -z "$(API_PORT)" ]; then \
@@ -100,6 +121,14 @@ test:
 	uv run --directory apps/api python -m tests._cleanup
 	uv run pytest apps/api/tests
 	pnpm exec turbo run test
+
+# Coverage gate (PAR-F F.5 / §9.4). NOT part of `make check` — local gates stay
+# fast. The 70% floor is enforced authoritatively in CI (.github/workflows/
+# security.yml::backend-coverage). Run this locally when you want the number.
+test-cov:
+	uv run --directory apps/api python -m tests._cleanup
+	uv run pytest apps/api/tests \
+		--cov=apps/api/src/xtrusio_api --cov-report=term-missing --cov-fail-under=70
 
 check: lint typecheck test
 

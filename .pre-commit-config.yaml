@@ -1,9 +1,17 @@
-# Local quality gate. Runs on `git commit` against changed files only.
-# Mirrors what `make check` does — same tools, smaller scope.
-# Project policy: this is LOCAL tooling only. CI/CD is deferred.
+# Local quality gates.
+# - pre-commit (on `git commit`): FAST feedback only — format + lint + the
+#   frontend-policy guards, against changed files. It does NOT run the full
+#   `make check`; the full check is `make check` (run it before opening a PR).
+# - pre-push (on `git push`): mypy + turbo typecheck + a fast smoke pytest
+#   subset (scripts/pre-push.sh) — the "don't push obviously-broken code" gate.
+# CI now exists (PAR-F): the full suite runs on push (this hook) AND on PR
+# (.github/workflows/ci.yml + security.yml). Install both hook types via
+# `make install` (default_install_hook_types below).
 
 default_language_version:
   python: python3.12
+
+default_install_hook_types: [pre-commit, pre-push]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -58,3 +66,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: pre-push-gate
+        name: Pre-push gate (mypy + typecheck + smoke pytest) — PAR-F F.9
+        entry: scripts/pre-push.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

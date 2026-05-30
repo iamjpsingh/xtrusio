@@ -1,0 +1,23 @@
+# gitleaks config (PAR-F F.5 / H15).
+#
+# We extend gitleaks' built-in rule set rather than redefining it, then add a
+# project allowlist for intentionally-committed sample/template files. The real
+# `.env` is gitignored and never committed; `.env.example` is the committed
+# template and contains only placeholders (no live secrets).
+
+title = "xtrusio gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Intentionally-committed templates and lockfiles — no live secrets"
+paths = [
+  # The committed env TEMPLATE — placeholders only. The real `.env` is
+  # gitignored. If a real secret ever lands here, that's a genuine leak, so we
+  # allowlist the PATH but rely on review to keep it placeholder-only.
+  '''\.env\.example$''',
+  # Lockfiles carry integrity hashes that can look like high-entropy secrets.
+  '''pnpm-lock\.yaml$''',
+  '''uv\.lock$''',
+]

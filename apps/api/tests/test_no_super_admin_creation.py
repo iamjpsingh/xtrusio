@@ -38,6 +38,13 @@ _ALLOWED = {
     # key in raw SQL (UPDATE/DELETE on roles WHERE key='super_admin') to verify
     # immutable-system-roles. They never INSERT a super_admin user_role.
     Path("migrations/test_0009_triggers.py"),
+    # F.4 / H14: the bootstrap test exercises super_admin creation entirely
+    # inside an outer transaction it rolls back (savepoint-joined sessionmaker +
+    # mocked Supabase client). Nothing is ever committed — a post-condition test
+    # asserts zero @example.com super_admins persist. The static scan can't see
+    # the rollback, so it is allow-listed; the RUNTIME guarantee holds via the
+    # rollback fixture, not this entry.
+    Path("scripts/test_bootstrap_main.py"),
 }
 
 

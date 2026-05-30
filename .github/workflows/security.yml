@@ -1,0 +1,193 @@
+name: security
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Weekly catch for newly-disclosed CVEs against the pinned dependency set.
+    - cron: "0 6 * * 1"
+
+# Security scans are read-only and share no state — cancel superseded runs.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Python dependency CVE audit. Fail on CVSS >= 7 (high/critical).
+  # ---------------------------------------------------------------------------
+  pip-audit:
+    name: pip-audit (Python deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Resolve + audit (fail on CVSS >= 7)
+        run: |
+          uv pip compile apps/api/pyproject.toml -o /tmp/requirements.txt
+          uvx pip-audit --requirement /tmp/requirements.txt --strict
+
+  # ---------------------------------------------------------------------------
+  # JS dependency audit. Fail on high+.
+  # ---------------------------------------------------------------------------
+  pnpm-audit:
+    name: pnpm audit (JS deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Audit (fail on high+)
+        run: pnpm audit --audit-level=high
+
+  # ---------------------------------------------------------------------------
+  # Secret scanning across history + working tree.
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ---------------------------------------------------------------------------
+  # CodeQL static analysis — Python + TypeScript, default query suite.
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+
+  # ---------------------------------------------------------------------------
+  # Backend coverage gate (authoritative). `make check` stays fast locally;
+  # the 70% floor is enforced HERE on the Supabase-dependent suite so the
+  # number is meaningful. Runs serialized against the shared CI project.
+  # ---------------------------------------------------------------------------
+  backend-coverage:
+    name: backend coverage (>=70%)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: ci-test-db
+      cancel-in-progress: false
+    env:
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.CI_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_JWKS_URL: ${{ secrets.CI_SUPABASE_JWKS_URL }}
+      SUPABASE_TIMEOUT_SEC: "10"
+      JWKS_TTL_SEC: "300"
+      JWKS_FETCH_TIMEOUT_SEC: "5"
+      API_HOST: "127.0.0.1"
+      API_PORT: "8000"
+      CORS_ALLOW_ORIGINS: "http://localhost:5173"
+      XTRUSIO_PROCESS_ROLE: "api"
+      STARTUP_RECONCILE_TOLERANT: "false"
+      LOG_LEVEL: "INFO"
+      WEB_APP_URL: "http://localhost:5173"
+      VALKEY_URL: "redis://localhost:6379/0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Install
+        run: make install
+      - name: Migrate test DB
+        run: make migrate
+      - name: Pre-test cleanup
+        run: make test-clean
+      - name: Backend coverage gate
+        run: make test-cov
+      - name: Post-test cleanup (best-effort)
+        if: always()
+        run: make test-clean
+
+  # ---------------------------------------------------------------------------
+  # Frontend coverage gate (authoritative). Conservative 60% floor to start;
+  # ratchet up via PR.
+  #
+  # NOTE: the actual vitest coverage config (the `@vitest/coverage-v8` devDep +
+  # the `coverage.thresholds` block in apps/web/vitest.config.ts) is owned by
+  # the PAR-F frontend half. Until that lands this job is advisory
+  # (continue-on-error) so it doesn't block on missing coverage tooling. Flip
+  # continue-on-error off once the frontend coverage config is committed.
+  # ---------------------------------------------------------------------------
+  frontend-coverage:
+    name: frontend coverage (>=60%, advisory until FE config lands)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Vitest coverage (threshold enforced in vitest.config)
+        run: pnpm --filter @xtrusio/web test -- --coverage
+
+  # ---------------------------------------------------------------------------
+  # Container image vulnerability scan — STUBBED until we ship containers.
+  # Enable the steps below once a Dockerfile / image exists (post-PAR).
+  # ---------------------------------------------------------------------------
+  trivy:
+    name: trivy (container scan — stubbed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Placeholder
+        run: |
+          echo "Trivy container scan is stubbed — no container images exist yet."
+          echo "Enable when containers exist:"
+          echo "  - uses: aquasecurity/trivy-action@master"
+          echo "    with: { image-ref: <image>, severity: 'HIGH,CRITICAL', exit-code: '1' }"
+      # - uses: aquasecurity/trivy-action@master
+      #   with:
+      #     image-ref: "ghcr.io/${{ github.repository }}/api:latest"
+      #     severity: "HIGH,CRITICAL"
+      #     exit-code: "1"

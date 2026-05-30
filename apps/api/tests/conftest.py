@@ -18,6 +18,49 @@ from xtrusio_api.core.db import SessionLocal
 from xtrusio_api.main import app
 from xtrusio_api.models.platform_user import PlatformRole, PlatformUser
 
+# PAR-F F.1: fixtures whose presence means a test needs the managed Supabase
+# project (real auth schema / JWT / JWKS / live engine). Used to AUTO-tag tests
+# with the ``requires_supabase`` marker so CI can run a Supabase-free subset on
+# an ephemeral Postgres service. This is selection metadata only — with no
+# ``-m`` filter (the local default) it changes nothing about how tests run.
+# NOTE: ``jwks_keypair`` is intentionally NOT here — the autouse ``_patch_jwks``
+# fixture pulls it into every test's fixturenames, so keying on it would tag the
+# entire suite. We key on fixtures a test must EXPLICITLY request.
+_SUPABASE_FIXTURES = frozenset(
+    {
+        "make_jwt",
+        "http_client",
+        "db_session",
+        "existing_super_admin",
+        "mock_supabase_admin",
+    }
+)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Auto-tag Supabase-dependent tests with ``requires_supabase``.
+
+    A test is Supabase-dependent if it requests a Supabase fixture OR its module
+    source references the live engine / auth schema (``SessionLocal`` /
+    ``auth.users``). The ephemeral-Postgres CI job deselects these
+    (``-m 'not requires_supabase'``); the managed-project job selects them.
+    """
+    from pathlib import Path
+
+    for item in items:
+        needs_supabase = bool(_SUPABASE_FIXTURES.intersection(getattr(item, "fixturenames", ())))
+        if not needs_supabase:
+            src = getattr(getattr(item, "module", None), "__file__", None)
+            if src:
+                try:
+                    text_src = Path(src).read_text(encoding="utf-8")
+                except OSError:
+                    text_src = ""
+                if "SessionLocal" in text_src or "auth.users" in text_src:
+                    needs_supabase = True
+        if needs_supabase:
+            item.add_marker(pytest.mark.requires_supabase)
+
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _purge_test_data_around_session() -> AsyncIterator[None]:

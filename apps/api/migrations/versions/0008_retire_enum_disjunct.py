@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from alembic import op
+from sqlalchemy import text
 
 revision: str = "0008"
 down_revision: str | Sequence[str] | None = "0007"
@@ -29,6 +30,21 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # M20 ordering guard: 0008 retires the enum fallback, so every principal
+    # MUST already be resolver-visible (i.e. backfilled into user_roles by 0006
+    # + the reconciler). Refuse to upgrade a populated DB whose user_roles is
+    # still empty — running 0008 there would silently strip super_admin/owner
+    # access. A no-op on a correctly-migrated DB (user_roles populated) and on a
+    # fresh DB (platform_users empty).
+    bind = op.get_bind()
+    user_role_count = bind.execute(text("SELECT count(*) FROM user_roles")).scalar()
+    platform_user_count = bind.execute(text("SELECT count(*) FROM platform_users")).scalar()
+    if platform_user_count and not user_role_count:
+        raise RuntimeError(
+            "0008 expects user_roles to be backfilled (run 0006 + reconciler). "
+            "Refusing to upgrade on a populated DB with empty user_roles."
+        )
+
     op.execute(
         """
         CREATE OR REPLACE FUNCTION is_super_admin(uid uuid) RETURNS boolean

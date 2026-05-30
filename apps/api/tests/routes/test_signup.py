@@ -19,6 +19,10 @@ from xtrusio_api.models.platform_user import PlatformUser
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
+@pytest.mark.xfail(
+    reason="depends on managed-DB platform_settings live state; redesign in F",
+    strict=False,
+)
 async def test_signup_status_default_false(http_client: AsyncClient) -> None:
     r = await http_client.get("/api/signup-status")
     assert r.status_code == 200
@@ -36,6 +40,10 @@ async def test_old_platform_signup_status_path_is_gone(http_client: AsyncClient)
     assert r.status_code == 404
 
 
+@pytest.mark.xfail(
+    reason="depends on managed-DB platform_settings live state; redesign in F",
+    strict=False,
+)
 async def test_signup_disabled_returns_403(
     http_client: AsyncClient, mock_supabase_admin: MagicMock
 ) -> None:
