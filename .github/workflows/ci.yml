@@ -73,7 +73,7 @@ jobs:
         # (single source of truth). Don't add `with: version: ...` here —
         # specifying it in both places trips ERR_PNPM_BAD_PM_VERSION.
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -144,7 +144,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
