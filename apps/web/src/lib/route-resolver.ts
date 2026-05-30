@@ -1,7 +1,7 @@
 // apps/web/src/lib/route-resolver.ts
 import type { MeResponse } from "@xtrusio/api-types";
 import { getDefaultLandingPath } from "./me-adapter";
-import { PLATFORM_SENTINEL, readLastWorkspace } from "./last-workspace";
+import { PLATFORM_SENTINEL } from "./last-workspace";
 
 export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
@@ -20,7 +20,16 @@ function workspaceIdFromPath(path: string): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
-export function resolveRoute(state: AuthState, path: string): RouteDecision {
+/**
+ * Pure route decision. `lastWorkspace` is passed in by the caller (read once
+ * via `readLastWorkspace()`) rather than read from localStorage here, so the
+ * resolver has no side effects and stays trivially testable (L9).
+ */
+export function resolveRoute(
+  state: AuthState,
+  path: string,
+  lastWorkspace: string | null,
+): RouteDecision {
   if (!state.session) {
     return PUBLIC.has(path) ? { kind: "render" } : { kind: "redirect", to: "/sign-in" };
   }
@@ -58,7 +67,7 @@ export function resolveRoute(state: AuthState, path: string): RouteDecision {
   // Anything else (notably "/") → honour last-selected scope if it's still valid,
   // otherwise fall back to the default landing.
   if (path === "/") {
-    const last = readLastWorkspace();
+    const last = lastWorkspace;
     if (last === PLATFORM_SENTINEL && me.platform) {
       return { kind: "redirect", to: "/platform" };
     }

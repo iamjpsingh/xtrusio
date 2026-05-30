@@ -7,12 +7,9 @@
 // gated by `platform.users.manage` (defense-in-depth — the backend
 // also gates the POST/DELETE endpoints).
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import type {
-  PlatformUserListItem,
-  PlatformUsersPage as PlatformUsersPageType,
-} from "@xtrusio/api-types";
+import type { PlatformUserListItem } from "@xtrusio/api-types";
 import { fetchPlatformUsers } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasPlatformPerm, useMe } from "@/lib/me-adapter";
@@ -46,22 +43,21 @@ function formatTime(iso: string | null): string {
 }
 
 function Body({ canManage }: { canManage: boolean }) {
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [pages, setPages] = useState<PlatformUsersPageType[]>([]);
   const [selected, setSelected] = useState<PlatformUserListItem | null>(null);
 
-  const query = useQuery({
-    queryKey: qk.platformUsersWithCursor(cursor),
-    queryFn: async () => {
-      const page = await fetchPlatformUsers(cursor);
-      setPages((prev) => (cursor === null ? [page] : [...prev, page]));
-      return page;
-    },
+  // H3: useInfiniteQuery owns the page accumulator (no setState in queryFn).
+  const query = useInfiniteQuery({
+    queryKey: qk.platformUsers(),
+    queryFn: ({ pageParam }) => fetchPlatformUsers(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
 
-  const users = useMemo<PlatformUserListItem[]>(() => pages.flatMap((p) => p.items), [pages]);
-  const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
-  const lastCursor = lastPage ? lastPage.next_cursor : null;
+  const users = useMemo<PlatformUserListItem[]>(
+    () => query.data?.pages.flatMap((p) => p.items) ?? [],
+    [query.data],
+  );
+  const nextCursor = query.hasNextPage ? "more" : null;
 
   return (
     <>
@@ -124,9 +120,9 @@ function Body({ canManage }: { canManage: boolean }) {
         </Table>
       )}
       <LoadMoreButton
-        nextCursor={lastCursor}
-        pending={query.isFetching}
-        onClick={() => setCursor(lastCursor)}
+        nextCursor={nextCursor}
+        pending={query.isFetchingNextPage}
+        onClick={() => void query.fetchNextPage()}
       />
       {selected ? (
         <GrantManagerDialog

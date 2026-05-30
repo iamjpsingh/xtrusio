@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchPlatformSettings, putPlatformSettings } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
@@ -7,12 +8,12 @@ import { PageHeader } from "@/components/page-header";
 export function SettingsPage() {
   const qc = useQueryClient();
   const { data } = useQuery({
-    queryKey: ["platform-settings"],
+    queryKey: qk.platformSettings(),
     queryFn: fetchPlatformSettings,
   });
   const m = useMutation({
     mutationFn: (v: boolean) => putPlatformSettings(v),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-settings"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.platformSettings() }),
   });
   return (
     <div className="space-y-6">

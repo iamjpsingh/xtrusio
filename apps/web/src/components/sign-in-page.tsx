@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSignupStatus } from "@/lib/api";
+import { qk } from "@/lib/query-keys";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -11,7 +12,7 @@ export function SignInPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const { data: signupStatus } = useQuery({
-    queryKey: ["signup-status"],
+    queryKey: qk.signupStatus(),
     queryFn: fetchSignupStatus,
   });
   const signupsEnabled = signupStatus?.signups_enabled === true;
@@ -42,7 +43,10 @@ export function SignInPage() {
         signupsEnabled ? (
           <>
             New organization?{" "}
-            <Link to="/sign-up" className="font-medium text-foreground underline-offset-4 hover:underline">
+            <Link
+              to="/sign-up"
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
               Public client signup
             </Link>
           </>

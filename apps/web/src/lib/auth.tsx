@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { queryClient } from "./query-client";
+import { clearLastWorkspace } from "./last-workspace";
 
 type AuthState = {
   user: User | null;
@@ -18,19 +20,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      setSession(data.session);
-      setLoading(false);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mounted) return;
+        setSession(data.session);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        // M23: corrupted Supabase localStorage / decryption failure must not
+        // hang the app on "Loading…" forever. Treat it as signed-out.
+        console.warn("getSession failed", err);
+        if (!mounted) return;
+        setSession(null);
+        setLoading(false);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, s) => {
+      // H1: drop every cached query + the last-workspace pin on sign-out so a
+      // subsequent sign-in as a different user never sees the prior user's
+      // `me`/lists. On a *different-user* sign-in, also clear (defense in depth).
+      if (event === "SIGNED_OUT") {
+        queryClient.clear();
+        clearLastWorkspace();
+      }
+      if (event === "SIGNED_IN" && s?.user.id !== session?.user.id) {
+        queryClient.clear();
+      }
       setSession(s);
       setLoading(false);
     });
+
     return () => {
       mounted = false;
-      sub.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
+    // Mount-once subscription: re-subscribing on every `session` change would
+    // tear down + recreate the Supabase listener and re-run getSession. The
+    // closure's `session?.user.id` read is an intentional "previous user" probe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = useMemo<AuthState>(
