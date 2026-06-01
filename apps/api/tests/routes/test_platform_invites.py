@@ -76,54 +76,49 @@ async def test_create_invite_unprivileged_returns_403_permission_denied(
         await _drop_platform_user(db_session, user_id)
 
 
-async def test_create_invite_platform_admin_succeeds(
+async def test_create_invite_platform_admin_forbidden(
     http_client: AsyncClient,
     db_session: AsyncSession,
     make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
-    # P3b intentionally CHANGES authz: platform `admin` now holds
-    # `platform.users.invite` (spec matrix) and may create invites.
+    # Platform-user provisioning is super_admin-ONLY (reverses the earlier P3b
+    # delegation): a platform `admin` holds platform.users.invite but may NOT
+    # create platform invites — only super_admin can add platform staff.
     user_id = await _seed_platform_user(db_session, role_key="admin")
     try:
-        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
         token = make_jwt(sub=user_id)
         r = await http_client.post(
             "/api/platform/users/invites",
             headers={"Authorization": f"Bearer {token}"},
             json={"email": "admin-invited@example.com", "role": "admin"},
         )
-        assert r.status_code == 201
-        assert r.json()["email"] == "admin-invited@example.com"
-        await db_session.execute(
-            text("DELETE FROM platform_invites WHERE email = :e"),
-            {"e": "admin-invited@example.com"},
-        )
-        await db_session.commit()
+        assert r.status_code == 403
+        assert r.json()["detail"] == "permission_denied"
+        # The super_admin gate runs BEFORE any Supabase call.
+        mock_supabase_admin.auth.admin.invite_user_by_email.assert_not_called()
     finally:
         await _drop_platform_user(db_session, user_id)
 
 
 async def test_create_editor_platform_invite_rejected_400(
     http_client: AsyncClient,
-    db_session: AsyncSession,
+    existing_super_admin: PlatformUser,
     make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
 ) -> None:
     """PAR-D L5: 'editor' has no platform RBAC system role (accepting it would
-    create a roleless platform user), so the invite is rejected up front."""
-    user_id = await _seed_platform_user(db_session, role_key="admin")
-    try:
-        token = make_jwt(sub=user_id)
-        r = await http_client.post(
-            "/api/platform/users/invites",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"email": "editor-invited@example.com", "role": "editor"},
-        )
-        assert r.status_code == 400
-        assert r.json()["detail"] == "unsupported_invite_role"
-    finally:
-        await _drop_platform_user(db_session, user_id)
+    create a roleless platform user), so the invite is rejected up front. Acts
+    as super_admin (the only role allowed to invite) so the request reaches the
+    role-validation rather than the super_admin gate."""
+    token = make_jwt(sub=existing_super_admin.id)
+    r = await http_client.post(
+        "/api/platform/users/invites",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"email": "editor-invited@example.com", "role": "editor"},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "unsupported_invite_role"
 
 
 async def test_create_invite_happy_path(

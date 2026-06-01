@@ -1,4 +1,10 @@
-"""POST/GET/DELETE /api/platform/users/invites — super_admin only."""
+"""POST/GET/DELETE /api/platform/users/invites.
+
+Provisioning actions (create + revoke an invite) are ``super_admin``-ONLY —
+inviting platform staff is non-delegatable (a platform admin must not be able
+to add platform staff). The GET list stays at ``platform.users.invite`` so a
+platform admin retains read visibility of pending invites.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import CurrentUser, get_current_user, require_super_admin
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -36,7 +42,7 @@ async def create(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformInviteResponse:
-    await require_permission(db, user.user_id, "platform.users.invite")
+    require_super_admin(user)
     # PAR-D M1: caller-owns-transaction — build the response from the live
     # (pre-commit) ORM row, then commit; roll back on any typed error. PAR-D H5:
     # the invite email is staged in the outbox and sent by the worker, so this
@@ -87,7 +93,7 @@ async def revoke(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    await require_permission(db, user.user_id, "platform.users.manage")
+    require_super_admin(user)
     try:
         await revoke_platform_invite(db, invite_id=invite_id)
     except InviteAlreadyAcceptedError as e:

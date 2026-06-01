@@ -1,10 +1,11 @@
 """Tests for ``POST /api/platform/users`` (super_admin direct-create).
 
-Auth gate: ``platform.users.manage``. The unprivileged-user fixture (a
-platform editor with no grants) must 403. Supabase is mocked via the shared
-``mock_supabase_admin`` fixture so no real auth user is created; the
-@example.com convention drives crash-proof teardown. No test creates a real
-super_admin — the privileged actor is the read-only ``existing_super_admin``.
+Auth gate: ``super_admin`` role ONLY (provisioning platform staff is
+non-delegatable). Both an unprivileged editor AND a platform ``admin`` must
+403. Supabase is mocked via the shared ``mock_supabase_admin`` fixture so no
+real auth user is created; the @example.com convention drives crash-proof
+teardown. No test creates a real super_admin — the privileged actor is the
+read-only ``existing_super_admin``.
 """
 
 from __future__ import annotations
@@ -70,6 +71,32 @@ async def unprivileged_user() -> AsyncIterator[PlatformUser]:
         await _cleanup_email(email)
 
 
+@pytest_asyncio.fixture
+async def platform_admin_user() -> AsyncIterator[PlatformUser]:
+    """A platform ``admin`` (holds platform.users.manage) — must STILL 403:
+    provisioning is super_admin-only, not delegatable to admins."""
+    uid = uuid4()
+    email = f"puc-admin-{uid.hex[:8]}@example.com"
+    async with SessionLocal() as s:
+        await s.execute(
+            text(
+                "INSERT INTO auth.users (id, instance_id, aud, role, email, "
+                "encrypted_password, email_confirmed_at, created_at, updated_at) "
+                "VALUES (:id,'00000000-0000-0000-0000-000000000000','authenticated',"
+                "'authenticated',:e,'',now(),now(),now())"
+            ),
+            {"id": str(uid), "e": email},
+        )
+        pu = PlatformUser(id=uid, email=email, role=PlatformRole.ADMIN, is_active=True)
+        s.add(pu)
+        await s.commit()
+        await s.refresh(pu)
+    try:
+        yield pu
+    finally:
+        await _cleanup_email(email)
+
+
 def _stub_created_user(mock_supabase_admin: MagicMock, user_id: str) -> None:
     mock_supabase_admin.auth.admin.create_user.return_value = MagicMock(user=MagicMock(id=user_id))
 
@@ -114,6 +141,25 @@ async def test_create_403_for_unprivileged(
     assert res.status_code == 403
     assert res.json()["detail"] == "permission_denied"
     # The gate runs BEFORE any Supabase call.
+    mock_supabase_admin.auth.admin.create_user.assert_not_called()
+
+
+async def test_create_403_for_platform_admin(
+    http_client: AsyncClient,
+    make_jwt: Callable[..., str],
+    platform_admin_user: PlatformUser,
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """A platform admin holds platform.users.manage but is NOT super_admin →
+    403. Provisioning platform staff is super_admin-only."""
+    token = make_jwt(sub=platform_admin_user.id)
+    res = await http_client.post(
+        "/api/platform/users",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"email": "admin-created@example.com", "password": "Password1!", "role": "admin"},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"] == "permission_denied"
     mock_supabase_admin.auth.admin.create_user.assert_not_called()
 
 

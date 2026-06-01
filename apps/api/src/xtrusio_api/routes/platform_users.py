@@ -2,7 +2,9 @@
 POST /api/platform/users — super_admin direct-create a platform user.
 
 GET is gated by ``platform.users.read`` (held by both seeded platform system
-roles); POST by ``platform.users.manage``. Sub-paths under
+roles); POST is ``super_admin``-ONLY (provisioning platform staff is
+non-delegatable — a platform admin cannot create platform users). Sub-paths
+under
 ``/api/platform/users/...`` (grant management, invites) are owned by other
 routers (``platform_role_grants``, ``platform_invites``); this router only
 registers the empty path so static sub-paths still match those routers
@@ -16,7 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import CurrentUser, get_current_user, require_super_admin
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -58,7 +60,7 @@ async def create_user(
     user: Annotated[CurrentUser, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformUserCreated:
-    await require_permission(db, user.user_id, "platform.users.manage")
+    require_super_admin(user)
     # PAR-D M1: caller-owns-transaction — the service flushes so a duplicate
     # surfaces here; we commit on success and roll back on any typed error.
     try:
