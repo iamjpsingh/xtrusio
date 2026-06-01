@@ -49,7 +49,9 @@ The 2026-05-26 audit is a **security/correctness** spec — it has zero findings
 
 Bugs 1, 5, 6, 7 merged via **#57**; bugs 2, 3, 4 via **#55 / #56**. **A `make dev` restart is required** (new `zustand` dep — Vite won't hot-reload it). **NOTE: the auth/component unit tests were NOT updated for the new Zustand store (vitest not run this session, per user instruction) — they need a pass before the frontend suite is green again (deferred to next session).**
 
-**Still remaining for a usable product (NOT in any spec):** real UI/UX polish (SaaS-grade spacing, skeleton loaders, consistent error/empty states), end-to-end flow verification against the running app, onboarding/email-confirm polish. **Plus the one remaining spec item: PAR-C slice 2 (C4/H9/M15), blocked on operator DB-role provisioning.**
+**UI/UX polish — pass 1 DONE (#59, `cf3e76c`):** states-layer polish merged — shared `TableSkeleton`/`PageSkeleton`/`FormSkeleton`, `ErrorState`+retry + router error boundary, standardized `EmptyState`, branded full-screen auth-gate loader, intentional dashboard zero-states. Every post-login surface now handles loading/error/empty/data; zero bare "Loading…". Monochrome, tokens only. Spec: `docs/superpowers/specs/2026-06-01-ui-states-layer-polish-design.md`. (PAR-C slice 2 also merged — #58; all 60 audit findings closed.)
+
+**Still remaining for a usable product (NOT in any spec):** deeper per-page polish + shell/nav refinement (sidebar grouping, active states, branding), real dashboard metrics (real queries, no demo data), end-to-end flow verification against the running app, onboarding/email-confirm polish. **Plus the frontend unit suite is red since the Zustand auth re-arch (#57) — auth/component tests need updating; deferred per "no test until I say".**
 
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#33 + post-audit fixes #55 / #56 / #57 MERGED; `main` @ `08932e4`; single Alembic head `0012`; Dependabot PRs #34–#54 open/untriaged — NOT merged, contain risky majors)
 
