@@ -37,7 +37,7 @@ export function TenantUsersPage() {
   // "admin" invite role. This mirrors the workspace-members invite contract.
   const canPickAdmin = myTenant.role === "owner";
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title={`${myTenant.name} — Users`}
         description="Manage who has access to this workspace."
@@ -93,6 +93,6 @@ export function TenantUsersPage() {
           </ul>
         )}
       </section>
-    </div>
+    </>
   );
 }

@@ -48,7 +48,7 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
   });
 
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title={`${tenant?.name ?? "Workspace"} — Members`}
         description="People with access to this workspace. Invite new members, list pending invites, and manage existing members' roles."
@@ -106,6 +106,6 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
       </section>
       <Separator />
       <WorkspaceMembersListPage workspaceId={workspaceId} />
-    </div>
+    </>
   );
 }

@@ -14,7 +14,7 @@ function WorkspaceOverview() {
   const { me } = useMe();
   const t = findTenant(me, workspaceId);
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title={t?.name ?? "Workspace"}
         description="An at-a-glance overview of this workspace. Live metrics arrive as your team gets going."
@@ -29,6 +29,6 @@ function WorkspaceOverview() {
         title="Your workspace is ready"
         description="Use the sidebar to manage Members, Roles, the Audit log and Settings. Activity and member growth will surface here as the team grows."
       />
-    </div>
+    </>
   );
 }
