@@ -34,6 +34,14 @@ vi.mock("@/lib/supabase", () => ({
 vi.mock("@/lib/api", () => ({
   fetchMe: vi.fn().mockImplementation(() => Promise.resolve(holders.me)),
   fetchSignupStatus: vi.fn().mockResolvedValue({ signups_enabled: false }),
+  // The platform index now fetches dashboard stats; this route-landing test
+  // only asserts the empty-state heading, so an all-null stats payload (every
+  // metric card omitted) is enough to keep the dashboard rendering.
+  fetchPlatformStats: vi.fn().mockResolvedValue({
+    client_tenants: null,
+    active_platform_users: null,
+    recent_activity: null,
+  }),
   apiFetch: vi.fn().mockResolvedValue({
     id: "u1",
     email: "test@example.com",
@@ -84,7 +92,11 @@ describe("/ Dashboard route", () => {
     // AuthGuard redirects / → /platform; the platform index's distinctive
     // empty-state heading confirms the landing.
     expect(
-      await screen.findByRole("heading", { name: /nothing to report yet/i }, { timeout: 5000 }),
+      await screen.findByRole(
+        "heading",
+        { name: /more insight is on the way/i },
+        { timeout: 5000 },
+      ),
     ).toBeInTheDocument();
   });
 });

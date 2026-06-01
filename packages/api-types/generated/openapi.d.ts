@@ -244,6 +244,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/platform/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Stats */
+    get: operations["get_stats_api_platform_stats_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/platform/audit-log": {
     parameters: {
       query?: never;
@@ -497,6 +514,23 @@ export interface paths {
     };
     /** List Events */
     get: operations["list_events_api_workspaces__workspace_id__audit_log_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Stats */
+    get: operations["get_stats_api_workspaces__workspace_id__stats_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -819,6 +853,18 @@ export interface components {
       updated_at: string;
       /** Updated By Email */
       updated_by_email: string | null;
+    };
+    /**
+     * PlatformStats
+     * @description Per-metric platform dashboard counts. ``None`` = not authorized.
+     */
+    PlatformStats: {
+      /** Client Tenants */
+      client_tenants?: number | null;
+      /** Active Platform Users */
+      active_platform_users?: number | null;
+      /** Recent Activity */
+      recent_activity?: number | null;
     };
     /**
      * PlatformUserListItemOut
@@ -1170,6 +1216,18 @@ export interface components {
     WorkspaceSettingsUpdate: {
       /** Name */
       name: string;
+    };
+    /**
+     * WorkspaceStats
+     * @description Per-metric workspace dashboard counts. ``None`` = not authorized.
+     */
+    WorkspaceStats: {
+      /** Members */
+      members?: number | null;
+      /** Pending Invites */
+      pending_invites?: number | null;
+      /** Recent Activity */
+      recent_activity?: number | null;
     };
   };
   responses: never;
@@ -1808,6 +1866,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PlatformUsersPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_stats_api_platform_stats_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformStats"];
         };
       };
       /** @description Validation Error */
@@ -2524,6 +2613,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AuditEventsPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_stats_api_workspaces__workspace_id__stats_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        workspace_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceStats"];
         };
       };
       /** @description Validation Error */

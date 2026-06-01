@@ -14,6 +14,9 @@ export const qk = {
   workspaceRoles: (workspaceId: string) => ["workspace", workspaceId, "roles"] as const,
   platformAudit: () => ["platform", "audit-log"] as const,
   workspaceAudit: (workspaceId: string) => ["workspace", workspaceId, "audit-log"] as const,
+  // Dashboard metrics (one round-trip per dashboard).
+  platformStats: () => ["platform", "stats"] as const,
+  workspaceStats: (workspaceId: string) => ["workspace", workspaceId, "stats"] as const,
   // Invite lists. `tenantInvites` (platform-clients view, keyed by tenant id)
   // and `workspaceInvites` (workspace-members view) target different backend
   // resources, so the tuples stay distinct — only the shape is unified.
