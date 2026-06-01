@@ -1,4 +1,5 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 import { errorMessage } from "@/lib/error-messages";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,19 @@ export function AcceptInvitePage() {
   const { code } = routeApi.useLoaderData();
 
   return (
-    <AuthLayout title="Accepting your invite" subtitle="One moment while we set up your access">
-      <div className="space-y-4 text-center">
+    <AuthLayout
+      title="We couldn't accept your invite"
+      subtitle="This invitation can't be used right now"
+    >
+      <div className="flex flex-col items-center gap-4 text-center">
+        <div className="rounded-full bg-foreground/5 p-3">
+          <TriangleAlert className="h-6 w-6 text-muted-foreground" />
+        </div>
         <p role="alert" className="text-sm text-destructive">
           {errorMessage(code)}
         </p>
         <Button
+          className="bg-foreground text-background hover:bg-foreground/90 h-11 w-full font-medium shadow-lg"
           onClick={() => void supabase.auth.signOut().then(() => navigate({ to: "/sign-in" }))}
         >
           Sign out

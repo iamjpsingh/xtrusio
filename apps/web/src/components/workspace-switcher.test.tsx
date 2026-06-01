@@ -60,7 +60,9 @@ describe("WorkspaceSwitcher", () => {
       tenants: [],
     });
     await user.click(screen.getByRole("button", { name: /switch workspace/i }));
-    expect(screen.getByText(/platform admin/i)).toBeInTheDocument();
+    // "Platform admin" also labels the trigger when the active scope is
+    // platform, so assert on the menu item specifically.
+    expect(screen.getByRole("menuitem", { name: /platform admin/i })).toBeInTheDocument();
   });
 
   it("hides 'Platform admin' when me.platform is null", async () => {
@@ -95,7 +97,7 @@ describe("WorkspaceSwitcher", () => {
       tenants: [],
     });
     await user.click(screen.getByRole("button", { name: /switch workspace/i }));
-    await user.click(screen.getByText(/platform admin/i));
+    await user.click(screen.getByRole("menuitem", { name: /platform admin/i }));
     expect(navigateMock).toHaveBeenCalledWith({ to: "/platform" });
     expect(readLastWorkspace()).toBe("__platform__");
   });

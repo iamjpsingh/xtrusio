@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_app/platform/")({
 
 function DashboardRoute() {
   return (
-    <div className="space-y-6">
+    <>
       <PageHeader
         title="Dashboard"
         description="A platform-wide overview. Live metrics arrive once activity flows through the system."
@@ -25,6 +25,6 @@ function DashboardRoute() {
         title="Nothing to report yet"
         description="As clients onboard and teams start working, platform activity, recent runs, and tenant health will surface here."
       />
-    </div>
+    </>
   );
 }

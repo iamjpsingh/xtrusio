@@ -2,6 +2,7 @@ import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PlatformSidebar } from "@/components/platform-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
+import { PageContainer } from "@/components/page-container";
 
 function PlatformShell() {
   return (
@@ -10,7 +11,9 @@ function PlatformShell() {
       <SidebarInset>
         <AppTopbar />
         <main className="flex-1 p-6">
-          <Outlet />
+          <PageContainer>
+            <Outlet />
+          </PageContainer>
         </main>
       </SidebarInset>
     </SidebarProvider>

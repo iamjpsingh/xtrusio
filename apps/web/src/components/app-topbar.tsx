@@ -70,8 +70,11 @@ export function AppTopbar() {
       </Breadcrumb>
       <div className="ml-auto flex items-center gap-2">
         <SearchTrigger />
-        <ThemeToggle />
-        <UserMenu />
+        <Separator orientation="vertical" className="mx-1 h-5" />
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <UserMenu />
+        </div>
       </div>
     </header>
   );

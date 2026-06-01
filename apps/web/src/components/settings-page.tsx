@@ -27,26 +27,26 @@ export function SettingsPage() {
 
   if (isPending) {
     return (
-      <div className="space-y-6">
+      <>
         {header}
         <FormSkeleton fields={1} />
-      </div>
+      </>
     );
   }
 
   if (isError) {
     return (
-      <div className="space-y-6">
+      <>
         {header}
         <ErrorState onRetry={() => void refetch()} />
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <>
       {header}
-      <section className="rounded-lg border border-border bg-card p-6">
+      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center justify-between gap-6">
           <div>
             <Label htmlFor="signups" className="text-base font-medium">
@@ -64,6 +64,6 @@ export function SettingsPage() {
           />
         </div>
       </section>
-    </div>
+    </>
   );
 }
