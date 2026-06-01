@@ -49,9 +49,14 @@ The 2026-05-26 audit is a **security/correctness** spec — it has zero findings
 
 Bugs 1, 5, 6, 7 merged via **#57**; bugs 2, 3, 4 via **#55 / #56**. **A `make dev` restart is required** (new `zustand` dep — Vite won't hot-reload it). **NOTE: the auth/component unit tests were NOT updated for the new Zustand store (vitest not run this session, per user instruction) — they need a pass before the frontend suite is green again (deferred to next session).**
 
-**UI/UX polish — pass 1 DONE (#59, `cf3e76c`):** states-layer polish merged — shared `TableSkeleton`/`PageSkeleton`/`FormSkeleton`, `ErrorState`+retry + router error boundary, standardized `EmptyState`, branded full-screen auth-gate loader, intentional dashboard zero-states. Every post-login surface now handles loading/error/empty/data; zero bare "Loading…". Monochrome, tokens only. Spec: `docs/superpowers/specs/2026-06-01-ui-states-layer-polish-design.md`. (PAR-C slice 2 also merged — #58; all 60 audit findings closed.)
+**UI/UX polish DONE — passes 1–3 + suite green (all monochrome, tokens only):**
+- **Pass 1 (#59, `cf3e76c`)** — states layer: `TableSkeleton`/`PageSkeleton`/`FormSkeleton`, `ErrorState`+retry + router error boundary, standardized `EmptyState`, branded full-screen auth-gate loader, dashboard zero-states. Every post-login surface handles loading/error/empty/data; zero bare "Loading…".
+- **Pass 2 + 3 (#60, `f9744a6`)** — shell/nav: grouped nav, **fixed active-state** (nested routes highlight parent), workspace-switcher current-context, topbar grouping, single `PageContainer` rhythm, table depth at the primitive; + flow: onboarding form matches the auth aesthetic, accept-invite reads as a real error.
+- **Frontend test suite GREEN again (#61, `b0bd38c`)** — 211/211. Fixed the Zustand-init-at-import + `vi.mock` hoisting breakage and stale selectors; added `isNavItemActive`/`groupNav` + `ErrorState` unit tests. Tests-only; no source bugs found.
 
-**Still remaining for a usable product (NOT in any spec):** deeper per-page polish + shell/nav refinement (sidebar grouping, active states, branding), real dashboard metrics (real queries, no demo data), end-to-end flow verification against the running app, onboarding/email-confirm polish. **Plus the frontend unit suite is red since the Zustand auth re-arch (#57) — auth/component tests need updating; deferred per "no test until I say".**
+Spec: `docs/superpowers/specs/2026-06-01-ui-states-layer-polish-design.md`. (PAR-C slice 2 also merged — #58; all 60 audit findings closed.)
+
+**Still remaining for a usable product (NOT in any spec):** **real dashboard metrics** (needs new backend count/stats endpoints — real data, no demo — then wire the `StatCard`s), **end-to-end flow verification against the running app** (user-driven), and any deeper per-page polish the live UI surfaces as still-weak. The cheap, low-risk UI polish is now substantially complete.
 
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#33 + post-audit fixes #55 / #56 / #57 MERGED; `main` @ `08932e4`; single Alembic head `0012`; Dependabot PRs #34–#54 open/untriaged — NOT merged, contain risky majors)
 
