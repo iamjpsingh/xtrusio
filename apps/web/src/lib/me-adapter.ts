@@ -14,6 +14,17 @@ export function hasPlatformPerm(me: MeResponse | null, key: PermissionKey): bool
   return me.platform_permissions.includes(key);
 }
 
+/**
+ * Super-admin gate for platform-user *provisioning* (direct-create + invite).
+ * This is a ROLE check, not a permission check: a platform `admin` holds
+ * `platform.users.manage` (so they may grant/revoke roles) but must NOT be
+ * able to mint new platform users. The backend enforces the same super_admin
+ * gate on the POST endpoints; this is the matching UI guard.
+ */
+export function isSuperAdmin(me: MeResponse | null): boolean {
+  return me?.platform?.role === "super_admin";
+}
+
 export function hasWorkspacePerm(
   me: MeResponse | null,
   workspaceId: string,

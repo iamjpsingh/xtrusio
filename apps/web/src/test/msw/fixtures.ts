@@ -32,6 +32,16 @@ export const meSuperAdmin: MeResponse = {
   pending_invite: null,
 };
 
+// A platform *admin* (not super_admin). Holds `platform.users.manage` — so the
+// per-row Manage roles affordance still shows — but must NOT see the
+// super_admin-only "Add platform user" provisioning entry point.
+export const mePlatformAdmin: MeResponse = {
+  ...meSuperAdmin,
+  user_id: "00000000-0000-0000-0000-000000000002",
+  email: "admin@example.com",
+  platform: { role: "admin", is_active: true },
+};
+
 export const permissionsCatalog: PermissionsCatalog = {
   items: [
     {

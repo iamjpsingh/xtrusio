@@ -13,7 +13,7 @@ import { Users } from "lucide-react";
 import type { PlatformUserListItem } from "@xtrusio/api-types";
 import { fetchPlatformUsers } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { getDefaultLandingPath, hasPlatformPerm, useMe } from "@/lib/me-adapter";
+import { getDefaultLandingPath, hasPlatformPerm, isSuperAdmin, useMe } from "@/lib/me-adapter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 import { GrantManagerDialog } from "@/components/grants/grant-manager-dialog";
+import { PlatformProvisionDialog } from "@/components/platform-provision-dialog";
 
 export function PlatformUsersPage() {
   const { me } = useMe();
@@ -38,7 +39,10 @@ export function PlatformUsersPage() {
     return <Forbidden landingPath={getDefaultLandingPath(me)} />;
   }
   const canManage = hasPlatformPerm(me, "platform.users.manage");
-  return <Body canManage={canManage} />;
+  // ROLE gate (not permission): a platform admin holds `platform.users.manage`
+  // but only a super_admin may mint new platform users.
+  const canProvision = isSuperAdmin(me);
+  return <Body canManage={canManage} canProvision={canProvision} />;
 }
 
 function formatTime(iso: string | null): string {
@@ -46,7 +50,7 @@ function formatTime(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
-function Body({ canManage }: { canManage: boolean }) {
+function Body({ canManage, canProvision }: { canManage: boolean; canProvision: boolean }) {
   const [selected, setSelected] = useState<PlatformUserListItem | null>(null);
 
   // H3: useInfiniteQuery owns the page accumulator (no setState in queryFn).
@@ -67,6 +71,7 @@ function Body({ canManage }: { canManage: boolean }) {
     <PageHeader
       title="Platform users"
       description="People with access to the platform. Use Manage roles to grant or revoke platform-scope custom roles."
+      action={canProvision ? <PlatformProvisionDialog /> : null}
     />
   );
 
