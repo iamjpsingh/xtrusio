@@ -39,6 +39,14 @@ class Settings(BaseSettings):
     env: str = Field(alias="XTRUSIO_ENV")
 
     database_url: str = Field(alias="DATABASE_URL")
+    # PAR-C M15: DSN for the least-privileged ``xtrusio_reconciler`` role that
+    # runs the reconcile. OPTIONAL by design: when unset (local dev before the
+    # operator provisions the role) the reconciler falls back to the request
+    # engine and logs a warning. Production should set it so the reconcile runs
+    # off the request role; the 0013 trigger gates the priv-escalation bypass on
+    # ``current_user = 'xtrusio_reconciler'``. ``None`` here means "absent", not
+    # a hardcoded config value.
+    reconcile_database_url: str | None = Field(default=None, alias="RECONCILE_DATABASE_URL")
     valkey_url: str = Field(alias="VALKEY_URL")
 
     supabase_url: str = Field(alias="SUPABASE_URL")

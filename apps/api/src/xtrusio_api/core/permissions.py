@@ -17,6 +17,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import perm_cache
 
 
+async def set_actor(db: AsyncSession, actor_id: UUID) -> None:
+    """Tag the current transaction with the acting user so the 0013
+    ``enforce_priv_escalation`` trigger can run its actor-holds-target-perm
+    check.
+
+    ``set_config(..., is_local => true)`` scopes the GUC to the surrounding
+    transaction (auto-reset at commit/rollback); the PAR-B ``checkin`` listener
+    (``core/db.py``) additionally RESETs ``app.actor_id`` when the connection
+    returns to the pool, so a read-only route that never commits can't leak the
+    actor to the next request.
+
+    PAR-C H9: this is the single shared actor-set — it replaces four identical
+    per-service ``_set_actor`` copies whose asymmetry was the finding.
+    """
+    await db.execute(
+        text("SELECT set_config('app.actor_id', :a, true)"),
+        {"a": str(actor_id)},
+    )
+
+
 async def has_permission(
     db: AsyncSession, user_id: UUID, key: str, workspace_id: UUID | None = None
 ) -> bool:

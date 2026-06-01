@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.audit import write_audit_event
 from ..core.pagination import encode_cursor
+from ..core.permissions import set_actor
 
 
 class RoleNotFoundError(LookupError):
@@ -49,13 +50,7 @@ class ScopeMismatchError(Exception):
 
 
 # --- helpers ---------------------------------------------------------------
-
-
-async def _set_actor(db: AsyncSession, actor_id: UUID) -> None:
-    await db.execute(
-        text("SELECT set_config('app.actor_id', :a, true)"),
-        {"a": str(actor_id)},
-    )
+# PAR-C H9: actor-set is shared (core.permissions.set_actor).
 
 
 async def _validate_perm_keys(db: AsyncSession, *, scope: str, keys: list[str]) -> None:
@@ -120,7 +115,7 @@ async def create_workspace_role(
     permission_keys: list[str],
 ) -> dict[str, Any]:
     """Create a custom (is_system=False) workspace role pinned to workspace_id."""
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     await _validate_perm_keys(db, scope="workspace", keys=permission_keys)
     existing = (
         await db.execute(
@@ -242,7 +237,7 @@ async def update_workspace_role(
     permission_keys: list[str] | None,
 ) -> dict[str, Any]:
     """Update a custom workspace role. System roles raise SystemRoleImmutableError."""
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     existing = await _load_role_full(db, workspace_id=workspace_id, role_id=role_id)
     if existing is None:
         raise RoleNotFoundError(str(role_id))
@@ -303,7 +298,7 @@ async def delete_workspace_role(
 ) -> None:
     """Delete a custom workspace role. Cascades to role_permissions and
     user_roles via 0006 ON DELETE CASCADE. System roles raise."""
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     existing = await _load_role_full(db, workspace_id=workspace_id, role_id=role_id)
     if existing is None:
         raise RoleNotFoundError(str(role_id))

@@ -1,12 +1,12 @@
 # Design — Production Audit Remediation (PAR)
 
-> ## ✅ STATUS (updated 2026-05-30): COMPLETE except PAR-C slice 2
-> **57 of 60 findings merged.** PAR-A (#25), PAR-B (#26), PAR-C slice 1 (#27), PAR-D (#28–#31), PAR-E (#32), PAR-F (#33) all merged on `main`. **M7** was a false finding (no fix); **L14** folded into M5.
-> **Remaining: only PAR-C slice 2 — C4, H9, M15** (reconciler DB role + role-gated bypass + `_set_actor` lift), **BLOCKED on operator** provisioning the `xtrusio_reconciler` DB role on managed Supabase. See §6.2 + HANDOFF.
+> ## ✅ STATUS (updated 2026-06-01): ALL 60 FINDINGS CODE-COMPLETE
+> **60 of 60 findings.** PAR-A (#25), PAR-B (#26), PAR-C slice 1 (#27), PAR-D (#28–#31), PAR-E (#32), PAR-F (#33), **PAR-C slice 2 (C4/H9/M15)** all on `main`. **M7** was a false finding (no fix); **L14** folded into M5.
+> **PAR-C slice 2** ships: migration `0013` (least-privileged `xtrusio_reconciler` role + permissive RLS policies; `enforce_priv_escalation` recreated `SECURITY INVOKER`, role-gated bypass on `current_user = 'xtrusio_reconciler'`, broadened to `INSERT OR UPDATE`), `RECONCILE_DATABASE_URL` engine isolation (OPTIONAL — dev falls back to the request engine with a warning), and the four `_set_actor` copies → one `core.permissions.set_actor`. **Scope note:** §6.2.3 (`granted_by NOT NULL` + sentinel) stays DEFERRED — it would break onboarding + invite-accept without a live DB to validate (FK to Supabase-owned `auth.users`; the request-path self-grants rely on the `granted_by IS NULL` short-circuit). Only `enforce_priv_escalation` is role-gated; the 0009/0010 immutability+owner-floor triggers still honour the bypass GUC from any role by design (onboarding's `wire_workspace_role_perms` needs it). **The production `RECONCILE_DATABASE_URL` path needs a live smoke-test before reliance** (it can't be exercised in dev, where reconcile runs as `postgres`/owner). See §6.2 + HANDOFF.
 > ⚠️ **This spec is security/correctness only.** It does NOT cover UI/UX, polish, or "does login work." In fact PAR-A's RS256 pin was a **regression that broke login** (the project uses ES256) — fixed post-spec in #57. Product/UX work is tracked in the HANDOFF "POST-AUDIT REALITY CHECK", not here.
 
 **Date:** 2026-05-26
-**Status:** ✅ COMPLETE except PAR-C slice 2 (was: DRAFT — pending user approval; approved + shipped A–F)
+**Status:** ✅ ALL 60 FINDINGS CODE-COMPLETE (A–F + PAR-C slice 2; was: DRAFT — pending user approval; approved + shipped A–F)
 **Builds on:** `main` @ `d046ab2` (RBAC admin surface COMPLETE; HANDOFF says "NEXT: first product feature").
 **Pivots from HANDOFF "NEXT":** before the first product feature, close the production-readiness gaps the 2026-05-26 audit surfaced. The product feature backlog is deferred until PAR-A and PAR-B (the two day-one blockers) ship.
 
