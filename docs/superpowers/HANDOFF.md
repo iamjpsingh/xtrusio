@@ -56,7 +56,9 @@ Bugs 1, 5, 6, 7 merged via **#57**; bugs 2, 3, 4 via **#55 / #56**. **A `make de
 
 Spec: `docs/superpowers/specs/2026-06-01-ui-states-layer-polish-design.md`. (PAR-C slice 2 also merged — #58; all 60 audit findings closed.)
 
-**Still remaining for a usable product (NOT in any spec):** **real dashboard metrics** (needs new backend count/stats endpoints — real data, no demo — then wire the `StatCard`s), **end-to-end flow verification against the running app** (user-driven), and any deeper per-page polish the live UI surfaces as still-weak. The cheap, low-risk UI polish is now substantially complete.
+**Real dashboard metrics DONE (#62, `358805b`):** `GET /api/platform/stats` + `GET /api/workspaces/{id}/stats` — per-metric permission-gated live counts (unauthorized metric → `null` → card omitted), 7-day activity window, workspace counts filtered by `:wid` (owner-conn bypasses RLS). Wired into both dashboards (`platform-dashboard-page` / `workspace-overview-page`) with loading/error states. **13/13 backend tests pass vs managed Supabase** (count correctness + gating matrix); frontend 219/219. Spec: `docs/superpowers/specs/2026-06-01-dashboard-metrics-design.md`.
+
+**Still remaining for a usable product (NOT in any spec):** **end-to-end flow verification against the running app** (user-driven — login → onboarding → invite → admin flows), and any deeper per-page polish the live UI surfaces as still-weak. Possible later features: recent-activity as a mini event-list/sparkline (currently a count), real "active in last 30d" / time-series, metric caching if a dashboard gets hot. **Operational:** the PAR-C slice 2 production `RECONCILE_DATABASE_URL` path still needs a live smoke-test; CI/Dependabot still paused (re-enable after fixing the workflow env-var bugs + adding `xtrusio-ci` secrets). The substantive build backlog is now essentially clear.
 
 ### Done & merged (PRs #1–#6, #8, #10, #11, #13–#16, #18–#33 + post-audit fixes #55 / #56 / #57 MERGED; `main` @ `08932e4`; single Alembic head `0012`; Dependabot PRs #34–#54 open/untriaged — NOT merged, contain risky majors)
 
