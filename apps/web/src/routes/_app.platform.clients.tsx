@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import {
   Table,
   TableBody,
@@ -12,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { apiFetch, fetchMe } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { queryClient } from "@/lib/query-client";
@@ -39,26 +40,34 @@ export const Route = createFileRoute("/_app/platform/clients")({
 });
 
 function ClientsRoute() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: qk.tenants(),
     queryFn: () => apiFetch<Tenant[]>("/api/tenants"),
   });
 
   const action = <CreateClientDialog trigger={<Button>Create client</Button>} />;
+  const header = (
+    <PageHeader
+      title="Client tenants"
+      description="Companies onboarded to the platform."
+      action={action}
+    />
+  );
 
   if (isLoading) {
     return (
       <>
-        <PageHeader
-          title="Client tenants"
-          description="Companies onboarded to the platform."
-          action={action}
-        />
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
+        {header}
+        <TableSkeleton columns={3} columnWidths={["w-40", "w-28", "w-24"]} />
+      </>
+    );
+  }
+
+  if (isError) {
+    return (
+      <>
+        {header}
+        <ErrorState onRetry={() => void refetch()} />
       </>
     );
   }
@@ -66,11 +75,7 @@ function ClientsRoute() {
   if (!data || data.length === 0) {
     return (
       <>
-        <PageHeader
-          title="Client tenants"
-          description="Companies onboarded to the platform."
-          action={action}
-        />
+        {header}
         <EmptyState
           icon={Building2}
           title="No client tenants yet"
@@ -82,11 +87,7 @@ function ClientsRoute() {
 
   return (
     <>
-      <PageHeader
-        title="Client tenants"
-        description="Companies onboarded to the platform."
-        action={action}
-      />
+      {header}
       <Table>
         <TableHeader>
           <TableRow>

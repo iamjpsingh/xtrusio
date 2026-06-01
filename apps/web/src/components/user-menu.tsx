@@ -10,6 +10,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth";
 import { useMe } from "@/lib/me-adapter";
 
@@ -17,7 +18,8 @@ export function UserMenu() {
   const { user, signOut } = useAuth();
   const { me } = useMe();
 
-  const initial = (me?.email ?? user?.email ?? "?").slice(0, 1).toUpperCase();
+  const email = me?.email ?? user?.email ?? null;
+  const initial = (email ?? "?").slice(0, 1).toUpperCase();
   const role = me?.platform?.role;
 
   return (
@@ -32,7 +34,11 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">{me?.email ?? user?.email ?? "Loading…"}</span>
+            {email ? (
+              <span className="text-sm font-medium">{email}</span>
+            ) : (
+              <Skeleton className="h-4 w-32" />
+            )}
             {role && (
               <Badge variant="secondary" className="w-fit text-xs">
                 {role.replace("_", " ")}

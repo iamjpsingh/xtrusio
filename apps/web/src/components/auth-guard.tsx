@@ -6,6 +6,7 @@ import { fetchMe } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { readLastWorkspace } from "@/lib/last-workspace";
 import { resolveRoute } from "@/lib/route-resolver";
+import { FullScreenLoader } from "@/components/full-screen-loader";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const auth = useAuth();
@@ -39,9 +40,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }, [decision, pathname, navigate]);
 
   if (auth.loading || (auth.session && meLoading)) {
-    return (
-      <div className="grid min-h-screen place-items-center text-muted-foreground">Loading…</div>
-    );
+    return <FullScreenLoader />;
   }
   if (decision.kind === "redirect") return null;
   return <>{children}</>;

@@ -1,10 +1,14 @@
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { MailX } from "lucide-react";
 import { deleteTenantInvite, fetchTenantInvites, type TenantInvite } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { ScopedInviteDialog } from "@/components/scoped-invite-dialog";
 
 export function TenantUsersPage() {
@@ -13,7 +17,12 @@ export function TenantUsersPage() {
   const { me } = useMe();
   const myTenant = me?.tenants.find((t) => t.slug === slug);
   const tenantId = myTenant?.id ?? "";
-  const { data: invites } = useQuery({
+  const {
+    data: invites,
+    isPending: invitesPending,
+    isError: invitesError,
+    refetch: refetchInvites,
+  } = useQuery({
     queryKey: qk.tenantInvites(tenantId),
     queryFn: () => fetchTenantInvites(tenantId),
     enabled: !!myTenant,
@@ -44,7 +53,20 @@ export function TenantUsersPage() {
       />
       <section>
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">Invitations</h2>
-        {invites && invites.items.length > 0 ? (
+        {invitesPending ? (
+          <div className="space-y-2 rounded-md border border-border bg-card p-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : invitesError ? (
+          <ErrorState onRetry={() => void refetchInvites()} />
+        ) : invites.items.length === 0 ? (
+          <EmptyState
+            icon={MailX}
+            title="No invitations yet"
+            description="Invite a teammate to this workspace and pending invites will show up here."
+          />
+        ) : (
           <ul className="divide-y rounded-md border">
             {invites.items.map((i: TenantInvite) => (
               <li key={i.id} className="flex items-center justify-between p-4">
@@ -69,8 +91,6 @@ export function TenantUsersPage() {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">No invitations yet.</p>
         )}
       </section>
     </div>

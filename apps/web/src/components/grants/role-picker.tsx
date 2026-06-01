@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const STALE = 60_000;
 
@@ -127,9 +128,9 @@ function PickerInner({
 }) {
   if (isLoading) {
     return (
-      <p className="text-sm text-muted-foreground" role="status">
-        Loading roles…
-      </p>
+      <div role="status" aria-label="Loading roles" className="w-full">
+        <Skeleton className="h-9 w-full rounded-md" />
+      </div>
     );
   }
   if (options.length === 0) {

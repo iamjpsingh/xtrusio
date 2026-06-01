@@ -6,12 +6,16 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import { errorCode, fetchPermissionsCatalog } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
 import { qk } from "@/lib/query-keys";
 import { useScopedRoleCrud, type RoleScope, type ScopedRole } from "@/hooks/use-scoped-role-crud";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { RolesTable } from "@/components/roles/roles-table";
 import { RoleFormDialog, type RoleFormPayload } from "@/components/roles/role-form-dialog";
 import { DeleteRoleDialog } from "@/components/roles/delete-role-dialog";
@@ -32,7 +36,10 @@ const COPY: Record<RoleScope, { title: string; description: string }> = {
 };
 
 export function ScopedRolesPage({ scope, workspaceId }: Props) {
-  const { roles, create, update, remove } = useScopedRoleCrud(scope, workspaceId);
+  const { roles, isPending, isError, refetch, create, update, remove } = useScopedRoleCrud(
+    scope,
+    workspaceId,
+  );
   const { data: catalog } = useQuery({
     queryKey: qk.permissionsCatalog(),
     queryFn: fetchPermissionsCatalog,
@@ -75,6 +82,28 @@ export function ScopedRolesPage({ scope, workspaceId }: Props) {
     remove.mutate(deleteTarget.id, { onSuccess: () => setDeleteTarget(null) });
   };
 
+  const list = isPending ? (
+    <TableSkeleton columns={4} columnWidths={["w-32", "w-40", "w-28", "w-20"]} />
+  ) : isError ? (
+    <ErrorState onRetry={refetch} />
+  ) : roles.length === 0 ? (
+    <EmptyState
+      icon={ShieldCheck}
+      title="No custom roles yet"
+      description="Create a role to bundle permissions and grant them to users in one step."
+    />
+  ) : (
+    <RolesTable
+      roles={roles}
+      canManage
+      onEdit={(r) => {
+        setFormError(null);
+        setEditTarget(r as ScopedRole);
+      }}
+      onDelete={(r) => setDeleteTarget(r as ScopedRole)}
+    />
+  );
+
   return (
     <>
       <PageHeader
@@ -91,15 +120,7 @@ export function ScopedRolesPage({ scope, workspaceId }: Props) {
           </Button>
         }
       />
-      <RolesTable
-        roles={roles}
-        canManage
-        onEdit={(r) => {
-          setFormError(null);
-          setEditTarget(r as ScopedRole);
-        }}
-        onDelete={(r) => setDeleteTarget(r as ScopedRole)}
-      />
+      {list}
       <RoleFormDialog
         mode="create"
         catalog={catalog?.items ?? []}

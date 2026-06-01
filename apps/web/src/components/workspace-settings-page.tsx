@@ -20,6 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
 import { Forbidden } from "@/components/forbidden";
+import { ErrorState } from "@/components/error-state";
+import { FormSkeleton } from "@/components/ui/page-skeleton";
 
 export function WorkspaceSettingsPage({ workspaceId }: { workspaceId: string }) {
   const { me } = useMe();
@@ -36,7 +38,7 @@ function formatDate(iso: string): string {
 
 function Body({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: qk.workspaceSettings(workspaceId),
     queryFn: () => fetchWorkspaceSettings(workspaceId),
   });
@@ -61,19 +63,23 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
     onError: (e) => setFormError(errorMessage(errorCode(e))),
   });
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <>
         <PageHeader title="Workspace settings" description="Per-workspace configuration." />
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <FormSkeleton fields={3} />
       </>
     );
   }
-  if (!data) {
+  if (isError || !data) {
     return (
       <>
         <PageHeader title="Workspace settings" description="Per-workspace configuration." />
-        <p className="text-sm text-muted-foreground">We couldn't load this workspace.</p>
+        <ErrorState
+          title="We couldn't load this workspace"
+          description="The workspace settings failed to load. Check your connection and try again."
+          onRetry={() => void refetch()}
+        />
       </>
     );
   }

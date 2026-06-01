@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { LayoutDashboard } from "lucide-react";
+import { Activity, Building2, LayoutDashboard, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { StatCard } from "@/components/stat-card";
 
 export const Route = createFileRoute("/_app/platform/")({
   component: DashboardRoute,
@@ -9,16 +10,21 @@ export const Route = createFileRoute("/_app/platform/")({
 
 function DashboardRoute() {
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description="Platform-wide activity will appear here once the bootstrap and auth plans land."
+        description="A platform-wide overview. Live metrics arrive once activity flows through the system."
       />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard icon={Building2} label="Client tenants" />
+        <StatCard icon={Users} label="Platform users" />
+        <StatCard icon={Activity} label="Recent activity" />
+      </div>
       <EmptyState
         icon={LayoutDashboard}
-        title="Welcome to Xtrusio"
-        description="The first platform owner is created via `make create-platform-owner`. Once signed in, this page shows platform-wide activity, recent runs, and tenant health."
+        title="Nothing to report yet"
+        description="As clients onboard and teams start working, platform activity, recent runs, and tenant health will surface here."
       />
-    </>
+    </div>
   );
 }

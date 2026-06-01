@@ -10,6 +10,7 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import type { WorkspaceMemberListItem } from "@xtrusio/api-types";
 import { fetchWorkspaceMembers } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
@@ -24,7 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { Forbidden } from "@/components/forbidden";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 import { GrantManagerDialog } from "@/components/grants/grant-manager-dialog";
 
@@ -58,53 +62,66 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
   );
   const nextCursor = query.hasNextPage ? "more" : null;
 
+  let body: React.ReactNode;
+  if (query.isPending) {
+    body = <TableSkeleton columns={5} columnWidths={["w-56", "w-20", "w-12", "w-40", "w-24"]} />;
+  } else if (query.isError) {
+    body = <ErrorState onRetry={() => void query.refetch()} />;
+  } else if (members.length === 0) {
+    body = (
+      <EmptyState
+        icon={Users}
+        title="No members yet"
+        description="Invite teammates to this workspace and they'll appear here once they join."
+      />
+    );
+  } else {
+    body = (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead className="w-32">Role</TableHead>
+            <TableHead className="w-24">Grants</TableHead>
+            <TableHead className="w-48">Joined</TableHead>
+            <TableHead className="w-32" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {members.map((m) => (
+            <TableRow key={m.user_id}>
+              <TableCell>
+                <span className="font-medium">{m.email ?? "—"}</span>
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="font-mono">
+                  {m.role}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {m.granted_role_count}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                <time dateTime={m.joined_at}>{formatDate(m.joined_at)}</time>
+              </TableCell>
+              <TableCell className="text-right">
+                {canManage ? (
+                  <Button variant="outline" size="sm" onClick={() => setSelected(m)}>
+                    Manage roles
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium text-muted-foreground">Members</h2>
-      {members.length === 0 && !query.isFetching ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-          No members yet.
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead className="w-32">Role</TableHead>
-              <TableHead className="w-24">Grants</TableHead>
-              <TableHead className="w-48">Joined</TableHead>
-              <TableHead className="w-32" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {members.map((m) => (
-              <TableRow key={m.user_id}>
-                <TableCell>
-                  <span className="font-medium">{m.email ?? "—"}</span>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="font-mono">
-                    {m.role}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {m.granted_role_count}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  <time dateTime={m.joined_at}>{formatDate(m.joined_at)}</time>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canManage ? (
-                    <Button variant="outline" size="sm" onClick={() => setSelected(m)}>
-                      Manage roles
-                    </Button>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      {body}
       <LoadMoreButton
         nextCursor={nextCursor}
         pending={query.isFetchingNextPage}

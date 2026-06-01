@@ -4,10 +4,12 @@ import { qk } from "@/lib/query-keys";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/page-header";
+import { ErrorState } from "@/components/error-state";
+import { FormSkeleton } from "@/components/ui/page-skeleton";
 
 export function SettingsPage() {
   const qc = useQueryClient();
-  const { data } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: qk.platformSettings(),
     queryFn: fetchPlatformSettings,
   });
@@ -15,13 +17,36 @@ export function SettingsPage() {
     mutationFn: (v: boolean) => putPlatformSettings(v),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.platformSettings() }),
   });
+
+  const header = (
+    <PageHeader
+      title="Platform settings"
+      description="Platform-wide toggles managed by super admins."
+    />
+  );
+
+  if (isPending) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <FormSkeleton fields={1} />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <ErrorState onRetry={() => void refetch()} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Platform settings"
-        description="Platform-wide toggles managed by super admins."
-      />
-      <section className="rounded-md border p-6">
+      {header}
+      <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex items-center justify-between gap-6">
           <div>
             <Label htmlFor="signups" className="text-base font-medium">
@@ -33,7 +58,7 @@ export function SettingsPage() {
           </div>
           <Switch
             id="signups"
-            checked={data?.signups_enabled ?? false}
+            checked={data.signups_enabled}
             onCheckedChange={(v) => m.mutate(v)}
             disabled={m.isPending}
           />

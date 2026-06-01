@@ -9,6 +9,7 @@
 
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Users } from "lucide-react";
 import type { PlatformUserListItem } from "@xtrusio/api-types";
 import { fetchPlatformUsers } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
@@ -23,8 +24,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { PageHeader } from "@/components/page-header";
 import { Forbidden } from "@/components/forbidden";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 import { GrantManagerDialog } from "@/components/grants/grant-manager-dialog";
 
@@ -59,66 +63,96 @@ function Body({ canManage }: { canManage: boolean }) {
   );
   const nextCursor = query.hasNextPage ? "more" : null;
 
+  const header = (
+    <PageHeader
+      title="Platform users"
+      description="People with access to the platform. Use Manage roles to grant or revoke platform-scope custom roles."
+    />
+  );
+
+  // First-load skeleton: no accumulated pages yet and a fetch is in flight.
+  if (query.isPending) {
+    return (
+      <>
+        {header}
+        <TableSkeleton columns={5} columnWidths={["w-56", "w-20", "w-12", "w-40", "w-24"]} />
+      </>
+    );
+  }
+
+  if (query.isError) {
+    return (
+      <>
+        {header}
+        <ErrorState onRetry={() => void query.refetch()} />
+      </>
+    );
+  }
+
+  if (users.length === 0) {
+    return (
+      <>
+        {header}
+        <EmptyState
+          icon={Users}
+          title="No platform users yet"
+          description="People you grant platform access to will appear here."
+        />
+      </>
+    );
+  }
+
   return (
     <>
-      <PageHeader
-        title="Platform users"
-        description="People with access to the platform. Use Manage roles to grant or revoke platform-scope custom roles."
-      />
-      {users.length === 0 && !query.isFetching ? (
-        <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-          No platform users yet.
-        </p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead className="w-32">Role</TableHead>
-              <TableHead className="w-24">Grants</TableHead>
-              <TableHead className="w-48">Last sign in</TableHead>
-              <TableHead className="w-32" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {users.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell>
-                  <span className="font-medium">{u.email}</span>
-                  {!u.is_active ? (
-                    <Badge variant="secondary" className="ml-2">
-                      Inactive
-                    </Badge>
-                  ) : null}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="font-mono">
-                    {u.role}
+      {header}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead className="w-32">Role</TableHead>
+            <TableHead className="w-24">Grants</TableHead>
+            <TableHead className="w-48">Last sign in</TableHead>
+            <TableHead className="w-32" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {users.map((u) => (
+            <TableRow key={u.id}>
+              <TableCell>
+                <span className="font-medium">{u.email}</span>
+                {!u.is_active ? (
+                  <Badge variant="secondary" className="ml-2">
+                    Inactive
                   </Badge>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {u.granted_role_count}
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  <time
-                    dateTime={u.last_sign_in_at ?? undefined}
-                    title={u.last_sign_in_at ?? "Never"}
-                  >
-                    {formatTime(u.last_sign_in_at)}
-                  </time>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canManage ? (
-                    <Button variant="outline" size="sm" onClick={() => setSelected(u)}>
-                      Manage roles
-                    </Button>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+                ) : null}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="font-mono">
+                  {u.role}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {u.granted_role_count}
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                <time
+                  dateTime={u.last_sign_in_at ?? undefined}
+                  title={u.last_sign_in_at ?? "Never"}
+                >
+                  {formatTime(u.last_sign_in_at)}
+                </time>
+              </TableCell>
+              <TableCell className="text-right">
+                {canManage ? (
+                  <Button variant="outline" size="sm" onClick={() => setSelected(u)}>
+                    Manage roles
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
       <LoadMoreButton
         nextCursor={nextCursor}
         pending={query.isFetchingNextPage}
