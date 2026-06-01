@@ -10,6 +10,7 @@ import type {
   PlatformRoleOut,
   PlatformRolePatch,
   PlatformRolesPage,
+  PlatformStats,
   PlatformUsersPage,
   WorkspaceMembersPage,
   WorkspaceRoleGrantOut,
@@ -19,6 +20,7 @@ import type {
   WorkspaceRolePatch,
   WorkspaceRolesPage,
   WorkspaceSettingsOut,
+  WorkspaceStats,
 } from "@xtrusio/api-types";
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -353,6 +355,16 @@ export async function fetchWorkspaceAuditLog(
 ): Promise<AuditEventsPage> {
   const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   return apiFetch<AuditEventsPage>(`/api/workspaces/${workspaceId}/audit-log${qs}`);
+}
+
+// ----- Dashboard stats (dashboard-metrics) -----
+
+export async function fetchPlatformStats(): Promise<PlatformStats> {
+  return apiFetch<PlatformStats>("/api/platform/stats");
+}
+
+export async function fetchWorkspaceStats(workspaceId: string): Promise<WorkspaceStats> {
+  return apiFetch<WorkspaceStats>(`/api/workspaces/${workspaceId}/stats`);
 }
 
 // ----- Platform users list (P6d) -----

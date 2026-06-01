@@ -40,6 +40,17 @@ vi.mock("@/lib/supabase", () => ({
 vi.mock("@/lib/api", () => ({
   fetchMe: vi.fn().mockImplementation(() => Promise.resolve(holders.me)),
   fetchSignupStatus: vi.fn().mockResolvedValue({ signups_enabled: false }),
+  // The dashboards now fetch stats; these shell-boundary cases only assert the
+  // sidebar + empty-state heading, so all-null stats payloads (every metric
+  // card omitted) keep the dashboards rendering without coupling to counts.
+  fetchPlatformStats: vi.fn().mockResolvedValue({
+    client_tenants: null,
+    active_platform_users: null,
+    recent_activity: null,
+  }),
+  fetchWorkspaceStats: vi
+    .fn()
+    .mockResolvedValue({ members: null, pending_invites: null, recent_activity: null }),
   apiFetch: vi.fn().mockResolvedValue({
     id: "u1",
     email: "test@example.com",
@@ -107,7 +118,7 @@ describe("app shell boundary", () => {
     holders.me = platformOnlyMe;
     renderAt("/platform");
     // The platform index landed: its distinctive empty-state heading is present.
-    await screen.findByRole("heading", { name: /nothing to report yet/i }, { timeout: 5000 });
+    await screen.findByRole("heading", { name: /more insight is on the way/i }, { timeout: 5000 });
     expect(document.querySelector(SIDEBAR)).not.toBeNull();
     expect(screen.getByText("Clients")).toBeInTheDocument();
   });
