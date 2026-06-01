@@ -11,6 +11,8 @@ import type {
   PlatformRolePatch,
   PlatformRolesPage,
   PlatformStats,
+  PlatformUserCreate,
+  PlatformUserCreated,
   PlatformUsersPage,
   WorkspaceMembersPage,
   WorkspaceRoleGrantOut,
@@ -238,6 +240,18 @@ export async function postPlatformInvite(
 
 export async function fetchPlatformInvites(): Promise<{ items: PlatformInvite[] }> {
   return apiFetch("/api/platform/users/invites");
+}
+
+/**
+ * Direct-create a platform user (super_admin only — the backend gates the
+ * endpoint by role). Body is the generated `PlatformUserCreate` shape
+ * (email + password + role); returns the provisioned `PlatformUserCreated`.
+ */
+export async function postPlatformUser(body: PlatformUserCreate): Promise<PlatformUserCreated> {
+  return apiFetch("/api/platform/users", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export async function deletePlatformInvite(id: string): Promise<void> {

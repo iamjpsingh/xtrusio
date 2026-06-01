@@ -1,9 +1,11 @@
-"""PAR-A H8: /signup must not enumerate registered emails.
+"""Non-enumeration: /api/signup must not distinguish new vs. registered email.
 
-The contract: regardless of whether the submitted email is new or already
-registered, the response is BYTE-IDENTICAL (status, body, headers shape).
-Only the server side-effect differs: a new email → confirmation email; an
-existing email → password reset.
+With the native ``sign_up`` flow, Supabase itself obfuscates an
+already-registered email — it returns a 200 with an obfuscated user object
+(no error) instead of an "email exists" signal. So the backend contract is
+simply: whatever email is submitted, the route calls ``auth.sign_up`` and
+returns a BYTE-IDENTICAL 202 ``confirm_email_sent``. There is no per-path
+branching, hence no oracle.
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ from collections.abc import Callable
 from unittest.mock import MagicMock
 
 import pytest
-from gotrue.errors import AuthApiError
 from httpx import AsyncClient
 from xtrusio_api.models.platform_user import PlatformUser
 
@@ -51,18 +52,15 @@ async def test_new_and_existing_email_yield_identical_response(
 ) -> None:
     token = await _enable_signups(http_client, str(existing_super_admin.id), make_jwt)
     try:
-        # Path 1 — new email: create_user succeeds.
-        mock_supabase_admin.auth.admin.create_user.return_value = MagicMock(
+        # Supabase ``sign_up`` returns 200 with an obfuscated user for BOTH a
+        # brand-new and an already-registered email — the backend can't tell
+        # them apart, which is the whole point.
+        mock_supabase_admin.auth.sign_up.return_value = MagicMock(
             user=MagicMock(id="00000000-0000-0000-0000-000000000901")
         )
         r1 = await http_client.post(
             "/api/signup",
             json={"email": "new-no-enum@example.com", "password": "Password1!"},
-        )
-        # Path 2 — taken email: create_user raises email_exists; service
-        # silently triggers password-reset side-effect.
-        mock_supabase_admin.auth.admin.create_user.side_effect = AuthApiError(
-            "email already registered", 422, "email_exists"
         )
         r2 = await http_client.post(
             "/api/signup",
@@ -71,10 +69,9 @@ async def test_new_and_existing_email_yield_identical_response(
         # CRITICAL: responses are indistinguishable.
         assert r1.status_code == r2.status_code == 202
         assert r1.json() == r2.json() == {"state": "confirm_email_sent"}
-        # Server side effects MUST differ — path 2 sent a password reset.
-        mock_supabase_admin.auth.reset_password_for_email.assert_called_once_with(
-            "taken-no-enum@example.com"
-        )
+        # Both paths take the SAME code path: native sign_up, no admin-create.
+        assert mock_supabase_admin.auth.sign_up.call_count == 2
+        mock_supabase_admin.auth.admin.create_user.assert_not_called()
     finally:
         await _disable_signups(http_client, token)
 
@@ -86,19 +83,15 @@ async def test_existing_email_does_not_leak_via_field_presence(
     mock_supabase_admin: MagicMock,
 ) -> None:
     """A tighter assertion: not just status + body equality, but no
-    fingerprintable field set (e.g. a path-1 body containing ``user_id``
-    while path-2 doesn't)."""
+    fingerprintable field set across the two submissions."""
     token = await _enable_signups(http_client, str(existing_super_admin.id), make_jwt)
     try:
-        mock_supabase_admin.auth.admin.create_user.return_value = MagicMock(
+        mock_supabase_admin.auth.sign_up.return_value = MagicMock(
             user=MagicMock(id="00000000-0000-0000-0000-000000000902")
         )
         r1 = await http_client.post(
             "/api/signup",
             json={"email": "fp-new@example.com", "password": "Password1!"},
-        )
-        mock_supabase_admin.auth.admin.create_user.side_effect = AuthApiError(
-            "email already registered", 422, "email_exists"
         )
         r2 = await http_client.post(
             "/api/signup",

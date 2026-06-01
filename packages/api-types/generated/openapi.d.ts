@@ -237,7 +237,8 @@ export interface paths {
     /** List Users */
     get: operations["list_users_api_platform_users_get"];
     put?: never;
-    post?: never;
+    /** Create User */
+    post: operations["create_user_api_platform_users_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -865,6 +866,49 @@ export interface components {
       active_platform_users?: number | null;
       /** Recent Activity */
       recent_activity?: number | null;
+    };
+    /**
+     * PlatformUserCreate
+     * @description Direct-create request: email + password + role (``admin`` only).
+     */
+    PlatformUserCreate: {
+      /**
+       * Email
+       * Format: email
+       */
+      email: string;
+      /** Password */
+      password: string;
+      /**
+       * Role
+       * @constant
+       * @enum {string}
+       */
+      role: "admin";
+    };
+    /**
+     * PlatformUserCreated
+     * @description The newly provisioned platform user.
+     */
+    PlatformUserCreated: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Email
+       * Format: email
+       */
+      email: string;
+      /**
+       * Role
+       * @constant
+       * @enum {string}
+       */
+      role: "admin";
+      /** Is Active */
+      is_active: boolean;
     };
     /**
      * PlatformUserListItemOut
@@ -1866,6 +1910,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PlatformUsersPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_user_api_platform_users_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformUserCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformUserCreated"];
         };
       };
       /** @description Validation Error */

@@ -1,6 +1,7 @@
 const MESSAGES: Record<string, string> = {
   signups_disabled: "Signups are currently disabled.",
   email_taken: "An account with that email already exists.",
+  user_exists: "A user with that email already exists.",
   invalid_email: "That email address doesn't look valid.",
   weak_password: "Password must be at least 8 characters.",
   already_has_membership: "You're already in a workspace.",

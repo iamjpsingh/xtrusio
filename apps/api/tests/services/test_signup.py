@@ -1,48 +1,69 @@
-"""Service-level tests for the signup orchestrator."""
+"""Service-level tests for the signup orchestrator (native ``sign_up`` model)."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
-from gotrue.errors import AuthApiError
 from sqlalchemy.ext.asyncio import AsyncSession
-from xtrusio_api.services.signup import EmailTakenError, create_signup_user
+from xtrusio_api.services.signup import (
+    EmailProviderUnavailableError,
+    SignupsDisabledError,
+    create_signup_user,
+)
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-@pytest.fixture(autouse=True)
-def _patch_signups_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Bypass the platform_settings gate so we exercise the create_user path."""
+def _patch_gate(monkeypatch: pytest.MonkeyPatch, *, enabled: bool) -> None:
+    async def _val(_db: AsyncSession) -> bool:
+        return enabled
 
-    async def _yes(_db: AsyncSession) -> bool:
-        return True
-
-    monkeypatch.setattr("xtrusio_api.services.signup.is_signups_enabled", _yes)
+    monkeypatch.setattr("xtrusio_api.services.signup.is_signups_enabled", _val)
 
 
-async def test_create_signup_user_maps_authapierror_to_emailtaken(
+async def test_create_signup_user_gated_off_raises_and_skips_supabase(
+    monkeypatch: pytest.MonkeyPatch,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    mock_supabase_admin.auth.admin.create_user.side_effect = AuthApiError(
-        "email already registered", 422, "email_exists"
-    )
-    with pytest.raises(EmailTakenError):
+    """Hard gate: disabled → SignupsDisabledError, NO Supabase call at all."""
+    _patch_gate(monkeypatch, enabled=False)
+    with pytest.raises(SignupsDisabledError):
         await create_signup_user(
-            db=db_session, email="dup@example.com", password="hunter22hunter22"
+            db=db_session, email="gated-off@example.com", password="hunter22hunter22"
         )
+    mock_supabase_admin.auth.sign_up.assert_not_called()
+    mock_supabase_admin.auth.admin.create_user.assert_not_called()
 
 
-async def test_create_signup_user_passes_unknown_authapierror_through(
+async def test_create_signup_user_gated_on_calls_native_sign_up(
+    monkeypatch: pytest.MonkeyPatch,
     mock_supabase_admin: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    mock_supabase_admin.auth.admin.create_user.side_effect = AuthApiError(
-        "weak password", 400, "weak_password"
+    """Enabled → native ``auth.sign_up`` is invoked; ``admin.create_user`` is NOT."""
+    _patch_gate(monkeypatch, enabled=True)
+    mock_supabase_admin.auth.sign_up.return_value = MagicMock(
+        user=MagicMock(id="00000000-0000-0000-0000-000000000777")
     )
-    with pytest.raises(AuthApiError):
+    await create_signup_user(db=db_session, email="native@example.com", password="hunter22hunter22")
+    mock_supabase_admin.auth.sign_up.assert_called_once_with(
+        {"email": "native@example.com", "password": "hunter22hunter22"}
+    )
+    mock_supabase_admin.auth.admin.create_user.assert_not_called()
+
+
+async def test_create_signup_user_transport_failure_maps_to_provider_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_supabase_admin: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    """A ``sign_up`` transport error surfaces as EmailProviderUnavailableError (→ 502)."""
+    _patch_gate(monkeypatch, enabled=True)
+    mock_supabase_admin.auth.sign_up.side_effect = httpx.ConnectError("boom")
+    with pytest.raises(EmailProviderUnavailableError):
         await create_signup_user(
-            db=db_session, email="weak@example.com", password="hunter22hunter22"
+            db=db_session, email="down@example.com", password="hunter22hunter22"
         )

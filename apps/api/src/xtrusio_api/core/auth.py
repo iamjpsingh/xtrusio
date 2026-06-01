@@ -95,6 +95,20 @@ class CurrentUser:
     is_active: bool
 
 
+def require_super_admin(user: CurrentUser) -> None:
+    """Gate an endpoint to the platform ``super_admin`` role ONLY.
+
+    Deliberately ROLE-based, not permission-based: provisioning platform staff
+    (creating platform users, sending/revoking platform invites) is
+    NON-delegatable per product requirement — a platform ``admin`` holds
+    ``platform.users.invite``/``manage`` (for read + management) but MUST NOT be
+    able to add other platform staff. Only ``super_admin`` may. Raises 403 with
+    the same ``permission_denied`` detail as ``require_permission``.
+    """
+    if user.role != PlatformRole.SUPER_ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "permission_denied")
+
+
 async def _fetch_jwks_uncached(url: str) -> dict[str, Any]:
     client = _get_http_client()
     resp = await client.get(url)
