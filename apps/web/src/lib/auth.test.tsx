@@ -1,8 +1,12 @@
-import { render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
-// Capture the onAuthStateChange callback so tests can drive auth events.
+// The Zustand auth re-arch (#57) made `initAuth()` run ONCE at module-load and
+// guard re-entry with a module-level `initialized` flag. So each test here
+// re-imports the module fresh under `vi.resetModules()` to get a clean
+// `initialized` flag + a fresh getSession/onAuthStateChange wiring, then drives
+// auth events through the captured onAuthStateChange callback.
+//
 // vi.hoisted exposes the shared spies to the hoisted vi.mock factories.
 type AuthCb = (event: AuthChangeEvent, session: Session | null) => void;
 const h = vi.hoisted(() => {
@@ -39,7 +43,21 @@ vi.mock("./last-workspace", () => ({
 
 const { getSession, onAuthStateChange, clear, clearLastWorkspace } = h;
 
-import { AuthProvider } from "./auth";
+/**
+ * Re-import auth-store with a clean `initialized` flag and run `initAuth()`.
+ * Returns once the seeding `getSession()` promise has settled, so the captured
+ * onAuthStateChange callback is wired and the store has applied its initial
+ * session. Defaults to a signed-out seed unless a test overrides getSession.
+ */
+async function bootstrapAuth() {
+  vi.resetModules();
+  h.state.authCallback = null;
+  const { initAuth } = await import("./auth-store");
+  initAuth();
+  // Let the getSession().then(...) / .catch(...) microtask drain.
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -51,34 +69,52 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mount() {
-  return render(<AuthProvider>app</AuthProvider>);
-}
+describe("auth store cache lifecycle", () => {
+  it("subscribes to onAuthStateChange on init", async () => {
+    await bootstrapAuth();
+    expect(onAuthStateChange).toHaveBeenCalledTimes(1);
+    expect(h.state.authCallback).toBeTypeOf("function");
+  });
 
-describe("AuthProvider cache lifecycle", () => {
   it("clears the query cache and last-workspace pin on SIGNED_OUT (H1)", async () => {
-    mount();
-    await waitFor(() => expect(onAuthStateChange).toHaveBeenCalled());
+    await bootstrapAuth();
     h.state.authCallback?.("SIGNED_OUT", null);
     expect(clear).toHaveBeenCalledTimes(1);
     expect(clearLastWorkspace).toHaveBeenCalledTimes(1);
   });
 
   it("clears the query cache on a different-user SIGNED_IN, but not last-workspace", async () => {
-    mount();
-    await waitFor(() => expect(onAuthStateChange).toHaveBeenCalled());
+    // Seed an initial user so the next sign-in is a genuine *switch*.
+    getSession.mockResolvedValue({
+      data: { session: { user: { id: "old-user" } } as unknown as Session },
+    });
+    await bootstrapAuth();
+    expect(clear).not.toHaveBeenCalled();
     h.state.authCallback?.("SIGNED_IN", { user: { id: "new-user" } } as unknown as Session);
     expect(clear).toHaveBeenCalledTimes(1);
     expect(clearLastWorkspace).not.toHaveBeenCalled();
   });
 
+  it("does NOT clear the cache when the SAME user re-signs in (tab focus refresh)", async () => {
+    getSession.mockResolvedValue({
+      data: { session: { user: { id: "same-user" } } as unknown as Session },
+    });
+    await bootstrapAuth();
+    h.state.authCallback?.("SIGNED_IN", { user: { id: "same-user" } } as unknown as Session);
+    expect(clear).not.toHaveBeenCalled();
+    expect(clearLastWorkspace).not.toHaveBeenCalled();
+  });
+
   it("does not hang on Loading when getSession rejects (M23)", async () => {
     // A rejected getSession (corrupted localStorage) must still resolve loading.
-    getSession.mockRejectedValueOnce(new Error("decrypt failed"));
+    getSession.mockRejectedValue(new Error("decrypt failed"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    mount();
-    await waitFor(() => expect(warn).toHaveBeenCalledWith("getSession failed", expect.any(Error)));
-    // No SIGNED_OUT fired → cache untouched on the error path.
+    await bootstrapAuth();
+    const { useAuthStore } = await import("./auth-store");
+    expect(warn).toHaveBeenCalledWith("getSession failed", expect.any(Error));
+    // Loading must resolve to a terminal status (treated as signed-out).
+    expect(useAuthStore.getState().status).toBe("unauthenticated");
+    // No SIGNED_OUT event fired → cache untouched on the error path.
     expect(clear).not.toHaveBeenCalled();
   });
 });
