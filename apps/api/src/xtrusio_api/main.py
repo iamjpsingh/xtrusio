@@ -47,6 +47,7 @@ from .routes import platform_invites as platform_invites_routes
 from .routes import platform_role_grants as platform_role_grants_routes
 from .routes import platform_roles as platform_roles_routes
 from .routes import platform_settings as platform_settings_routes
+from .routes import platform_stats as platform_stats_routes
 from .routes import platform_users as platform_users_routes
 from .routes import signup as signup_routes
 from .routes import tenant_invites as tenant_invites_routes
@@ -56,6 +57,7 @@ from .routes import workspace_members as workspace_members_routes
 from .routes import workspace_role_grants as workspace_role_grants_routes
 from .routes import workspace_roles as workspace_roles_routes
 from .routes import workspace_settings as workspace_settings_routes
+from .routes import workspace_stats as workspace_stats_routes
 
 # PAR-D M9: advisory-lock key gating the boot reconcile to a single process.
 # 0x52424143 = "RBAC". Reconcile is idempotent, so a missed lock only costs a
@@ -243,6 +245,8 @@ app.include_router(platform_role_grants_routes.router)
 # (e.g. /invites) and parameterised ones (/{user_id}/roles) belong to other
 # routers — they coexist because the paths are distinct.
 app.include_router(platform_users_routes.router)
+# Static sub-path GET /api/platform/stats — distinct from the /users sub-paths.
+app.include_router(platform_stats_routes.router)
 app.include_router(platform_audit_log_routes.router)
 app.include_router(permissions_routes.router)
 app.include_router(tenant_invites_routes.router)
@@ -257,3 +261,5 @@ app.include_router(workspace_members_routes.router)
 app.include_router(workspace_role_grants_routes.router)
 app.include_router(workspace_settings_routes.router)
 app.include_router(workspace_audit_log_routes.router)
+# Static sub-path GET /api/workspaces/{workspace_id}/stats.
+app.include_router(workspace_stats_routes.router)
