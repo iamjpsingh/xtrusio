@@ -9,7 +9,17 @@ Read top to bottom before doing anything.
 
 ---
 
-## ⏩ RESUME HERE — 2026-06-01 (PAR-C slice 2 code-complete — all 60 findings closed)
+## ⏩ RESUME HERE — 2026-06-01 (auth: native signup + super_admin-only platform provisioning — #63)
+
+**Signup "no verification email" bug FIXED + auth model locked (#63, `6bc9b8c`).**
+- **Root cause:** signup used `admin.create_user(email_confirm=False)` → creates an unconfirmed user but **sends no email**. Now signup uses Supabase **native `sign_up`** (anon client, server-side) → sends the confirmation email + native non-enumeration.
+- **Model:** client self-signup is native, behind the `signups_enabled` toggle (**off ⇒ no signup at all**, backend 403; on ⇒ confirm → onboarding → client workspace owner, never a platform user). **Platform users = super_admin ONLY** (invite OR new direct-create `POST /api/platform/users` OR CLI). New `require_super_admin` role-gate on direct-create + invite-create + invite-revoke — **reverses the earlier P3b** "platform admin can invite" delegation. UI: `PlatformProvisionDialog` (Create + Invite tabs) shown only to super_admin (`isSuperAdmin(me)`).
+- Gate: backend gating tests 17/17 vs managed DB; frontend 224/224; mypy/ruff/typecheck green.
+- **🔴 OPERATOR ACTION (the bug's 2nd layer — config, not code):** the code now *requests* the email; it only **DELIVERS** if the Supabase project has **"Confirm email" ON + a working email sender** (built-in is rate-limited/unreliable; prod needs custom SMTP). Verify in Supabase Dashboard → Authentication → Providers/Emails. Until then the user still won't receive the email even though signup works.
+
+---
+
+## ⏩ RESUME — 2026-06-01 (PAR-C slice 2 code-complete — all 60 findings closed)
 
 **PAR-C slice 2 (C4/H9/M15) shipped — migration `0013_rbac_reconciler_role`.** What landed:
 
