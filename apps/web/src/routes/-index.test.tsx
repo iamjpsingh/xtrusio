@@ -3,12 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { routeTree } from "@/routeTree.gen";
 import type { MeResponse } from "@xtrusio/api-types";
+import type { Session } from "@supabase/supabase-js";
 import { queryClient } from "@/lib/query-client";
+import { useAuthStore } from "@/lib/auth-store";
 
-const holders = {
+// `holders` MUST be created with vi.hoisted: the Zustand auth re-arch (#57)
+// runs `initAuth()` at module-load, which calls supabase.auth.getSession()
+// synchronously while the module graph is still evaluating. vitest hoists the
+// vi.mock factories above this declaration, so a plain `const holders` would be
+// in the TDZ when getSession's factory reads `holders.session` → "Cannot access
+// 'holders' before initialization". vi.hoisted lifts it above the mocks.
+const holders = vi.hoisted(() => ({
   session: null as { access_token: string; user: { id: string; email: string } } | null,
   me: null as MeResponse | null,
-};
+}));
 
 vi.mock("@/lib/supabase", () => ({
   supabase: {
@@ -35,6 +43,15 @@ vi.mock("@/lib/api", () => ({
 }));
 
 function renderAt(initial: string) {
+  // Post-#57 the Zustand auth store is the single source of truth that AuthGuard
+  // reads. `initAuth()` only seeds it once at module-load (when holders.session
+  // was still null), so seed the store explicitly from holders.session — the
+  // same value the getSession mock returns — to a terminal auth status.
+  useAuthStore.setState({
+    session: holders.session as Session | null,
+    userId: holders.session?.user.id ?? null,
+    status: holders.session ? "authenticated" : "unauthenticated",
+  });
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [initial] }),
@@ -64,8 +81,10 @@ describe("/ Dashboard route", () => {
       pending_invite: null,
     };
     renderAt("/");
+    // AuthGuard redirects / → /platform; the platform index's distinctive
+    // empty-state heading confirms the landing.
     expect(
-      await screen.findByRole("heading", { name: /welcome to xtrusio/i }, { timeout: 5000 }),
+      await screen.findByRole("heading", { name: /nothing to report yet/i }, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
 });

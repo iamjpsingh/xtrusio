@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { RouterContextProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
@@ -53,8 +53,19 @@ describe("WorkspaceSidebar", () => {
     expect(screen.getByText("Audit log")).toBeInTheDocument();
   });
 
-  it("renders the workspace name in the header", () => {
+  it("renders the workspace name in the header brand block", () => {
     renderSidebar(["workspace.members.read"]);
-    expect(screen.getByText("Acme")).toBeInTheDocument();
+    // "Acme" now appears in three places (header brand block, the
+    // workspace-switcher trigger, and the footer caption — the latter as
+    // "Acme · Workspace"). Assert the dedicated brand block in the header:
+    // it's the element rendering "Acme" exactly, and NOT the switch-workspace
+    // trigger button.
+    const header = document.querySelector('[data-slot="sidebar-header"]') as HTMLElement;
+    expect(header).not.toBeNull();
+    const brand = within(header)
+      .getAllByText("Acme")
+      .find((el) => el.closest('[aria-label="Switch workspace"]') === null);
+    expect(brand).toBeDefined();
+    expect(brand).toBeInTheDocument();
   });
 });
