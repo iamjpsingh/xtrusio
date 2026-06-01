@@ -35,6 +35,7 @@ from .core.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
 from .core.outbox_worker import run_outbox_worker
 from .core.perm_cache import close_perm_cache
 from .core.rate_limit import limiter
+from .core.reconciler_db import get_reconciler_sessionmaker
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
 from .routes import health as health_routes
 from .routes import invite_acceptance as invite_acceptance_routes
@@ -105,10 +106,23 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             if not got:
                 log.info("rbac_reconcile_skipped_lock_held")
             else:
+                # PAR-C M15: run the reconcile (which sets the bypass GUC) on
+                # the dedicated xtrusio_reconciler role when provisioned, so the
+                # request path can never effect the bypass. Falls back to the
+                # request engine in dev (RECONCILE_DATABASE_URL unset) with a
+                # warning — the bypass then rides postgres until the operator
+                # provisions the role.
+                reconcile_maker = get_reconciler_sessionmaker()
+                if reconcile_maker is None:
+                    reconcile_maker = SessionLocal
+                    log.warning(
+                        "rbac_reconcile_on_request_engine",
+                        reason="RECONCILE_DATABASE_URL unset",
+                    )
                 try:
-                    async with SessionLocal() as _s:
+                    async with reconcile_maker() as _s:
                         await reconcile_rbac(_s)
-                    async with SessionLocal() as _s:
+                    async with reconcile_maker() as _s:
                         await reconcile_user_roles_from_enums(_s)
                 finally:
                     await lock_s.execute(

@@ -44,8 +44,11 @@ def _is_pooler_dsn(url: str) -> bool:
     return ".pooler.supabase.com" in url
 
 
-def _build_engine_kwargs() -> dict[str, Any]:
-    """Compose pool + connect args from settings + DSN shape.
+def _engine_kwargs_for(url: str) -> dict[str, Any]:
+    """Compose pool + connect args for an arbitrary DSN.
+
+    Shared by the request engine and the PAR-C reconciler engine
+    (``core/reconciler_db.py``) so both pick the same pool shape from the DSN.
 
     Server-side timeouts (``statement_timeout``, etc.) are NOT passed via
     asyncpg ``server_settings`` because Supavisor session-mode ignores them
@@ -54,7 +57,7 @@ def _build_engine_kwargs() -> dict[str, Any]:
     ``SET``s them after the connection is established — Supavisor honours
     post-connect SET statements on the same backend session.
     """
-    if _is_pooler_dsn(_settings.database_url):
+    if _is_pooler_dsn(url):
         # Supavisor owns the pool. Disable both caches so transaction-mode
         # statement routing does not collide on prepared-statement names.
         return {
@@ -75,6 +78,11 @@ def _build_engine_kwargs() -> dict[str, Any]:
         "pool_reset_on_return": "rollback",
         "future": True,
     }
+
+
+def _build_engine_kwargs() -> dict[str, Any]:
+    """Pool + connect args for the request engine (``DATABASE_URL``)."""
+    return _engine_kwargs_for(_settings.database_url)
 
 
 engine = create_async_engine(_settings.database_url, **_build_engine_kwargs())
@@ -108,13 +116,13 @@ def _set_session_settings(dbapi_conn: Any, _record: Any) -> None:
 def _reset_session_gucs(dbapi_conn: Any, _record: Any) -> None:
     """Wipe request-scoped GUCs before a connection returns to the pool.
 
-    PAR-C lifts ``_set_actor`` into a request-scoped FastAPI dependency that
-    writes ``app.actor_id`` via ``SET LOCAL``; the LOCAL scope is bounded by
-    the surrounding transaction, but a read-only route that never commits
-    relies on this listener to clear actor state before the connection is
-    handed to the next request. The same applies to
-    ``app.bypass_priv_escalation`` (the reconciler-only bypass GUC PAR-C
-    isolates to its own DB role).
+    PAR-C consolidates the per-service actor-set into one shared
+    ``core.permissions.set_actor`` that writes ``app.actor_id`` via
+    ``SET LOCAL``; the LOCAL scope is bounded by the surrounding transaction,
+    but a read-only route that never commits relies on this listener to clear
+    actor state before the connection is handed to the next request. The same
+    applies to ``app.bypass_priv_escalation`` (the reconciler-only bypass GUC
+    PAR-C isolates to the dedicated ``xtrusio_reconciler`` DB role).
 
     On the pooler ``NullPool`` branch this fires too but is effectively a
     no-op since every checkin closes the underlying connection.

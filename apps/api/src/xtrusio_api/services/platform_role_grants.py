@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core import perm_cache
 from ..core.audit import write_audit_event
 from ..core.pagination import encode_cursor
+from ..core.permissions import set_actor
 
 
 class PlatformUserNotFoundError(LookupError):
@@ -62,17 +63,8 @@ class GrantNotFoundError(LookupError):
 
 
 # --- helpers ---------------------------------------------------------------
-
-
-async def _set_actor(db: AsyncSession, actor_id: UUID) -> None:
-    """Tag the tx with the actor so the DB priv-escalation trigger sees it.
-
-    Set-local (third arg = true) so it auto-resets at tx end.
-    """
-    await db.execute(
-        text("SELECT set_config('app.actor_id', :a, true)"),
-        {"a": str(actor_id)},
-    )
+# PAR-C H9: the actor-set lives in core.permissions.set_actor (shared) — the
+# per-service _set_actor copies were the asymmetry the finding named.
 
 
 async def _load_platform_user(db: AsyncSession, user_id: UUID) -> dict[str, Any] | None:
@@ -150,7 +142,7 @@ async def grant_platform_role(
     Returns the new (or pre-existing, on conflict) grant row including the
     role key.
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     target_user = await _load_platform_user(db, target_user_id)
     if target_user is None:
         raise PlatformUserNotFoundError(str(target_user_id))
@@ -263,7 +255,7 @@ async def revoke_platform_role_grant(
     addressing user A's path with grant B's id (where B belongs to user C) must
     not succeed. Mismatches return GrantNotFoundError so we don't leak existence.
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     grant = (
         (
             await db.execute(

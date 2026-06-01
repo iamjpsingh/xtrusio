@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.audit import write_audit_event
 from ..core.pagination import encode_cursor
+from ..core.permissions import set_actor
 
 
 class RoleNotFoundError(LookupError):
@@ -51,17 +52,7 @@ class ScopeMismatchError(Exception):
 
 
 # --- helpers ---------------------------------------------------------------
-
-
-async def _set_actor(db: AsyncSession, actor_id: UUID) -> None:
-    """Tag the tx with the actor so the priv-escalation trigger sees it.
-
-    Set-local (third arg = true) so it auto-resets at tx end.
-    """
-    await db.execute(
-        text("SELECT set_config('app.actor_id', :a, true)"),
-        {"a": str(actor_id)},
-    )
+# PAR-C H9: actor-set is shared (core.permissions.set_actor).
 
 
 async def _validate_perm_keys(db: AsyncSession, *, scope: str, keys: list[str]) -> None:
@@ -123,7 +114,7 @@ async def create_platform_role(
     permission_keys: list[str],
 ) -> dict[str, Any]:
     """Create a custom (``is_system=False``) platform role."""
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     await _validate_perm_keys(db, scope="platform", keys=permission_keys)
     # Friendly-first uniqueness check (DB also has a UNIQUE index).
     existing = (
@@ -247,7 +238,7 @@ async def update_platform_role(
     before the DB trigger fires). ``None`` for any field means "leave
     unchanged" per the ``PlatformRolePatch`` contract.
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     existing = await _load_role_full(db, role_id)
     if existing is None or existing["scope"] != "platform" or existing["workspace_id"] is not None:
         raise RoleNotFoundError(str(role_id))
@@ -316,7 +307,7 @@ async def delete_platform_role(db: AsyncSession, *, actor_id: UUID, role_id: UUI
     service-layer guard below is a friendlier 422 path before the trigger
     fires.
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     existing = await _load_role_full(db, role_id)
     if existing is None or existing["scope"] != "platform" or existing["workspace_id"] is not None:
         raise RoleNotFoundError(str(role_id))

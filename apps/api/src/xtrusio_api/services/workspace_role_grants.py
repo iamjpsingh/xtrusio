@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core import perm_cache
 from ..core.audit import write_audit_event
 from ..core.pagination import encode_cursor
+from ..core.permissions import set_actor
 
 
 class MembershipNotFoundError(LookupError):
@@ -77,11 +78,7 @@ class OwnerFloorError(Exception):
     owners. A workspace MUST retain at least one active owner grant."""
 
 
-async def _set_actor(db: AsyncSession, actor_id: UUID) -> None:
-    await db.execute(
-        text("SELECT set_config('app.actor_id', :a, true)"),
-        {"a": str(actor_id)},
-    )
+# PAR-C H9: actor-set is shared (core.permissions.set_actor).
 
 
 async def _load_role(
@@ -168,7 +165,7 @@ async def grant_workspace_role(
     falls through to the SELECT and returns the existing row; both callers
     see success.
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     await _require_workspace_membership(db, workspace_id=workspace_id, user_id=target_user_id)
     role = await _load_role(db, workspace_id=workspace_id, role_id=role_id)
     if role is None:
@@ -257,7 +254,7 @@ async def revoke_workspace_role_grant(
          must leave at least one other active owner grant in this workspace
          (else OwnerFloorError -> 409).
     """
-    await _set_actor(db, actor_id)
+    await set_actor(db, actor_id)
     grant = (
         (
             await db.execute(

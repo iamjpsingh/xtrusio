@@ -1,11 +1,33 @@
 # HANDOFF — RBAC + RLS Re-architecture → PAR Remediation
 
-**Written:** 2026-05-19, updated 2026-05-30 (PAR-A + PAR-B + PAR-C slice 1 + **PAR-D + PAR-E + PAR-F complete** merged; **only PAR-C slice 2 remains — blocked on operator provisioning**).
-**Status:** **RBAC admin surface complete + PAR-A #25 + PAR-B #26 + PAR-C slice 1 #27 + PAR-D (all slices: #28 #29 #30 #31) merged** — all RBAC PRs (#1–#24) merged on `main`; the 2026-05-26 production audit identified **60 findings** (5 Critical / 15 High / 24 Medium / 16 Low), **96% verified accurate** against current code. PAR remediation spec approved (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md`) with 6 phases (A–F). **PAR-A #25 (`3e9e06d`), PAR-B #26 (`e9af880`), PAR-C slice 1 #27 (`1b0d46b`), PAR-D #28 (`626654d`) #29 (`3cea1f9`) #30 (`42980aa`) #31 (`a0027c0`), PAR-E #32 (`ad92caf`), PAR-F #33 (`c7a86d6`) merged.** Alembic head is still `0012` (PAR-F added no migration). **Only remaining PAR work: PAR-C slice 2 (reconciler role) — BLOCKED on operator provisioning the `xtrusio_reconciler` DB role + `RECONCILE_DATABASE_URL` on managed Supabase.**
+**Written:** 2026-05-19, updated 2026-06-01 (**PAR-C slice 2 code-complete → all 60 audit findings closed**; PAR-A + PAR-B + PAR-C both slices + PAR-D + PAR-E + PAR-F).
+**Status:** **RBAC admin surface complete + the full PAR remediation (A–F + PAR-C slice 2)** — all RBAC PRs (#1–#24) merged on `main`; the 2026-05-26 production audit identified **60 findings** (5 Critical / 15 High / 24 Medium / 16 Low), **96% verified accurate** against current code. **PAR-A #25 (`3e9e06d`), PAR-B #26 (`e9af880`), PAR-C slice 1 #27 (`1b0d46b`), PAR-D #28–#31, PAR-E #32 (`ad92caf`), PAR-F #33 (`c7a86d6`)** merged, **+ PAR-C slice 2 (C4/H9/M15) — migration `0013`** (Alembic head now `0013`). **All 60 findings are now code-complete.** One caveat: the production `RECONCILE_DATABASE_URL` reconciler-engine path can't be exercised in dev (reconcile runs as `postgres`/owner there) — **it needs a live smoke-test before reliance** (see PAR-C slice 2 section below).
 
 New required env vars across PAR-D (already in `.env.example`; operators must set): `CURSOR_HMAC_KEY` (M5), `PERM_CACHE_TTL_SEC` (M16), `OUTBOX_POLL_SEC` (H5).
 
 Read top to bottom before doing anything.
+
+---
+
+## ⏩ RESUME HERE — 2026-06-01 (PAR-C slice 2 code-complete — all 60 findings closed)
+
+**PAR-C slice 2 (C4/H9/M15) shipped — migration `0013_rbac_reconciler_role`.** What landed:
+
+- **C4** — `enforce_priv_escalation` recreated as **`SECURITY INVOKER`** (was DEFINER — under DEFINER `current_user` is the function owner `postgres`, so the role-gate could never match), **role-gated** so the bypass GUC only works when `current_user = 'xtrusio_reconciler'`, and broadened to **`INSERT OR UPDATE`**. The `granted_by IS NULL` short-circuit is **KEPT** (request-path system grants — onboarding owner self-grant + invite-accept — rely on it).
+- **M15** — least-privileged **`xtrusio_reconciler`** role (created `NOLOGIN`, **no credential in source**) + **permissive RLS policies** (`{tbl}_reconciler_all FOR ALL TO xtrusio_reconciler USING(true) WITH CHECK(true)`) on the 7 tables reconcile touches (permissions, roles, role_permissions, user_roles, tenants, platform_users, tenant_memberships — the role is a non-owner so RLS would otherwise deny it everything). New **`RECONCILE_DATABASE_URL`** + `core/reconciler_db.py` engine; boot + `python -m xtrusio_api.rbac` reconcile use it when set, else **fall back to the request engine with a warning** (dev-safe).
+- **H9** — the four duplicate per-service `_set_actor` helpers collapsed into one **`core.permissions.set_actor`** (+ the PAR-B checkin RESET already ships).
+
+**Why `GRANT SET ON PARAMETER` is NOT in the migration:** it requires superuser (managed-Supabase `postgres` isn't), so it would abort the migration — and it's functionally inert (custom placeholder GUCs are session-settable by any role; the trigger's `current_user` gate is the real control). Caught in adversarial review before commit.
+
+**Reviewed** by a 6-dimension adversarial workflow (28 agents) + a focused fix-verification pass. Two CRITICAL bugs were caught & fixed pre-commit: (1) the reconciler role was subject to RLS → would silently read 0 rows + fail all writes in production (fixed with the permissive policies); (2) the `GRANT SET ON PARAMETER` (above). Static gates green: `ruff check` + `ruff format --check` + `mypy --strict` (187 files).
+
+### ⚠️ OPERATOR STEPS before relying on the production reconciler path
+1. After `make migrate` applies `0013` (creates the role `NOLOGIN`), enable login + set a password out of band:
+   `ALTER ROLE xtrusio_reconciler LOGIN PASSWORD '<strong-password>';`
+2. Set `RECONCILE_DATABASE_URL=postgresql+asyncpg://xtrusio_reconciler:<PW>@db.<ref>.supabase.co:5432/postgres`.
+3. **Smoke-test the production path live** — boot with `RECONCILE_DATABASE_URL` set and confirm the reconcile completes (reads non-zero rows, writes succeed). This path **cannot** be validated in dev (there reconcile runs as `postgres`/owner and bypasses RLS by ownership; the `TO xtrusio_reconciler` policies are inert). Until smoke-tested, leave `RECONCILE_DATABASE_URL` unset (the dev fallback is safe and correct).
+
+**Still DEFERRED (the one non-shipped audit sub-item): §6.2.3 `granted_by NOT NULL` + system sentinel** — its FK target is the Supabase-owned `auth.users`, and onboarding + invite-accept self-grant with `granted_by=NULL` relying on the short-circuit; dropping it without rerouting those request-path flows would break both. Needs a live DB to validate. Tracked as a follow-up, not a regression.
 
 ---
 
