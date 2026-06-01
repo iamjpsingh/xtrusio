@@ -53,7 +53,15 @@ export function useScopedRoleCrud(scope: RoleScope, workspaceId?: string) {
     onSuccess: invalidate,
   });
 
-  return { roles: list.data?.items ?? [], create, update, remove };
+  return {
+    roles: list.data?.items ?? [],
+    isPending: list.isPending,
+    isError: list.isError,
+    refetch: () => void list.refetch(),
+    create,
+    update,
+    remove,
+  };
 }
 
 export type UseScopedRoleCrud = ReturnType<typeof useScopedRoleCrud>;

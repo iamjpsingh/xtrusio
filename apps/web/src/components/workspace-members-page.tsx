@@ -4,10 +4,14 @@ import type { TenantInvite } from "@/lib/api";
 import { deleteTenantInvite, fetchTenantInvites } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { findTenant, getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
+import { MailX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { Forbidden } from "@/components/forbidden";
+import { EmptyState } from "@/components/empty-state";
+import { ErrorState } from "@/components/error-state";
 import { ScopedInviteDialog } from "@/components/scoped-invite-dialog";
 import { WorkspaceMembersListPage } from "@/components/workspace-members-list-page";
 
@@ -28,7 +32,12 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
   // This mirrors the legacy invite contract used by tenant-users-page.
   const canPickAdmin = tenant?.role === "owner";
 
-  const { data: invites } = useQuery({
+  const {
+    data: invites,
+    isPending: invitesPending,
+    isError: invitesError,
+    refetch: refetchInvites,
+  } = useQuery({
     queryKey: qk.workspaceInvites(workspaceId),
     queryFn: () => fetchTenantInvites(workspaceId),
   });
@@ -55,7 +64,20 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
       />
       <section>
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">Invitations</h2>
-        {invites && invites.items.length > 0 ? (
+        {invitesPending ? (
+          <div className="space-y-2 rounded-md border border-border bg-card p-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : invitesError ? (
+          <ErrorState onRetry={() => void refetchInvites()} />
+        ) : invites.items.length === 0 ? (
+          <EmptyState
+            icon={MailX}
+            title="No invitations yet"
+            description="Invite a teammate to this workspace and pending invites will show up here."
+          />
+        ) : (
           <ul className="divide-y rounded-md border">
             {invites.items.map((i: TenantInvite) => (
               <li key={i.id} className="flex items-center justify-between p-4">
@@ -80,8 +102,6 @@ function Body({ me, workspaceId }: { me: MeResponse | null; workspaceId: string 
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">No invitations yet.</p>
         )}
       </section>
       <Separator />
