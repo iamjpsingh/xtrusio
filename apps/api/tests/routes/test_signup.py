@@ -80,6 +80,39 @@ async def test_signup_resend_happy_path_returns_202(
         )
 
 
+async def test_signup_resend_already_confirmed_still_returns_202(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """An already-confirmed email makes GoTrue ``resend`` raise an AuthApiError;
+    the endpoint SWALLOWS it and still returns the identical 202 — no oracle."""
+    from gotrue.errors import AuthApiError
+
+    token = make_jwt(sub=existing_super_admin.id)
+    await http_client.put(
+        "/api/platform/settings",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"signups_enabled": True},
+    )
+    mock_supabase_admin.auth.resend.side_effect = AuthApiError(
+        "email already confirmed", 422, "email_already_confirmed"
+    )
+    try:
+        r = await http_client.post(
+            "/api/signup/resend", json={"email": "confirmed-route@example.com"}
+        )
+        assert r.status_code == 202
+        assert r.json() == {"state": "confirm_email_sent"}
+    finally:
+        await http_client.put(
+            "/api/platform/settings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"signups_enabled": False},
+        )
+
+
 async def test_signup_resend_transport_failure_returns_502(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,

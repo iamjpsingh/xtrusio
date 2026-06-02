@@ -38,7 +38,7 @@ import asyncio
 from collections.abc import Callable
 
 import httpx
-from gotrue.errors import AuthRetryableError
+from gotrue.errors import AuthApiError, AuthError, AuthRetryableError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,17 +84,37 @@ async def lookup_auth_user(db: AsyncSession, email: str) -> tuple[bool, bool]:
     return (True, row[0] is not None)
 
 
-async def _send_via_supabase(send: Callable[[], object], *, timeout_sec: float) -> None:
+async def _send_via_supabase(
+    send: Callable[[], object], *, timeout_sec: float, swallow_api_errors: bool = False
+) -> None:
     """Run a blocking Supabase email call off-thread with a timeout.
 
-    A transport/timeout failure becomes ``EmailProviderUnavailableError`` (the
-    route maps it to 502). ``send`` is a zero-arg callable returning the
-    Supabase response (which we discard — the outcome is intentionally
-    identical regardless of which email was requested).
+    Failure handling is uniform so the OUTCOME never depends on the email's
+    account state (non-enumeration):
+
+    * transport/timeout (``TimeoutError`` / ``AuthRetryableError`` / ``httpx``)
+      → ``EmailProviderUnavailableError`` (route → 502).
+    * GoTrue 4xx (``AuthApiError`` — e.g. an already-confirmed ``resend`` or a
+      per-email send throttle): with ``swallow_api_errors`` (the blind resend
+      path) it is SWALLOWED so the endpoint returns an identical 202 and cannot
+      leak whether the email is new / unconfirmed / confirmed; otherwise → 502.
+    * any other GoTrue error (``AuthError``) → 502.
+
+    Without this, an ``AuthApiError`` would escape as a 500 — both breaking the
+    graceful-502 contract AND re-opening a 500-vs-202 enumeration oracle on the
+    unauthenticated resend endpoint (the very thing this slice protects).
+
+    ``send`` returns the Supabase response, which we discard.
     """
     try:
         await asyncio.wait_for(asyncio.to_thread(send), timeout=timeout_sec)
     except (TimeoutError, AuthRetryableError, httpx.HTTPError) as e:
+        raise EmailProviderUnavailableError() from e
+    except AuthApiError as e:
+        if swallow_api_errors:
+            return
+        raise EmailProviderUnavailableError() from e
+    except AuthError as e:
         raise EmailProviderUnavailableError() from e
 
 
@@ -160,9 +180,10 @@ async def resend_signup_confirmation(*, db: AsyncSession, email: str) -> None:
     Used by ``POST /api/signup/resend`` (e.g. the sign-in "resend verification"
     nudge and the sign-up success-screen resend button). Hard-gated by
     ``signups_enabled`` like ``create_signup_user``. Always returns ``None``
-    and never reveals whether the email exists — calling ``resend`` for an
-    unknown/confirmed email is a no-op on Supabase's side, and the response is
-    identical either way (non-enumeration).
+    and never reveals whether the email exists: GoTrue ``resend`` raises an
+    ``AuthApiError`` for an already-confirmed (or otherwise ineligible) email,
+    so ``swallow_api_errors=True`` collapses that to the identical 202 — only a
+    genuine transport/timeout failure surfaces as 502 (non-enumeration).
     """
     if not await is_signups_enabled(db):
         raise SignupsDisabledError()
@@ -178,4 +199,5 @@ async def resend_signup_confirmation(*, db: AsyncSession, email: str) -> None:
             }
         ),
         timeout_sec=cfg.supabase_timeout_sec,
+        swallow_api_errors=True,
     )

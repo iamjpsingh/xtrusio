@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from gotrue.errors import AuthApiError
 from sqlalchemy.ext.asyncio import AsyncSession
 from xtrusio_api.core.config import get_settings
 from xtrusio_api.services.signup import (
@@ -180,3 +181,38 @@ async def test_resend_confirmation_transport_failure_maps_to_provider_unavailabl
     mock_supabase_admin.auth.resend.side_effect = httpx.ConnectError("boom")
     with pytest.raises(EmailProviderUnavailableError):
         await resend_signup_confirmation(db=db_session, email="down@example.com")
+
+
+async def test_resend_confirmation_swallows_api_error_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_supabase_admin: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    """A GoTrue 4xx (e.g. already-confirmed email) is SWALLOWED → identical
+    ``None`` outcome, so the resend endpoint cannot leak account state. This is
+    the non-enumeration guarantee: confirmed and unconfirmed must look alike."""
+    _patch_gate(monkeypatch, enabled=True)
+    mock_supabase_admin.auth.resend.side_effect = AuthApiError(
+        "email already confirmed", 422, "email_already_confirmed"
+    )
+    # Must NOT raise — swallowed to the identical no-op outcome.
+    await resend_signup_confirmation(db=db_session, email="already-confirmed@example.com")
+
+
+async def test_create_signup_confirmed_branch_api_error_maps_to_502_not_500(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_supabase_admin: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    """On the main /signup path a GoTrue 4xx (NOT swallowed) collapses to
+    ``EmailProviderUnavailableError`` (→ 502) — never an uncaught 500, and the
+    same outcome bucket as any other branch (no 500-vs-202 oracle)."""
+    _patch_gate(monkeypatch, enabled=True)
+    _patch_lookup(monkeypatch, exists=True, confirmed=True)
+    mock_supabase_admin.auth.reset_password_email.side_effect = AuthApiError(
+        "over email send rate limit", 429, "over_email_send_rate_limit"
+    )
+    with pytest.raises(EmailProviderUnavailableError):
+        await create_signup_user(
+            db=db_session, email="throttled@example.com", password="hunter22hunter22"
+        )
