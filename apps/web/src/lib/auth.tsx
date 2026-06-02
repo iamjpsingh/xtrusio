@@ -13,8 +13,20 @@ type AuthState = {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<SignInResult>;
   signOut: () => Promise<void>;
+};
+
+/**
+ * Result of a sign-in attempt. `error` is the human-readable message and
+ * `code` is the GoTrue `AuthError.code` (e.g. `email_not_confirmed`,
+ * `invalid_credentials`) when present — the sign-in page branches on `code`
+ * to offer a "resend verification" nudge instead of a generic message.
+ */
+export type SignInResult = {
+  error: string | null;
+  code: string | null;
+  status: number | null;
 };
 
 // Initialise the store as soon as the auth module is first imported (once).
@@ -29,9 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-async function signIn(email: string, password: string): Promise<{ error: string | null }> {
+async function signIn(email: string, password: string): Promise<SignInResult> {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  return { error: error?.message ?? null };
+  return {
+    error: error?.message ?? null,
+    code: error?.code ?? null,
+    status: error?.status ?? null,
+  };
 }
 
 async function signOut(): Promise<void> {

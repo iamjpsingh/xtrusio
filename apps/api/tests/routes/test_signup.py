@@ -54,6 +54,60 @@ async def test_signup_invalid_email_returns_422(
         )
 
 
+async def test_signup_resend_happy_path_returns_202(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """Gated ON: /signup/resend calls ``auth.resend`` and returns 202."""
+    token = make_jwt(sub=existing_super_admin.id)
+    await http_client.put(
+        "/api/platform/settings",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"signups_enabled": True},
+    )
+    try:
+        r = await http_client.post("/api/signup/resend", json={"email": "resend-route@example.com"})
+        assert r.status_code == 202
+        assert r.json() == {"state": "confirm_email_sent"}
+        mock_supabase_admin.auth.resend.assert_called_once()
+    finally:
+        await http_client.put(
+            "/api/platform/settings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"signups_enabled": False},
+        )
+
+
+async def test_signup_resend_transport_failure_returns_502(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """A ``resend`` transport error surfaces as 502 email_provider_unavailable."""
+    import httpx
+
+    token = make_jwt(sub=existing_super_admin.id)
+    await http_client.put(
+        "/api/platform/settings",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"signups_enabled": True},
+    )
+    mock_supabase_admin.auth.resend.side_effect = httpx.ConnectError("boom")
+    try:
+        r = await http_client.post("/api/signup/resend", json={"email": "resend-down@example.com"})
+        assert r.status_code == 502
+        assert r.json()["detail"] == "email_provider_unavailable"
+    finally:
+        await http_client.put(
+            "/api/platform/settings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"signups_enabled": False},
+        )
+
+
 async def test_signup_happy_path_calls_native_sign_up(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,

@@ -45,6 +45,21 @@ describe("resolveRoute", () => {
     expect(resolveRoute({ session: null, me: null }, "/sign-up", null)).toEqual({ kind: "render" });
   });
 
+  it("allows /forgot-password and /reset-password when unauth", () => {
+    expect(resolveRoute({ session: null, me: null }, "/forgot-password", null)).toEqual({
+      kind: "render",
+    });
+    expect(resolveRoute({ session: null, me: null }, "/reset-password", null)).toEqual({
+      kind: "render",
+    });
+  });
+
+  it("renders /reset-password even with a (recovery) session so the form survives setSession", () => {
+    expect(resolveRoute({ session: "s", me: sa }, "/reset-password", null)).toEqual({
+      kind: "render",
+    });
+  });
+
   it("pending invite forces /accept-invite", () => {
     expect(resolveRoute({ session: "s", me: pending }, "/platform", null)).toEqual({
       kind: "redirect",

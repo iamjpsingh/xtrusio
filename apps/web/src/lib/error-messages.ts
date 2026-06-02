@@ -1,3 +1,5 @@
+import { ApiError } from "./api";
+
 const MESSAGES: Record<string, string> = {
   signups_disabled: "Signups are currently disabled.",
   email_taken: "An account with that email already exists.",
@@ -26,6 +28,16 @@ const MESSAGES: Record<string, string> = {
   workspace_not_found: "We couldn't find that workspace.",
   role_not_found: "That role no longer exists. Refresh the page.",
   grant_not_found: "That grant has already been removed.",
+  // Auth-pages additions (2026-06-02). Some are backend codes, others are the
+  // GoTrue `AuthError.code` strings surfaced by supabase-js on the client.
+  rate_limited: "Too many attempts. Please wait a minute and try again.",
+  over_request_rate_limit: "Too many attempts. Please wait a minute and try again.",
+  over_email_send_rate_limit: "Too many emails sent. Please wait a minute and try again.",
+  email_not_confirmed: "Your email isn't verified yet. Check your inbox for the link.",
+  invalid_credentials: "Email or password is incorrect.",
+  otp_expired: "This link has expired. Request a new one.",
+  same_password: "Your new password must be different from your current one.",
+  network_error: "Couldn't reach the server. Check your connection and try again.",
 };
 
 export function errorMessage(code: string): string {
@@ -38,4 +50,45 @@ export function errorMessage(code: string): string {
     return `You can't grant a role with a permission you lack: ${perm}.`;
   }
   return MESSAGES[code] ?? "Something went wrong. Please try again.";
+}
+
+/**
+ * Friendly copy for an arbitrary thrown auth error. Handles, in order:
+ * - `ApiError` (backend): 429 → rate-limited, then the structured `.code`.
+ * - supabase-js `AuthError`-shaped objects: HTTP `status` 429 then `.code`.
+ * - AbortError / timeouts / network failures → a connectivity message.
+ * - Anything else → the generic registry fallback.
+ *
+ * Returning a string (never null) keeps callers simple — they render it
+ * directly. The mapping never reveals whether an email exists.
+ */
+export function authErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 429) return errorMessage("rate_limited");
+    return errorMessage(error.code ?? "");
+  }
+  if (isAbortLike(error)) return errorMessage("network_error");
+  const supa = asSupabaseError(error);
+  if (supa) {
+    if (supa.status === 429) return errorMessage("rate_limited");
+    if (supa.code) return errorMessage(supa.code);
+  }
+  if (error instanceof TypeError) {
+    // fetch() rejects with a TypeError on a network-level failure.
+    return errorMessage("network_error");
+  }
+  return errorMessage("");
+}
+
+function isAbortLike(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+function asSupabaseError(error: unknown): { code?: string; status?: number } | null {
+  if (typeof error !== "object" || error === null) return null;
+  const e = error as Record<string, unknown>;
+  const code = typeof e.code === "string" ? e.code : undefined;
+  const status = typeof e.status === "number" ? e.status : undefined;
+  if (code === undefined && status === undefined) return null;
+  return { code, status };
 }
