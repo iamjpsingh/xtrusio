@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import type { PlatformUserListItem } from "@xtrusio/api-types";
 import { fetchPlatformUsers } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasPlatformPerm, isSuperAdmin, useMe } from "@/lib/me-adapter";
 import { Badge } from "@/components/ui/badge";
@@ -43,11 +44,6 @@ export function PlatformUsersPage() {
   // but only a super_admin may mint new platform users.
   const canProvision = isSuperAdmin(me);
   return <Body canManage={canManage} canProvision={canProvision} />;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "Never";
-  return new Date(iso).toLocaleString();
 }
 
 function Body({ canManage, canProvision }: { canManage: boolean; canProvision: boolean }) {
@@ -144,7 +140,7 @@ function Body({ canManage, canProvision }: { canManage: boolean; canProvision: b
                   dateTime={u.last_sign_in_at ?? undefined}
                   title={u.last_sign_in_at ?? "Never"}
                 >
-                  {formatTime(u.last_sign_in_at)}
+                  {formatDateTime(u.last_sign_in_at, { fallback: "Never" })}
                 </time>
               </TableCell>
               <TableCell className="text-right">

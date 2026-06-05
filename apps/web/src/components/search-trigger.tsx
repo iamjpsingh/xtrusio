@@ -34,7 +34,7 @@ export function SearchTrigger() {
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput placeholder="Search…" />
         <CommandList>
-          <CommandEmpty>Search will be wired up in Plan 1E (user management).</CommandEmpty>
+          <CommandEmpty>Search isn’t available yet.</CommandEmpty>
         </CommandList>
       </CommandDialog>
     </>

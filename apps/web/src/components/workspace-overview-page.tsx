@@ -3,10 +3,12 @@ import { Activity, LayoutDashboard, Mail, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { Forbidden } from "@/components/forbidden";
 import { StatCard } from "@/components/stat-card";
 import { fetchWorkspaceStats } from "@/lib/api";
+import { isForbiddenError } from "@/lib/errors";
 import { qk } from "@/lib/query-keys";
-import { findTenant, useMe } from "@/lib/me-adapter";
+import { findTenant, getDefaultLandingPath, useMe } from "@/lib/me-adapter";
 
 type WorkspaceOverviewPageProps = {
   workspaceId: string;
@@ -22,11 +24,16 @@ type WorkspaceOverviewPageProps = {
 export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProps) {
   const { me } = useMe();
   const t = findTenant(me, workspaceId);
-  const { data, isPending, isError, refetch } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: qk.workspaceStats(workspaceId),
     queryFn: () => fetchWorkspaceStats(workspaceId),
     refetchOnWindowFocus: false,
   });
+
+  // A 403 is not retryable — this member lacks `workspace.members.read`, so
+  // re-firing would 403 again. Render the access surface (no retry); reserve
+  // the retryable <ErrorState> for 5xx / network failures.
+  const forbidden = isError && isForbiddenError(error);
 
   return (
     <>
@@ -34,7 +41,9 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
         title={t?.name ?? "Workspace"}
         description="An at-a-glance overview of this workspace — members, invites, and recent activity."
       />
-      {isError ? (
+      {forbidden ? (
+        <Forbidden landingPath={getDefaultLandingPath(me)} />
+      ) : isError ? (
         <ErrorState
           title="Couldn't load metrics"
           description="We couldn't load this workspace's metrics. Check your connection and try again."

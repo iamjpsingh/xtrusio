@@ -3,8 +3,11 @@ import { Activity, Building2, LayoutDashboard, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { Forbidden } from "@/components/forbidden";
 import { StatCard } from "@/components/stat-card";
 import { fetchPlatformStats } from "@/lib/api";
+import { isForbiddenError } from "@/lib/errors";
+import { getDefaultLandingPath, useMe } from "@/lib/me-adapter";
 import { qk } from "@/lib/query-keys";
 
 /**
@@ -14,11 +17,18 @@ import { qk } from "@/lib/query-keys";
  * field is non-null. Monochrome, tokens only.
  */
 export function PlatformDashboardPage() {
-  const { data, isPending, isError, refetch } = useQuery({
+  const { me } = useMe();
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: qk.platformStats(),
     queryFn: fetchPlatformStats,
     refetchOnWindowFocus: false,
   });
+
+  // A 403 is not retryable — a minimal-role user simply isn't authorized to
+  // read these metrics. Render the access surface (no retry) instead of an
+  // <ErrorState onRetry> that would re-fire the same 403 forever. Only 5xx /
+  // network failures get the retryable error state.
+  const forbidden = isError && isForbiddenError(error);
 
   return (
     <>
@@ -26,7 +36,9 @@ export function PlatformDashboardPage() {
         title="Dashboard"
         description="A platform-wide overview of clients, users, and recent activity."
       />
-      {isError ? (
+      {forbidden ? (
+        <Forbidden landingPath={getDefaultLandingPath(me)} />
+      ) : isError ? (
         <ErrorState
           title="Couldn't load metrics"
           description="We couldn't load the platform metrics. Check your connection and try again."

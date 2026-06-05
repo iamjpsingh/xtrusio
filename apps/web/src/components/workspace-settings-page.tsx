@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { errorCode, fetchWorkspaceSettings, updateWorkspaceSettings } from "@/lib/api";
 import { errorMessage } from "@/lib/error-messages";
+import { formatDateTime } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Button } from "@/components/ui/button";
@@ -30,10 +31,6 @@ export function WorkspaceSettingsPage({ workspaceId }: { workspaceId: string }) 
   }
   const canManage = hasWorkspacePerm(me, workspaceId, "workspace.settings.manage");
   return <Body workspaceId={workspaceId} canManage={canManage} />;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
 }
 
 function Body({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
@@ -125,7 +122,7 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="created-at">Created</Label>
-          <Input id="created-at" value={formatDate(data.created_at)} readOnly disabled />
+          <Input id="created-at" value={formatDateTime(data.created_at)} readOnly disabled />
         </div>
         {formError ? (
           <p role="alert" className="text-sm text-destructive">
