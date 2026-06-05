@@ -51,8 +51,49 @@ class ScopeMismatchError(Exception):
     """A permission key's scope doesn't match the role's scope."""
 
 
+class PrivilegeEscalationError(Exception):
+    """Actor tried to put a permission they do NOT themselves hold into a role
+    definition (create or edit). Mirrors the grant-path guard: you cannot grant
+    — or bake into a role — a permission you lack.
+
+    The missing perm key is kept on the exception for server-side logging ONLY;
+    the route sanitizes the response body (PAR-A M22) so the RBAC graph can't be
+    enumerated by probing."""
+
+    def __init__(self, missing_perm_key: str) -> None:
+        super().__init__(f"actor lacks permission: {missing_perm_key}")
+        self.missing_perm_key = missing_perm_key
+
+
 # --- helpers ---------------------------------------------------------------
 # PAR-C H9: actor-set is shared (core.permissions.set_actor).
+
+
+async def _find_missing_perm(db: AsyncSession, *, actor_id: UUID, keys: list[str]) -> str | None:
+    """Return the first key in ``keys`` the actor does NOT hold on the platform
+    scope, or ``None`` if the actor holds every one.
+
+    This is the role-DEFINITION analogue of the grant path's
+    ``platform_role_grants._find_missing_perm``: that helper checks an existing
+    role's ``role_permissions`` rows; here the keys are the *requested* resulting
+    permission set (not yet — or about to be — written), so we resolve them via
+    ``unnest`` against the SAME ``has_platform_perm`` SECURITY DEFINER resolver
+    the grant path and the 0013 trigger use. super_admin holds every platform
+    perm, so it passes trivially.
+    """
+    if not keys:
+        return None
+    row = (
+        await db.execute(
+            text(
+                "SELECT k FROM unnest(CAST(:keys AS text[])) AS k "
+                "WHERE NOT has_platform_perm(:actor, k) "
+                "LIMIT 1"
+            ),
+            {"keys": keys, "actor": str(actor_id)},
+        )
+    ).first()
+    return str(row.k) if row is not None else None
 
 
 async def _validate_perm_keys(db: AsyncSession, *, scope: str, keys: list[str]) -> None:
@@ -116,6 +157,15 @@ async def create_platform_role(
     """Create a custom (``is_system=False``) platform role."""
     await set_actor(db, actor_id)
     await _validate_perm_keys(db, scope="platform", keys=permission_keys)
+    # Privilege-escalation guard: the resulting permission set must be a subset
+    # of the actor's own effective platform perms. Closes the role-definition
+    # escalation hole (an actor with only ``platform.roles.manage`` could
+    # otherwise mint a role carrying perms they don't hold and self-assign it).
+    # The 0013 trigger only fires on ``user_roles``, never ``role_permissions``,
+    # so this service check is the PRIMARY gate for this path.
+    missing = await _find_missing_perm(db, actor_id=actor_id, keys=permission_keys)
+    if missing is not None:
+        raise PrivilegeEscalationError(missing)
     # Friendly-first uniqueness check (DB also has a UNIQUE index).
     existing = (
         await db.execute(
@@ -252,6 +302,14 @@ async def update_platform_role(
     # Validate perm_keys BEFORE any write.
     if permission_keys is not None:
         await _validate_perm_keys(db, scope="platform", keys=permission_keys)
+        # Privilege-escalation guard: evaluate the RESULTING set (the new keys
+        # being written), not the delta — an under-privileged actor must not be
+        # able to retain OR add perms they lack. Matches the grant-path
+        # invariant. ``permission_keys is None`` (name/description-only edits)
+        # skips this entirely.
+        missing = await _find_missing_perm(db, actor_id=actor_id, keys=permission_keys)
+        if missing is not None:
+            raise PrivilegeEscalationError(missing)
     # PAR-D L3: single UPDATE for both fields (one updated_at, one row touch).
     # PlatformRolePatch contract: None = "leave unchanged" — COALESCE keeps the
     # existing value. If callers ever need to clear description, add a sentinel.
