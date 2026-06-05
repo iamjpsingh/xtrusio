@@ -16,6 +16,7 @@ import type {
   PlatformRoleGrantOut,
   PlatformRoleOut,
   PlatformUserListItem,
+  TenantOut,
 } from "@xtrusio/api-types";
 
 export const meSuperAdmin: MeResponse = {
@@ -88,6 +89,25 @@ export const platformUserBen: PlatformUserListItem = {
   created_at: "2026-05-02T00:00:00Z",
   last_sign_in_at: null,
   granted_role_count: 0,
+};
+
+// Client tenants surfaced by the platform Clients page (`GET /api/tenants`).
+export const tenantAcme: TenantOut = {
+  id: "50000000-0000-0000-0000-000000000001",
+  slug: "acme-corp",
+  name: "Acme Corp",
+  created_at: "2026-05-10T00:00:00Z",
+  updated_at: "2026-05-10T00:00:00Z",
+  created_by: meSuperAdmin.user_id,
+};
+
+export const tenantGlobex: TenantOut = {
+  id: "50000000-0000-0000-0000-000000000002",
+  slug: "globex",
+  name: "Globex",
+  created_at: "2026-05-11T00:00:00Z",
+  updated_at: "2026-05-11T00:00:00Z",
+  created_by: meSuperAdmin.user_id,
 };
 
 export const platformRoleGrantAuditor: PlatformRoleGrantOut = {

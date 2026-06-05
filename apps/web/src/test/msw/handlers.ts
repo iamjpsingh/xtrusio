@@ -17,6 +17,7 @@ import type {
   PlatformRoleOut,
   PlatformRolesPage,
   PlatformUsersPage,
+  TenantsPage,
 } from "@xtrusio/api-types";
 import {
   auditEventCreate,
@@ -26,6 +27,8 @@ import {
   platformRoleGrantAuditor,
   platformUserAna,
   platformUserBen,
+  tenantAcme,
+  tenantGlobex,
 } from "./fixtures";
 
 const API = "http://api.test.invalid";
@@ -77,6 +80,12 @@ export const handlers = [
       items: [platformRoleGrantAuditor],
       next_cursor: null,
     }),
+  ),
+
+  // ----- Client tenants (platform Clients page) -----
+  // `GET /api/tenants` returns the `TenantsPage` envelope, NOT a bare array.
+  http.get(`${API}/api/tenants`, () =>
+    HttpResponse.json<TenantsPage>({ items: [tenantAcme, tenantGlobex], next_cursor: null }),
   ),
 
   // ----- Platform audit log -----

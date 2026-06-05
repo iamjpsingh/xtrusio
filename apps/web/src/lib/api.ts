@@ -14,6 +14,7 @@ import type {
   PlatformUserCreate,
   PlatformUserCreated,
   PlatformUsersPage,
+  TenantsPage,
   WorkspaceMembersPage,
   WorkspaceRoleGrantOut,
   WorkspaceRoleGrantsPage,
@@ -379,6 +380,16 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
 
 export async function fetchWorkspaceStats(workspaceId: string): Promise<WorkspaceStats> {
   return apiFetch<WorkspaceStats>(`/api/workspaces/${workspaceId}/stats`);
+}
+
+// ----- Client tenants list (platform clients view) -----
+//
+// `GET /api/tenants` returns the cursor-paginated `TenantsPage` envelope
+// (`items` + `next_cursor`), NOT a bare array — mirrors `fetchPlatformUsers`.
+
+export async function fetchTenants(cursor: string | null): Promise<TenantsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<TenantsPage>(`/api/tenants${qs}`);
 }
 
 // ----- Platform users list (P6d) -----
