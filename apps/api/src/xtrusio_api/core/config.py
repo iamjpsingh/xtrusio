@@ -4,9 +4,19 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Prefix of the placeholder CURSOR_HMAC_KEY shipped in .env.example. A known key
+# = forgeable pagination cursors (CWE-798/321), so prod must reject it. Matched
+# by prefix (not equality) so any "dev-only-change-me…" variant is also caught.
+_WEAK_CURSOR_KEY_PREFIX = "dev-only-change-me"
+# Minimum cursor-signing key length enforced in prod. 32 chars is the floor for a
+# secrets.token_hex(32) (= 64 hex chars) style key; anything shorter is rejected
+# in prod as low-entropy.
+_MIN_CURSOR_KEY_LEN = 32
 
 
 def _find_env_file() -> Path | None:
@@ -101,6 +111,34 @@ class Settings(BaseSettings):
     def cors_allow_origins(self) -> list[str]:
         """Comma-separated browser origins allowed to call the API."""
         return [o.strip() for o in self.cors_allow_origins_raw.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _reject_weak_cursor_key_in_prod(self) -> Self:
+        """Fail fast in prod on a known-weak / too-short CURSOR_HMAC_KEY.
+
+        The placeholder shipped in ``.env.example`` was copied verbatim into a
+        live ``.env`` (CWE-798/321) — a known signing key lets a client forge
+        pagination cursors. We reject the placeholder prefix and obviously
+        low-entropy keys ONLY when ``env == "prod"`` so dev/test stay frictionless
+        (the dev placeholder keeps working locally; rotating it only invalidates
+        ephemeral dev cursors).
+        """
+        if self.env != "prod":
+            return self
+        key = self.cursor_hmac_key
+        if key.startswith(_WEAK_CURSOR_KEY_PREFIX):
+            raise ValueError(
+                "CURSOR_HMAC_KEY is set to the shipped dev placeholder in prod. "
+                'Generate a fresh key: python -c "import secrets; '
+                'print(secrets.token_hex(32))"'
+            )
+        if len(key) < _MIN_CURSOR_KEY_LEN:
+            raise ValueError(
+                f"CURSOR_HMAC_KEY is too short for prod ({len(key)} < "
+                f"{_MIN_CURSOR_KEY_LEN} chars). Generate a strong key: "
+                'python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

@@ -42,6 +42,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.platform_user import PlatformRole, PlatformUser
 from .config import get_settings
 from .db import get_db
+from .logging import get_logger
+
+_log = get_logger(__name__)
+
+# CWE-209: client-facing 401 details are STABLE OPAQUE codes — never the raw
+# JOSE/JWKS exception text (which can leak library internals or the JWKS host).
+# The detailed exception is logged server-side at WARN (with the request_id the
+# RequestIdMiddleware bound on structlog's contextvars) so debuggability holds.
+_CODE_INVALID_TOKEN = "invalid_token"
+_CODE_JWKS_UNAVAILABLE = "token_verification_unavailable"
 
 _AUDIENCE = "authenticated"
 # Accepted JWT signing algorithms. Supabase's modern asymmetric JWTs default to
@@ -171,17 +181,24 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
     try:
         header = jwt.get_unverified_header(token)
     except JOSEError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token header: {e}") from e
+        # CWE-209: opaque code to the client; full JOSE text only in the log.
+        _log.warning("jwt_header_decode_failed", error=str(e), error_type=type(e).__name__)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN) from e
     if header.get("alg") not in _ALLOWED_ALGS:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
+        _log.warning("jwt_unsupported_alg", alg=header.get("alg"))
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN)
     kid = header.get("kid")
     if not kid:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token missing kid")
+        _log.warning("jwt_missing_kid")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN)
     jwks_url = get_settings().supabase_jwks_url
     try:
         jwks = await _fetch_jwks(jwks_url)
     except httpx.HTTPError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"jwks fetch failed: {e}") from e
+        # JWKS fetch failure is an availability problem, not a bad token — a
+        # distinct opaque code, and we never echo the (host-leaking) error text.
+        _log.warning("jwks_fetch_failed", error=str(e), error_type=type(e).__name__)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_JWKS_UNAVAILABLE) from e
     key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if key is None:
         # PAR-B H7: kid not in cached JWKS — could be a key rotation. Refetch
@@ -191,14 +208,17 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
         try:
             jwks = await _fetch_jwks(jwks_url, force_refresh=True)
         except httpx.HTTPError as e:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"jwks fetch failed: {e}") from e
+            _log.warning("jwks_refetch_failed", error=str(e), error_type=type(e).__name__)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_JWKS_UNAVAILABLE) from e
         key = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
         if key is None:
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "no matching jwks key")
+            _log.warning("jwt_no_matching_jwks_key", kid=kid)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN)
     # Also defensively check the key alg metadata — asymmetric allow-list only.
     key_alg = key.get("alg")
     if key_alg is not None and key_alg not in _ALLOWED_ALGS:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unsupported alg")
+        _log.warning("jwt_key_unsupported_alg", alg=key_alg)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN)
     try:
         payload: dict[str, Any] = jwt.decode(
             token,
@@ -209,7 +229,8 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
             options=_JWT_OPTIONS,
         )
     except JOSEError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, f"invalid token: {e}") from e
+        _log.warning("jwt_decode_failed", error=str(e), error_type=type(e).__name__)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN) from e
     return payload
 
 
