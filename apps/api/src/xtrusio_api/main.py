@@ -31,7 +31,11 @@ from .core.auth import close_jwks_client
 from .core.config import get_settings
 from .core.db import SessionLocal
 from .core.logging import configure_logging, get_logger
-from .core.middleware import BodySizeLimitMiddleware, RequestIdMiddleware
+from .core.middleware import (
+    BodySizeLimitMiddleware,
+    RequestIdMiddleware,
+    SecurityHeadersMiddleware,
+)
 from .core.outbox_worker import run_outbox_worker
 from .core.perm_cache import close_perm_cache
 from .core.rate_limit import limiter
@@ -215,8 +219,11 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 
 # Middleware order matters in Starlette (outermost added LAST executes
 # FIRST). We want request-id first so every other layer sees state.request_id;
-# then the body-size cap so 413s are also tagged. CORS runs as last-out so it
-# can observe and tag every response.
+# then the body-size cap so 413s are also tagged. CORS runs near last-out so it
+# can observe and tag every response. SecurityHeadersMiddleware is added LAST so
+# it is the OUTERMOST layer — it stamps the hardening headers on EVERY response,
+# including CORS preflight (204) responses CORSMiddleware short-circuits and the
+# global exception handler's 4xx/5xx bodies.
 app.add_middleware(
     CORSMiddleware,
     # PAR-B M14: explicit allow lists, no wildcards; preflight cache 10 min;
@@ -229,6 +236,9 @@ app.add_middleware(
 )
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=get_settings().max_request_body_bytes)
 app.add_middleware(RequestIdMiddleware)
+# HSTS is env-gated; resolve env once at registration so the request path holds
+# no env literal (no hardcoded config — driven from settings.env).
+app.add_middleware(SecurityHeadersMiddleware, is_prod=get_settings().env == "prod")
 
 # Health probes register before any router that may itself be rate-limited so
 # the orchestrator's probes never trip a limit.

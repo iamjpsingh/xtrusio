@@ -25,6 +25,25 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
+# Paths that render HTML and pull CDN assets / use inline script+style (FastAPI's
+# interactive docs). A blanket strict CSP (`default-src 'none'`) breaks the
+# Swagger/ReDoc UI, so we SKIP the Content-Security-Policy header on these paths
+# while still applying the non-CSP hardening headers everywhere. ``openapi.json``
+# is plain JSON but is fetched by the docs page, so it is grouped here too.
+_DOCS_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
+
+# Strict CSP for the JSON API surface (everything that isn't the docs UI). The
+# API never returns HTML that a browser renders as a document, so locking
+# everything down is safe and blunts any reflected-content / clickjacking vector.
+_API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+
+# Minimal Permissions-Policy — the API needs none of these browser features.
+_PERMISSIONS_POLICY = "geolocation=(), camera=(), microphone=()"
+
+# HSTS value applied ONLY in prod (env-gated in __init__). Two years +
+# includeSubDomains; never sent in dev/local so we don't pin HSTS on localhost.
+_HSTS_VALUE = "max-age=63072000; includeSubDomains"
+
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Generate or accept ``X-Request-ID`` per request; surface on response.
@@ -48,6 +67,53 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.bind_contextvars(request_id=rid)
         response = await call_next(request)
         response.headers["X-Request-ID"] = rid
+        return response
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Set baseline HTTP security headers on every response (CWE-693/1021).
+
+    Headers (all responses):
+      - ``X-Content-Type-Options: nosniff`` — no MIME sniffing.
+      - ``X-Frame-Options: DENY`` — legacy clickjacking guard.
+      - ``Referrer-Policy: strict-origin-when-cross-origin``.
+      - ``Permissions-Policy`` — disable browser features the API never needs.
+
+    Env-gated:
+      - ``Strict-Transport-Security`` — ONLY when ``env == "prod"``. Never in
+        dev/local so HSTS is not pinned against ``http://localhost``.
+
+    CSP decision: FastAPI serves the interactive docs (``/docs``, ``/redoc``,
+    ``/openapi.json``) as HTML that loads CDN assets + inline script/style. A
+    strict ``default-src 'none'`` would break that UI, and docs are enabled in
+    every env here (no ``docs_url=None`` in ``main.py``). So we apply a strict
+    API CSP on every path EXCEPT the docs paths, where CSP is omitted. The
+    other (non-CSP) headers still apply to the docs paths.
+    """
+
+    def __init__(self, app: ASGIApp, *, is_prod: bool) -> None:
+        super().__init__(app)
+        # env-driven, resolved once at registration (no per-request settings read,
+        # no hardcoded env literal in the request path).
+        self._is_prod = is_prod
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        response = await call_next(request)
+        headers = response.headers
+        headers.setdefault("X-Content-Type-Options", "nosniff")
+        headers.setdefault("X-Frame-Options", "DENY")
+        headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        headers.setdefault("Permissions-Policy", _PERMISSIONS_POLICY)
+        if self._is_prod:
+            headers.setdefault("Strict-Transport-Security", _HSTS_VALUE)
+        # Skip CSP on the docs UI paths so Swagger/ReDoc keep working; lock down
+        # everything else (the JSON API) with a strict policy.
+        if request.url.path not in _DOCS_PATHS:
+            headers.setdefault("Content-Security-Policy", _API_CSP)
         return response
 
 
