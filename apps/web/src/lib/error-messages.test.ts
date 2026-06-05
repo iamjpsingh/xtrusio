@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { errorMessage } from "./error-messages";
+import { authErrorMessage, errorMessage } from "./error-messages";
+import { ApiError } from "./api";
 
 describe("errorMessage", () => {
   it("returns the mapped string for known codes", () => {
@@ -60,5 +61,46 @@ describe("errorMessage — P6c Slice 1 codes", () => {
   it("falls through to the existing default for unknown codes", () => {
     const result = errorMessage("definitely-not-a-real-code");
     expect(result).toBeTruthy();
+  });
+});
+
+describe("errorMessage — auth-pages codes (2026-06-02)", () => {
+  it("maps email_not_confirmed", () => {
+    expect(errorMessage("email_not_confirmed")).toMatch(/verif/i);
+  });
+  it("maps invalid_credentials", () => {
+    expect(errorMessage("invalid_credentials")).toBe("Email or password is incorrect.");
+  });
+  it("maps rate_limited and over_request_rate_limit", () => {
+    expect(errorMessage("rate_limited")).toMatch(/too many/i);
+    expect(errorMessage("over_request_rate_limit")).toMatch(/too many/i);
+  });
+  it("maps otp_expired", () => {
+    expect(errorMessage("otp_expired")).toMatch(/expired/i);
+  });
+});
+
+describe("authErrorMessage", () => {
+  it("maps a 429 ApiError to the rate-limited message regardless of code", () => {
+    expect(authErrorMessage(new ApiError(429, { detail: "whatever" }))).toMatch(/too many/i);
+  });
+  it("maps an ApiError code (502 email_provider_unavailable)", () => {
+    expect(authErrorMessage(new ApiError(502, { detail: "email_provider_unavailable" }))).toMatch(
+      /couldn't send/i,
+    );
+  });
+  it("maps a supabase-shaped AuthError by code", () => {
+    expect(authErrorMessage({ code: "email_not_confirmed", status: 400 })).toMatch(/verif/i);
+  });
+  it("maps a supabase-shaped AuthError by 429 status", () => {
+    expect(authErrorMessage({ code: "over_email_send_rate_limit", status: 429 })).toMatch(
+      /too many/i,
+    );
+  });
+  it("maps a fetch network failure (TypeError) to the connectivity message", () => {
+    expect(authErrorMessage(new TypeError("Failed to fetch"))).toMatch(/connection/i);
+  });
+  it("falls back to the generic message for an unrecognised value", () => {
+    expect(authErrorMessage({})).toMatch(/something went wrong/i);
   });
 });

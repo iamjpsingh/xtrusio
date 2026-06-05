@@ -182,6 +182,18 @@ export async function postSignup(email: string, password: string): Promise<void>
   });
 }
 
+/**
+ * Resend the signup-confirmation email (POST /api/signup/resend → 202).
+ * The backend is gated by `signups_enabled` and never reveals whether the
+ * email exists (non-enumeration), so the resolved value is always void.
+ */
+export async function postSignupResend(email: string): Promise<void> {
+  await apiFetch("/api/signup/resend", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function postOnboarding(workspace_name: string): Promise<{
   tenant: { id: string; slug: string; name: string; role: string };
 }> {

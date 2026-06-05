@@ -7,8 +7,12 @@ export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
 export type RouteDecision = { kind: "render" } | { kind: "redirect"; to: string };
 
-const PUBLIC = new Set(["/sign-in", "/sign-up"]);
-const UNGATED_AUTHED = new Set(["/onboarding", "/accept-invite"]);
+const PUBLIC = new Set(["/sign-in", "/sign-up", "/forgot-password", "/reset-password"]);
+// `/reset-password` is also ungated-when-authed: GoTrue's recovery link calls
+// `setSession`, which makes the user transiently "signed in" while they're
+// still on the form. Without this, the resolver would redirect them away
+// mid-reset to their landing page.
+const UNGATED_AUTHED = new Set(["/onboarding", "/accept-invite", "/reset-password"]);
 
 function isPlatformPath(path: string): boolean {
   return path === "/platform" || path.startsWith("/platform/");

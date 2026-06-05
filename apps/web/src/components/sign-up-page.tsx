@@ -1,11 +1,80 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
-import { errorCode, fetchSignupStatus, postSignup } from "@/lib/api";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
+import { fetchSignupStatus, postSignup, postSignupResend } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
-import { errorMessage } from "@/lib/error-messages";
+import { authErrorMessage } from "@/lib/error-messages";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { AuthLayout } from "@/components/auth-layout";
 import { Button } from "@/components/ui/button";
+
+const RESEND_COOLDOWN_SEC = 15;
+
+function SignInFooter() {
+  return (
+    <span>
+      Already have an account?{" "}
+      <Link
+        to="/sign-in"
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        Sign in
+      </Link>
+    </span>
+  );
+}
+
+function CheckEmailScreen({ email }: { email: string }) {
+  const [cooldown, setCooldown] = useState(0);
+  const resend = useMutation({
+    mutationFn: () => postSignupResend(email),
+    onSuccess: () => setCooldown(RESEND_COOLDOWN_SEC),
+  });
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
+
+  const disabled = resend.isPending || cooldown > 0;
+
+  return (
+    <AuthLayout
+      title="Check your email"
+      subtitle={`We've sent a link to ${email}`}
+      footer={<SignInFooter />}
+    >
+      <div className="space-y-4 text-center">
+        <p className="text-sm text-muted-foreground">
+          Click the link in the email to finish setting up your account. If you already have an
+          account, we've emailed you a sign-in or password-reset link instead.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Didn't get it? Check your spam folder, or resend below.
+        </p>
+        {resend.error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {authErrorMessage(resend.error)}
+          </p>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => resend.mutate()}
+          disabled={disabled}
+          className="h-11 w-full font-medium"
+        >
+          {resend.isPending
+            ? "Resending…"
+            : cooldown > 0
+              ? `Resend email (${cooldown}s)`
+              : "Resend email"}
+        </Button>
+      </div>
+    </AuthLayout>
+  );
+}
 
 export function SignUpPage() {
   const { data: status, isLoading } = useQuery({
@@ -27,6 +96,7 @@ export function SignUpPage() {
       <AuthLayout
         title="Sign-up unavailable"
         subtitle="Public client signup is currently turned off"
+        footer={<SignInFooter />}
       >
         <p className="text-center text-sm text-muted-foreground">
           Contact your administrator for an invitation.
@@ -35,20 +105,18 @@ export function SignUpPage() {
     );
   }
   if (submitted) {
-    return (
-      <AuthLayout title="Check your email" subtitle={`We've sent a confirmation link to ${email}`}>
-        <p className="text-center text-sm text-muted-foreground">
-          Check your inbox and click the link to complete sign-up.
-        </p>
-      </AuthLayout>
-    );
+    return <CheckEmailScreen email={email} />;
   }
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     m.mutate();
   };
   return (
-    <AuthLayout title="Create your account" subtitle="Start a new client workspace">
+    <AuthLayout
+      title="Create your account"
+      subtitle="Start a new client workspace"
+      footer={<SignInFooter />}
+    >
       <form onSubmit={onSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <label
@@ -108,7 +176,7 @@ export function SignUpPage() {
 
         {m.error ? (
           <p role="alert" className="text-sm text-destructive">
-            {errorMessage(errorCode(m.error))}
+            {authErrorMessage(m.error)}
           </p>
         ) : null}
         <Button
