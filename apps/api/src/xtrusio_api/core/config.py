@@ -101,6 +101,36 @@ class Settings(BaseSettings):
     # worker that sends invite emails out of band of the request transaction.
     outbox_poll_sec: float = Field(alias="OUTBOX_POLL_SEC")
 
+    # === Rate-limit hardening (RL-1/RL-2/RL-3) ===
+    # Per-EMAIL throttle on /api/signup + /api/signup/resend. Defends the
+    # secure-signup design (which ALWAYS sends mail) against email-bombing a
+    # known victim by rotating source IPs to dodge the per-IP slowapi limit.
+    # Counts REQUESTS PER NORMALIZED EMAIL — never branches on whether the
+    # account exists — so it can never become an enumeration oracle.
+    # OPTIONAL with a sane default (no .env change needed for dev); an operator
+    # can tighten/loosen per-environment without a code change.
+    signup_email_max_per_window: int = Field(default=5, alias="SIGNUP_EMAIL_MAX_PER_WINDOW")
+    signup_email_window_sec: int = Field(default=3600, alias="SIGNUP_EMAIL_WINDOW_SEC")
+
+    # Authenticated catch-all ceiling (RL-1: wires the previously-dead
+    # AUTHED_CATCHALL_RATE). A slowapi limit string (e.g. "120/minute") applied
+    # USER-keyed as a default limit to every authenticated route that has no
+    # explicit per-route limit; health probes are exempt. Default is generous
+    # so a normal multi-query dashboard load (and the test suite) never trips
+    # it — it only catches a single user/token hammering the API.
+    authed_catchall_rate: str = Field(default="120/minute", alias="AUTHED_CATCHALL_RATE")
+
+    # RL-3: trusted reverse-proxy hop count for client-IP derivation from
+    # X-Forwarded-For. 0 (default) = trust ONLY the socket peer, ignore XFF
+    # entirely (correct for dev and any deployment where the app is directly
+    # exposed). Behind N trusted proxies/CDN hops, set this to N: the limiter
+    # then takes the (N+1)-th entry from the RIGHT of XFF (the address the
+    # outermost trusted proxy observed), never a blindly-trusted leftmost
+    # client-supplied value. PROD OPERATOR NOTE: also pin uvicorn
+    # ``--forwarded-allow-ips`` to the real proxy egress IP(s) so a direct
+    # attacker cannot inject a forged XFF that the app would honour.
+    rate_limit_trusted_proxy_hops: int = Field(default=0, alias="RATE_LIMIT_TRUSTED_PROXY_HOPS")
+
     log_level: str = Field(alias="LOG_LEVEL")
 
     startup_reconcile_tolerant: bool = Field(alias="STARTUP_RECONCILE_TOLERANT")

@@ -24,12 +24,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core.auth import close_jwks_client
 from .core.config import get_settings
 from .core.db import SessionLocal
+from .core.email_throttle import close_email_throttle
 from .core.logging import configure_logging, get_logger
 from .core.middleware import (
     BodySizeLimitMiddleware,
@@ -163,6 +165,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await close_jwks_client()
         # PAR-D M16: close the Valkey perm-cache client likewise.
         await close_perm_cache()
+        # RL-2: close the Valkey per-email signup-throttle client likewise.
+        await close_email_throttle()
 
 
 app = FastAPI(title="Xtrusio API", version="0.0.0", lifespan=lifespan)
@@ -175,6 +179,25 @@ app.state.limiter = limiter
 # dispatches the registered class (``RateLimitExceeded``) to the matching
 # handler before the type signature is enforced.
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
+# RL-1: install SlowAPIMiddleware so the user-keyed authenticated catch-all
+# (limiter.default_limits, read from AUTHED_CATCHALL_RATE) is evaluated on every
+# request. Without the middleware, default_limits only apply to routes that
+# carry an explicit @limiter.limit decorator — i.e. the catch-all would stay
+# dead. The middleware skips routes that already have an explicit per-route
+# limit and routes registered as exempt, so it never double-limits or clobbers
+# SIGNUP_RATE / INVITE_ACCEPT_RATE / ONBOARDING_RATE. (It also short-circuits
+# entirely when ``limiter.enabled`` is False, which the test suite relies on.)
+app.add_middleware(SlowAPIMiddleware)
+
+# RL-1: exempt the K8s liveness/readiness probes from the catch-all so an
+# orchestrator polling them frequently never trips a 429. ``limiter.exempt``
+# registers the endpoint's ``module.func`` name in the limiter's exempt set as
+# a side effect (the SlowAPIMiddleware checks that set before applying any
+# default limit); we discard the returned wrapper because the routes are
+# already bound to the original functions.
+for _probe in (health_routes.live, health_routes.ready, health_routes.health):
+    limiter.exempt(_probe)  # type: ignore[no-untyped-call]
 
 
 # PAR-B M13: global exception handlers — every error response carries the

@@ -67,11 +67,33 @@ def test_onboarding_rate_limit_registered() -> None:
 
 
 def test_authed_catchall_rate_string_is_per_minute() -> None:
-    """The authenticated catch-all spec is per-minute (60/minute). Assert the
-    constant is well-formed — the catch-all is applied via default_limits in
-    a later phase if needed; for PAR-A it's documented + ready."""
+    """The legacy ``AUTHED_CATCHALL_RATE`` constant is per-minute and
+    well-formed. RL-1 now wires the ACTUAL applied ceiling from settings
+    (``authed_catchall_rate``, default "120/minute") via ``default_limits`` +
+    ``SlowAPIMiddleware`` — exercised in ``test_rate_limit_hardening.py``. This
+    constant is retained for the config-shape contract."""
     assert "minute" in AUTHED_CATCHALL_RATE
     assert AUTHED_CATCHALL_RATE.startswith("60")
+
+
+def test_catchall_default_limit_registered_and_user_keyed() -> None:
+    """RL-1: the limiter carries the authenticated catch-all as a default limit,
+    keyed by the user-aware ``_authed_default_key`` (so a single user/token has
+    a per-minute ceiling on otherwise-undecorated authed routes)."""
+    from xtrusio_api.core.config import get_settings
+    from xtrusio_api.core.rate_limit import _authed_default_key
+
+    assert limiter._default_limits, "expected a wired authenticated catch-all default limit"
+    expected = get_settings().authed_catchall_rate.replace(" ", "")
+    # The raw limit string lives on the name-mangled private attr of LimitGroup.
+    rendered = [
+        str(getattr(g, "_LimitGroup__limit_provider")).replace(" ", "")  # noqa: B009
+        for g in limiter._default_limits
+    ]
+    assert any(expected in r for r in rendered), rendered
+    # The default limit is user-keyed via the limiter's main key_func.
+    assert limiter._key_func is _authed_default_key
+    assert all(g.key_function is _authed_default_key for g in limiter._default_limits)
 
 
 def test_limiter_singleton_is_app_state() -> None:
