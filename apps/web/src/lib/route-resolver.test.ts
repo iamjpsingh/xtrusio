@@ -60,6 +60,15 @@ describe("resolveRoute", () => {
     });
   });
 
+  it("renders /accept-invite when unauth so the loader can consume the invite-link hash", () => {
+    // A sessionless invitee arrives from a GoTrue invite link with the session
+    // in the URL hash. The route must NOT bounce to /sign-in before the loader
+    // calls setSession.
+    expect(resolveRoute({ session: null, me: null }, "/accept-invite", null)).toEqual({
+      kind: "render",
+    });
+  });
+
   it("pending invite forces /accept-invite", () => {
     expect(resolveRoute({ session: "s", me: pending }, "/platform", null)).toEqual({
       kind: "redirect",

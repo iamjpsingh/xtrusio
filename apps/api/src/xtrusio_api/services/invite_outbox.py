@@ -109,8 +109,19 @@ async def _send_one(payload: dict[str, Any]) -> str | None:
     sb = create_client(cfg.supabase_url, cfg.supabase_service_role_key)
     email: str = payload["email"]
 
+    # Land the invite link on /accept-invite so the SPA's route loader can
+    # consume the `#access_token&refresh_token&type=invite` hash and establish
+    # the invitee's session. Without redirect_to, GoTrue uses the project's Site
+    # URL and the invitee never reaches the authenticated accept flow.
+    # NOTE (operator): the redirect URL must be in the Supabase project's
+    # Redirect URLs allow-list, else GoTrue silently falls back to the Site URL.
+    accept_redirect = f"{cfg.web_app_url.rstrip('/')}/accept-invite"
     result = await asyncio.wait_for(
-        asyncio.to_thread(lambda: sb.auth.admin.invite_user_by_email(email)),
+        asyncio.to_thread(
+            lambda: sb.auth.admin.invite_user_by_email(
+                email, options={"redirect_to": accept_redirect}
+            )
+        ),
         timeout=cfg.supabase_timeout_sec,
     )
     sb_user_id = getattr(getattr(result, "user", None), "id", None)

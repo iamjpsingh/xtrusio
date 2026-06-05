@@ -7,11 +7,23 @@ export type { MeResponse };
 export type AuthState = { session: string | null; me: MeResponse | null };
 export type RouteDecision = { kind: "render" } | { kind: "redirect"; to: string };
 
-const PUBLIC = new Set(["/sign-in", "/sign-up", "/forgot-password", "/reset-password"]);
+// `/accept-invite` is public so a sessionless invitee landing from a GoTrue
+// invite link (which carries the session in the URL hash, not a cookie) is NOT
+// bounced to /sign-in before the route's loader can consume the hash and call
+// setSession. Same reasoning as /reset-password's recovery link.
+const PUBLIC = new Set([
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/accept-invite",
+]);
 // `/reset-password` is also ungated-when-authed: GoTrue's recovery link calls
 // `setSession`, which makes the user transiently "signed in" while they're
 // still on the form. Without this, the resolver would redirect them away
-// mid-reset to their landing page.
+// mid-reset to their landing page. `/accept-invite` is the same: its loader
+// calls setSession from the invite-link hash, so the invitee becomes authed
+// while still on the accept route.
 const UNGATED_AUTHED = new Set(["/onboarding", "/accept-invite", "/reset-password"]);
 
 function isPlatformPath(path: string): boolean {
