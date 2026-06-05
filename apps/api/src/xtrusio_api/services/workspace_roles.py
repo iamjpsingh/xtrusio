@@ -49,8 +49,49 @@ class ScopeMismatchError(Exception):
     """A permission key's scope doesn't match the role's scope."""
 
 
+class PrivilegeEscalationError(Exception):
+    """Actor tried to put a permission they do NOT hold in this workspace into a
+    role definition (create or edit). Mirrors the grant-path guard: you cannot
+    grant — or bake into a role — a permission you lack.
+
+    The missing perm key is kept on the exception for server-side logging ONLY;
+    the route sanitizes the response body (PAR-A M22)."""
+
+    def __init__(self, missing_perm_key: str) -> None:
+        super().__init__(f"actor lacks permission: {missing_perm_key}")
+        self.missing_perm_key = missing_perm_key
+
+
 # --- helpers ---------------------------------------------------------------
 # PAR-C H9: actor-set is shared (core.permissions.set_actor).
+
+
+async def _find_missing_perm(
+    db: AsyncSession, *, actor_id: UUID, workspace_id: UUID, keys: list[str]
+) -> str | None:
+    """Return the first key in ``keys`` the actor does NOT hold in
+    ``workspace_id``, or ``None`` if the actor holds every one.
+
+    Role-DEFINITION analogue of ``workspace_role_grants._find_missing_workspace_perm``:
+    the grant helper checks an existing role's ``role_permissions`` rows; here the
+    keys are the *requested* resulting set, resolved via ``unnest`` against the
+    SAME ``has_workspace_perm`` SECURITY DEFINER resolver the grant path and the
+    0009/0013 triggers use. A workspace owner holds every workspace perm, so it
+    passes trivially.
+    """
+    if not keys:
+        return None
+    row = (
+        await db.execute(
+            text(
+                "SELECT k FROM unnest(CAST(:keys AS text[])) AS k "
+                "WHERE NOT has_workspace_perm(:actor, :wid, k) "
+                "LIMIT 1"
+            ),
+            {"keys": keys, "actor": str(actor_id), "wid": str(workspace_id)},
+        )
+    ).first()
+    return str(row.k) if row is not None else None
 
 
 async def _validate_perm_keys(db: AsyncSession, *, scope: str, keys: list[str]) -> None:
@@ -117,6 +158,18 @@ async def create_workspace_role(
     """Create a custom (is_system=False) workspace role pinned to workspace_id."""
     await set_actor(db, actor_id)
     await _validate_perm_keys(db, scope="workspace", keys=permission_keys)
+    # Privilege-escalation guard: the resulting permission set must be a subset
+    # of the actor's own effective perms IN THIS WORKSPACE. Closes the
+    # role-definition escalation hole (a delegate with only
+    # ``workspace.roles.manage`` could otherwise mint a role carrying
+    # ``workspace.members.manage`` / ``workspace.settings.manage`` and
+    # self-assign it). No DB trigger fires on ``role_permissions``, so this is
+    # the PRIMARY gate for this path.
+    missing = await _find_missing_perm(
+        db, actor_id=actor_id, workspace_id=workspace_id, keys=permission_keys
+    )
+    if missing is not None:
+        raise PrivilegeEscalationError(missing)
     existing = (
         await db.execute(
             text(
@@ -250,6 +303,16 @@ async def update_workspace_role(
     }
     if permission_keys is not None:
         await _validate_perm_keys(db, scope="workspace", keys=permission_keys)
+        # Privilege-escalation guard: evaluate the RESULTING set (the new keys
+        # being written), not the delta — an under-privileged actor must not be
+        # able to retain OR add perms they lack in this workspace. Matches the
+        # grant-path invariant. ``permission_keys is None`` (name/description-
+        # only edits) skips this entirely.
+        missing = await _find_missing_perm(
+            db, actor_id=actor_id, workspace_id=workspace_id, keys=permission_keys
+        )
+        if missing is not None:
+            raise PrivilegeEscalationError(missing)
     # PAR-D L3: single UPDATE for both fields (one updated_at, one row touch).
     if name is not None or description is not None:
         await db.execute(

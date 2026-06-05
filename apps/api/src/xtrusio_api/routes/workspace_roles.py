@@ -8,6 +8,7 @@ catalog.SYSTEM_ROLE_PERMISSIONS). The require_permission call passes
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -25,6 +26,7 @@ from ..schemas.workspace_role import (
     WorkspaceRolesPage,
 )
 from ..services.workspace_roles import (
+    PrivilegeEscalationError,
     RoleKeyTakenError,
     RoleNotFoundError,
     ScopeMismatchError,
@@ -36,6 +38,8 @@ from ..services.workspace_roles import (
     list_workspace_roles,
     update_workspace_role,
 )
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspace-roles"])
 
@@ -95,6 +99,18 @@ async def create_role(
     except ScopeMismatchError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    except PrivilegeEscalationError as e:
+        await db.rollback()
+        # PAR-A M22: sanitize — the missing perm key would leak the RBAC graph.
+        _log.warning(
+            "privilege_escalation",
+            extra={
+                "actor_id": str(user.user_id),
+                "workspace_id": str(workspace_id),
+                "missing_perm_key": e.missing_perm_key,
+            },
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     return WorkspaceRoleOut.model_validate(row)
 
 
@@ -145,6 +161,18 @@ async def update_role(
     except ScopeMismatchError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    except PrivilegeEscalationError as e:
+        await db.rollback()
+        # PAR-A M22: sanitize — the missing perm key would leak the RBAC graph.
+        _log.warning(
+            "privilege_escalation",
+            extra={
+                "actor_id": str(user.user_id),
+                "workspace_id": str(workspace_id),
+                "missing_perm_key": e.missing_perm_key,
+            },
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     return WorkspaceRoleOut.model_validate(row)
 
 

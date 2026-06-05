@@ -6,6 +6,7 @@ seeded `admin` platform role does NOT — see catalog.SYSTEM_ROLE_PERMISSIONS).
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -23,6 +24,7 @@ from ..schemas.platform_role import (
     PlatformRolesPage,
 )
 from ..services.platform_roles import (
+    PrivilegeEscalationError,
     RoleKeyTakenError,
     RoleNotFoundError,
     ScopeMismatchError,
@@ -34,6 +36,8 @@ from ..services.platform_roles import (
     list_platform_roles,
     update_platform_role,
 )
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/platform/roles", tags=["platform-roles"])
 
@@ -84,6 +88,15 @@ async def create_role(
     except ScopeMismatchError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    except PrivilegeEscalationError as e:
+        await db.rollback()
+        # PAR-A M22: sanitize — the missing perm key would leak the RBAC graph.
+        # Keep it server-side only (WARN log); return the bare constant.
+        _log.warning(
+            "privilege_escalation",
+            extra={"actor_id": str(user.user_id), "missing_perm_key": e.missing_perm_key},
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     return PlatformRoleOut.model_validate(row)
 
 
@@ -131,6 +144,14 @@ async def update_role(
     except ScopeMismatchError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    except PrivilegeEscalationError as e:
+        await db.rollback()
+        # PAR-A M22: sanitize — the missing perm key would leak the RBAC graph.
+        _log.warning(
+            "privilege_escalation",
+            extra={"actor_id": str(user.user_id), "missing_perm_key": e.missing_perm_key},
+        )
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
     return PlatformRoleOut.model_validate(row)
 
 
