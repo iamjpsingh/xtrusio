@@ -97,7 +97,7 @@ async def test_signup_resend_already_confirmed_still_returns_202(
         json={"signups_enabled": True},
     )
     mock_supabase_admin.auth.resend.side_effect = AuthApiError(
-        "email already confirmed", 422, "email_already_confirmed"
+        "email already confirmed", 422, "user_already_exists"
     )
     try:
         r = await http_client.post(

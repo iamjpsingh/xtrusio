@@ -193,7 +193,7 @@ async def test_resend_confirmation_swallows_api_error_returns_none(
     the non-enumeration guarantee: confirmed and unconfirmed must look alike."""
     _patch_gate(monkeypatch, enabled=True)
     mock_supabase_admin.auth.resend.side_effect = AuthApiError(
-        "email already confirmed", 422, "email_already_confirmed"
+        "email already confirmed", 422, "user_already_exists"
     )
     # Must NOT raise — swallowed to the identical no-op outcome.
     await resend_signup_confirmation(db=db_session, email="already-confirmed@example.com")
