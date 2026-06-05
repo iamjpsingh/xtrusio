@@ -17,13 +17,18 @@ export function isForbiddenError(e: unknown): boolean {
 }
 
 /**
- * True when the error means the session is gone / unauthenticated — either a
- * `SessionExpiredError` (apiFetch's refresh-and-retry failed and it signed out)
- * or a raw `ApiError` 401 (a 401 that survived the single retry). Both mean a
- * sign-out redirect is imminent (the auth store's SIGNED_OUT branch drives it),
- * so the UI should render the loading/neutral state rather than flash a generic
- * error surface for one frame before the redirect lands.
+ * True ONLY for the `SessionExpiredError` sentinel — the case where apiFetch's
+ * refresh-and-retry failed and it ALREADY called `supabase.auth.signOut()`, so
+ * the auth store's SIGNED_OUT branch is about to drive a redirect to /sign-in.
+ * In that single case the UI should render the loading/neutral state rather than
+ * flash a generic error surface for one frame before the redirect lands.
+ *
+ * A *raw* `ApiError` 401 is deliberately NOT matched: it only reaches a page
+ * when a 401 SURVIVES the refresh+retry (e.g. a transient JWKS-unavailable blip,
+ * or a still-authenticated user the backend rejected — not a session expiry).
+ * No sign-out happens in that path, so suppressing it would hang the page on a
+ * permanent spinner. It should fall through to the retryable `<ErrorState>`.
  */
 export function isSessionExpiredError(e: unknown): boolean {
-  return e instanceof SessionExpiredError || (e instanceof ApiError && e.status === 401);
+  return e instanceof SessionExpiredError;
 }

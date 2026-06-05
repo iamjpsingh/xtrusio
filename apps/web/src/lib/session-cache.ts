@@ -17,6 +17,13 @@ import { useAuthStore } from "./auth-store";
  * otherwise be sent and 401 at the backend. 60s comfortably covers that window
  * while staying well inside the token's lifetime, so we don't refresh on every
  * request.
+ *
+ * INVARIANT: this MUST stay ≤ auth-js's ~90s EXPIRY_MARGIN. We trigger a
+ * `getSession()` at ≤60s-to-expiry, and auth-js only actually refreshes when the
+ * token is <90s from expiry — so 60 ≤ 90 guarantees the `getSession()` we issue
+ * returns a genuinely refreshed token. Raising this above ~90 would make
+ * `getSession()` hand back the same near-expiry token without refreshing,
+ * silently breaking the proactive-refresh.
  */
 const EXPIRY_MARGIN_SEC = 60;
 

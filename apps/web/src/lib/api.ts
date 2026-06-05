@@ -137,7 +137,7 @@ async function performFetch(
 
   if (res.status === 401 && !retried) {
     const { data, error } = await supabase.auth.refreshSession();
-    if (error || !data.session) {
+    if (error || !data.session?.access_token) {
       await supabase.auth.signOut();
       throw new SessionExpiredError();
     }

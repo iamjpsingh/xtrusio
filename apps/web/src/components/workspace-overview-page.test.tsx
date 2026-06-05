@@ -133,12 +133,10 @@ describe("<WorkspaceOverviewPage />", () => {
     expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
   });
 
-  it("suppresses the error flash on a raw 401 — renders the loader, not ErrorState", async () => {
+  it("shows the retryable ErrorState on a raw 401 that survived the retry (no sign-out behind it — must NOT hang on a spinner)", async () => {
     mockedStats.mockRejectedValue(new ApiError(401, { detail: "expired" }));
-    const { container } = renderWith(newClient());
-    await waitFor(() =>
-      expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(3),
-    );
-    expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
+    renderWith(newClient());
+    expect(await screen.findByText(/couldn't load metrics/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 });
