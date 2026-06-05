@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import type { WorkspaceMemberListItem } from "@xtrusio/api-types";
 import { fetchWorkspaceMembers } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
 import { Badge } from "@/components/ui/badge";
@@ -39,10 +40,6 @@ export function WorkspaceMembersListPage({ workspaceId }: { workspaceId: string 
   }
   const canManage = hasWorkspacePerm(me, workspaceId, "workspace.members.manage");
   return <Body workspaceId={workspaceId} canManage={canManage} />;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
 }
 
 function Body({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
@@ -102,7 +99,9 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
                 {m.granted_role_count}
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
-                <time dateTime={m.joined_at}>{formatDate(m.joined_at)}</time>
+                <time dateTime={m.joined_at} title={m.joined_at}>
+                  {formatDateTime(m.joined_at)}
+                </time>
               </TableCell>
               <TableCell className="text-right">
                 {canManage ? (

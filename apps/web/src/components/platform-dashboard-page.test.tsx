@@ -3,21 +3,33 @@ import { RouterContextProvider, createMemoryHistory, createRouter } from "@tanst
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlatformStats } from "@xtrusio/api-types";
+import type { MeResponse, PlatformStats } from "@xtrusio/api-types";
 import { routeTree } from "@/routeTree.gen";
 import { PlatformDashboardPage } from "./platform-dashboard-page";
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
-  return { ...actual, fetchPlatformStats: vi.fn() };
+  return { ...actual, fetchPlatformStats: vi.fn(), fetchMe: vi.fn() };
 });
 
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 const mockedFetch = vi.mocked(api.fetchPlatformStats);
+const mockedMe = vi.mocked(api.fetchMe);
+
+const ME: MeResponse = {
+  user_id: "u-self",
+  email: "admin@example.com",
+  platform: { role: "admin", is_active: true },
+  platform_permissions: [],
+  tenants: [],
+  pending_invite: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedMe.mockResolvedValue(ME);
 });
 
 function newClient() {
@@ -89,10 +101,11 @@ describe("<PlatformDashboardPage />", () => {
     );
   });
 
-  it("shows an error state with retry on failure", async () => {
-    mockedFetch.mockRejectedValueOnce(new Error("boom"));
+  it("shows a retryable error state on a 5xx failure", async () => {
+    mockedFetch.mockRejectedValueOnce(new ApiError(503, { detail: "service_unavailable" }));
     renderWith(newClient());
     await waitFor(() => expect(screen.getByText(/couldn't load metrics/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     const stats: PlatformStats = {
       client_tenants: 5,
       active_platform_users: 2,
@@ -101,5 +114,16 @@ describe("<PlatformDashboardPage />", () => {
     mockedFetch.mockResolvedValue(stats);
     await userEvent.click(screen.getByRole("button", { name: /try again/i }));
     await waitFor(() => expect(screen.getByText("5")).toBeInTheDocument());
+  });
+
+  it("renders the Forbidden surface with NO retry on a 403", async () => {
+    mockedFetch.mockRejectedValue(new ApiError(403, { detail: "forbidden" }));
+    renderWith(newClient());
+    await waitFor(() =>
+      expect(screen.getByText(/don't have (access|permission)/i)).toBeInTheDocument(),
+    );
+    // The retryable "Couldn't load metrics" / "Try again" must NOT appear.
+    expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
   });
 });

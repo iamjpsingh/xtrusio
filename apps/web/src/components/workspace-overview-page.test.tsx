@@ -31,6 +31,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 import * as api from "@/lib/api";
+import { ApiError } from "@/lib/api";
 
 const mockedMe = vi.mocked(api.fetchMe);
 const mockedStats = vi.mocked(api.fetchWorkspaceStats);
@@ -101,12 +102,23 @@ describe("<WorkspaceOverviewPage />", () => {
     );
   });
 
-  it("shows an error state with retry on failure", async () => {
-    mockedStats.mockRejectedValueOnce(new Error("boom"));
+  it("shows a retryable error state on a 5xx failure", async () => {
+    mockedStats.mockRejectedValueOnce(new ApiError(500, { detail: "internal_error" }));
     renderWith(newClient());
     await waitFor(() => expect(screen.getByText(/couldn't load metrics/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     mockedStats.mockResolvedValue({ members: 8, pending_invites: 0, recent_activity: 3 });
     await userEvent.click(screen.getByRole("button", { name: /try again/i }));
     await waitFor(() => expect(screen.getByText("8")).toBeInTheDocument());
+  });
+
+  it("renders the Forbidden surface with NO retry on a 403", async () => {
+    mockedStats.mockRejectedValue(new ApiError(403, { detail: "forbidden" }));
+    renderWith(newClient());
+    await waitFor(() =>
+      expect(screen.getByText(/don't have (access|permission)/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
   });
 });
