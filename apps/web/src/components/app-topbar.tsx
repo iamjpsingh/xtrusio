@@ -1,4 +1,4 @@
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -56,7 +56,9 @@ export function AppTopbar() {
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/">{scopeLabel}</BreadcrumbLink>
+            <BreadcrumbLink asChild>
+              <Link to="/">{scopeLabel}</Link>
+            </BreadcrumbLink>
           </BreadcrumbItem>
           {pageLabel && pageLabel !== scopeLabel && (
             <>

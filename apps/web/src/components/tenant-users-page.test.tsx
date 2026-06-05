@@ -46,6 +46,13 @@ const ME_EDITOR_NO_INVITE: MeResponse = {
   tenants: [EDITOR_TENANT],
 };
 
+// A platform admin viewing a client workspace they are NOT a member of: the
+// route param slug ("acme") matches no entry in me.tenants.
+const ME_NON_MEMBER: MeResponse = {
+  ...ME_OWNER_WITH_INVITE,
+  tenants: [],
+};
+
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -77,6 +84,14 @@ describe("TenantUsersPage", () => {
     // Wait for me to load — once myTenant is set, the page renders.
     await waitFor(() => expect(fetchMe).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: /invite user/i })).toBeNull();
+  });
+
+  it("renders a limited-view state (not a blank page) when the viewer is not a member", async () => {
+    vi.mocked(fetchMe).mockResolvedValue(ME_NON_MEMBER);
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/limited view/i)).toBeInTheDocument());
+    // No workspace-scoped invites are fetched for a non-member.
+    expect(fetchTenantInvites).not.toHaveBeenCalled();
   });
 
   it("invites a user with the default role", async () => {

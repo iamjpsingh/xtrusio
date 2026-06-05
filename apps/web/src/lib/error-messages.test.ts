@@ -45,6 +45,11 @@ describe("errorMessage — P6c Slice 1 codes", () => {
       "You can't grant a role with a permission you lack: platform.roles.manage.",
     );
   });
+  it("maps the bare privilege_escalation (sanitized role-save) form", () => {
+    expect(errorMessage("privilege_escalation")).toBe(
+      "You can only include permissions you currently hold.",
+    );
+  });
   it("maps membership_not_found", () => {
     expect(errorMessage("membership_not_found")).toBe(
       "That user isn't a member of this workspace.",

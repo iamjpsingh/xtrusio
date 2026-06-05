@@ -43,14 +43,14 @@ export function RolesTable({ roles, canManage, onEdit, onDelete }: Props) {
                   {lock ? <Badge variant="secondary">System</Badge> : null}
                 </div>
                 {r.description ? (
-                  <p className="text-xs text-muted-foreground">
-                    {r.description}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{r.description}</p>
                 ) : null}
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {r.permission_keys.length}{" "}
-                {r.permission_keys.length === 1 ? "permission" : "permissions"}
+              <TableCell>
+                <Badge variant="outline" className="tabular-nums font-normal">
+                  {r.permission_keys.length}{" "}
+                  {r.permission_keys.length === 1 ? "permission" : "permissions"}
+                </Badge>
               </TableCell>
               <TableCell className="text-right">
                 {canManage && !lock ? (

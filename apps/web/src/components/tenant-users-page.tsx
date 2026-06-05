@@ -1,6 +1,6 @@
 import { useParams } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MailX } from "lucide-react";
+import { Eye, MailX } from "lucide-react";
 import { deleteTenantInvite, fetchTenantInvites, type TenantInvite } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { hasWorkspacePerm, useMe } from "@/lib/me-adapter";
@@ -14,7 +14,7 @@ import { ScopedInviteDialog } from "@/components/scoped-invite-dialog";
 export function TenantUsersPage() {
   const { slug } = useParams({ strict: false }) as { slug: string };
   const qc = useQueryClient();
-  const { me } = useMe();
+  const { me, isLoading: meLoading } = useMe();
   const myTenant = me?.tenants.find((t) => t.slug === slug);
   const tenantId = myTenant?.id ?? "";
   const {
@@ -31,7 +31,34 @@ export function TenantUsersPage() {
     mutationFn: (id: string) => deleteTenantInvite(tenantId, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.tenantInvites(tenantId) }),
   });
-  if (!myTenant) return null;
+
+  // The page resolves the tenant from the VIEWER's own memberships (`me.tenants`).
+  // A platform admin who is not a member of this client workspace has no
+  // membership row here — so today there is no workspace-scoped data we can show.
+  // Render an explicit "limited view" state instead of a blank screen.
+  // FOLLOW-UP: a platform-scoped endpoint (get tenant by slug + list its members,
+  // gated by `platform.clients.read`) is needed to show full per-client info for
+  // a non-member platform admin — that's a separate slice.
+  if (!myTenant) {
+    if (meLoading) {
+      return (
+        <div className="space-y-2 rounded-md border border-border bg-card p-4">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+    return (
+      <>
+        <PageHeader title={`${slug} — Users`} description="Workspace membership for this client." />
+        <EmptyState
+          icon={Eye}
+          title="Limited view"
+          description="You're not a member of this workspace, so its members and invitations aren't shown here. Full per-client visibility for platform admins is coming soon."
+        />
+      </>
+    );
+  }
   const canInvite = hasWorkspacePerm(me, myTenant.id, "workspace.members.invite");
   // "owner" is the workspace governance role; only owner may pick the
   // "admin" invite role. This mirrors the workspace-members invite contract.

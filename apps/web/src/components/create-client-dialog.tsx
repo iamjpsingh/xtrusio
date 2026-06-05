@@ -13,18 +13,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import type { TenantOut } from "@xtrusio/api-types";
 import { ApiError, apiFetch } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 
 type CreateBody = { slug: string; name: string };
-type Tenant = {
-  id: string;
-  slug: string;
-  name: string;
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-};
 
 export function CreateClientDialog({ trigger }: { trigger: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -34,7 +27,7 @@ export function CreateClientDialog({ trigger }: { trigger: React.ReactNode }) {
 
   const create = useMutation({
     mutationFn: (body: CreateBody) =>
-      apiFetch<Tenant>("/api/tenants", {
+      apiFetch<TenantOut>("/api/tenants", {
         method: "POST",
         body: JSON.stringify(body),
       }),

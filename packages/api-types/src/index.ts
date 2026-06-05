@@ -1,4 +1,5 @@
 export * from "./me";
+export * from "./tenant";
 export * from "./permission";
 export * from "./role";
 export * from "./audit-log";
