@@ -9,6 +9,20 @@ Read top to bottom before doing anything.
 
 ---
 
+## ⏩ RESUME HERE — 2026-06-05 (deep auth + UX audit → remediation slices in flight)
+
+Two deep read-only audits (18 Opus agents, exploitability-verified). Full record + findings table + slice plan: **`docs/superpowers/specs/2026-06-05-auth-security-audit-and-remediation.md`**.
+
+- **🟢 Cross-tenant data separation: SOLID — no IDOR** (workspace routes bind `require_permission` to the path `workspace_id`). RLS correct defense-in-depth.
+- **🟢 "Existing email → reset link" on signup is CORRECT** (intentional non-enumeration; no duplicate account). UX-clarity gripe only.
+- **Slice 1 ✅ #65 (`b3ec633`)** — closed a **verified-exploitable privilege escalation**: role *create/edit* lacked the "you-cannot-grant-what-you-lack" check the grant path had. Service-layer actor-holds-resulting-perms guard + sanitized 403 + tests on `create/update_{platform,workspace}_role`. DB-trigger defense-in-depth on `role_permissions` deferred (tied to the reconciler-role/bypass-marker rework).
+- **Slice 2 ▶ NEXT** — invite flow is **dead** (`detectSessionInUrl:false` + `invite_user_by_email` with no `redirect_to` + no hash consumption on accept-invite → invitee never gets a session). Fix = local hash-consumption shim (mirror reset-password) + `redirect_to` + e2e test.
+- Queued: 401-after-login race; HMAC-key rotation + security headers + opaque 401s; rate-limit hardening; signup/sign-in UX (incl. the sign-in footer flicker); clients-page envelope fix; create-role modal; unified Activity=Audit feed (+GoTrue auth-event hook); worker/system log; broad UI cleanup.
+- **Open decision:** localStorage→httpOnly-cookie session (highest-leverage hardening) — now, or deferred with CSP/HSTS/short-TTL?
+- **Process:** full managed-DB suite is impractical per-slice (shared-state failures that pass in isolation); per-slice bar = blast-radius tests + independent review + lint/typecheck + attributing any full-suite failures as pre-existing. (PAR-F ephemeral-CI-PG would fix this; its `xtrusio-ci` secrets aren't wired.)
+
+---
+
 ## ⏩ RESUME HERE — 2026-06-01 (auth: native signup + super_admin-only platform provisioning — #63)
 
 **Signup "no verification email" bug FIXED + auth model locked (#63, `6bc9b8c`).**
