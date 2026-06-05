@@ -189,6 +189,17 @@ async def _clear_perm_cache() -> AsyncIterator[None]:
     yield
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def _clear_email_throttle() -> AsyncIterator[None]:
+    """RL-2: drop the Valkey per-email signup-throttle keys before each test so
+    the counter never leaks across tests (tolerant of a down Valkey — clear_all
+    is a no-op then)."""
+    from xtrusio_api.core import email_throttle
+
+    await email_throttle.clear_all()
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _disable_rate_limiter() -> Iterator[None]:
     """PAR-A H8: SlowAPI is wired to Valkey for the request path; disabling
