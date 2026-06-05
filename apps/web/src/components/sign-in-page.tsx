@@ -12,7 +12,7 @@ import { AuthLayout } from "@/components/auth-layout";
 export function SignInPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
-  const { data: signupStatus } = useQuery({
+  const { data: signupStatus, isLoading: signupStatusLoading } = useQuery({
     queryKey: qk.signupStatus(),
     queryFn: fetchSignupStatus,
   });
@@ -66,7 +66,14 @@ export function SignInPage() {
       title="Welcome back"
       subtitle="Sign in to your dashboard"
       footer={
-        signupsEnabled ? (
+        // Reserve the footer space (non-breaking space) until signup-status
+        // resolves so the copy doesn't flicker from the invite line to the
+        // "Create an account" line on first load — and the card height stays
+        // stable. AuthLayout only renders the footer block when `footer` is
+        // truthy, so the &nbsp; keeps the slot occupied without showing text.
+        signupStatusLoading ? (
+          <span aria-hidden>&nbsp;</span>
+        ) : signupsEnabled ? (
           <span>
             Don't have an account?{" "}
             <Link

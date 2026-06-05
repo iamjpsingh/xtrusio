@@ -98,11 +98,20 @@ describe("apiFetch", () => {
     vi.useRealTimers();
   });
 
+  function headerAt(callIndex: number): Headers {
+    const init = fetchMock.mock.calls[callIndex]?.[1] as RequestInit | undefined;
+    if (!init) throw new Error(`fetch call ${callIndex} not made`);
+    return init.headers as Headers;
+  }
+
   it("on 401 refreshes the session and retries the request once", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(401, { detail: "expired" }))
       .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
-    refreshSession.mockResolvedValueOnce({ data: {}, error: null });
+    refreshSession.mockResolvedValueOnce({
+      data: { session: { access_token: "tok-2" } },
+      error: null,
+    });
 
     const out = await apiFetch<{ ok: boolean }>("/api/thing");
     expect(out).toEqual({ ok: true });
@@ -110,9 +119,30 @@ describe("apiFetch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("retries with the token from refreshSession()'s return, NOT the stale store token", async () => {
+    // The session cache still hands out the stale token (tok-1); the retry must
+    // ignore it and use the NEW token refreshSession() returned.
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(401, { detail: "expired" }))
+      .mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+    refreshSession.mockResolvedValueOnce({
+      data: { session: { access_token: "fresh-tok-2" } },
+      error: null,
+    });
+
+    await apiFetch<{ ok: boolean }>("/api/thing");
+
+    // Original request carried the (stale) cache token...
+    expect(headerAt(0).get("Authorization")).toBe("Bearer tok-1");
+    // ...and the retry carried the freshly refreshed token from the response.
+    expect(headerAt(1).get("Authorization")).toBe("Bearer fresh-tok-2");
+    // The retry did NOT re-read the cache (which would have re-used tok-1).
+    expect(vi.mocked(resolveSession)).toHaveBeenCalledTimes(1);
+  });
+
   it("on 401 with a failed refresh signs out and throws SessionExpiredError", async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { detail: "expired" }));
-    refreshSession.mockResolvedValueOnce({ data: {}, error: { message: "bad" } });
+    refreshSession.mockResolvedValueOnce({ data: { session: null }, error: { message: "bad" } });
     signOut.mockResolvedValueOnce({ error: null });
 
     const err = await apiFetch("/api/thing").catch((e) => e);
@@ -122,9 +152,24 @@ describe("apiFetch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("on 401 with a refresh that returns no session signs out and throws", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(401, { detail: "expired" }));
+    // No error, but also no session — treat as unrecoverable.
+    refreshSession.mockResolvedValueOnce({ data: { session: null }, error: null });
+    signOut.mockResolvedValueOnce({ error: null });
+
+    const err = await apiFetch("/api/thing").catch((e) => e);
+    expect(err).toBeInstanceOf(SessionExpiredError);
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not loop: a second 401 after a successful refresh still throws", async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { detail: "expired" }));
-    refreshSession.mockResolvedValue({ data: {}, error: null });
+    refreshSession.mockResolvedValue({
+      data: { session: { access_token: "tok-2" } },
+      error: null,
+    });
 
     const err = await apiFetch("/api/thing").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
