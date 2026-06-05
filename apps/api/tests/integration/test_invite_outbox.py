@@ -81,6 +81,24 @@ async def test_send_marks_succeeded(monkeypatch: pytest.MonkeyPatch) -> None:
         await _cleanup(email)
 
 
+async def test_invite_passes_accept_invite_redirect(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The invite email must carry redirect_to=<web_app_url>/accept-invite so the
+    GoTrue invite link lands on the SPA route that consumes the session hash."""
+    email = f"obx-redir-{uuid4().hex[:8]}@example.com"
+    client = _mock_supabase(monkeypatch, sb_uid=str(uuid4()), fail=False)
+    from xtrusio_api.core.config import get_settings
+
+    expected = f"{get_settings().web_app_url.rstrip('/')}/accept-invite"
+    await _enqueue(email, {"platform_invite_id": str(uuid4()), "platform_role": "admin"})
+    try:
+        await invite_outbox.process_due_batch(SessionLocal)
+        client.auth.admin.invite_user_by_email.assert_called_once_with(
+            email, options={"redirect_to": expected}
+        )
+    finally:
+        await _cleanup(email)
+
+
 async def test_failure_increments_attempts_and_backs_off(monkeypatch: pytest.MonkeyPatch) -> None:
     email = f"obx-fail-{uuid4().hex[:8]}@example.com"
     _mock_supabase(monkeypatch, sb_uid=None, fail=True)
