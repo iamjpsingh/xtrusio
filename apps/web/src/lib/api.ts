@@ -80,14 +80,22 @@ export function errorCode(e: unknown): string {
   return "";
 }
 
-async function authHeaders(init?: RequestInit): Promise<Headers> {
-  const session = await resolveSession();
+/**
+ * Build request headers with a bearer token. When `token` is supplied (the
+ * refresh-and-retry path) it is used verbatim — no store read — so the retry
+ * carries the freshly refreshed token rather than re-deriving a possibly stale
+ * one. Otherwise the token is resolved from the session cache (which itself
+ * refreshes near-expiry tokens before returning them).
+ */
+async function authHeaders(init?: RequestInit, token?: string | null): Promise<Headers> {
+  const accessToken =
+    token !== undefined ? token : ((await resolveSession())?.access_token ?? null);
   const headers = new Headers(init?.headers);
   if (!headers.has("Content-Type") && init?.body !== undefined) {
     headers.set("Content-Type", "application/json");
   }
-  if (session?.access_token) {
-    headers.set("Authorization", `Bearer ${session.access_token}`);
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
   return headers;
 }
@@ -110,26 +118,30 @@ async function rawRequest(path: string, init: RequestInit, timeoutMs: number): P
 /**
  * Core fetch wrapper (H2/L8/L10):
  * - AbortController-backed timeout (default 20s, override via 4th arg).
- * - On 401: refresh the session once and retry. If refresh fails, sign out and
+ * - On 401: refresh the session once and retry, building the retry's bearer
+ *   header from the token `refreshSession()` returned (NOT a fresh store read),
+ *   so the retry can't pick up a stale token. If refresh fails, sign out and
  *   throw SessionExpiredError. The `retried` guard prevents infinite loops.
- * - Reads the access token from the module session cache, not getSession().
+ * - Initial request reads the access token from the session cache (which itself
+ *   refreshes near-expiry tokens before returning them).
  */
 async function performFetch(
   path: string,
   init: RequestInit | undefined,
   timeoutMs: number,
   retried: boolean,
+  token?: string,
 ): Promise<Response> {
-  const headers = await authHeaders(init);
+  const headers = await authHeaders(init, retried ? (token ?? null) : undefined);
   const res = await rawRequest(path, { ...init, headers }, timeoutMs);
 
   if (res.status === 401 && !retried) {
-    const { error } = await supabase.auth.refreshSession();
-    if (error) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) {
       await supabase.auth.signOut();
       throw new SessionExpiredError();
     }
-    return performFetch(path, init, timeoutMs, true);
+    return performFetch(path, init, timeoutMs, true, data.session.access_token);
   }
   return res;
 }

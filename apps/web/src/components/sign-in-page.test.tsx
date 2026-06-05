@@ -46,9 +46,32 @@ describe("SignInPage", () => {
   it("hides the sign-up link and shows invite copy when signups are disabled", async () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: false });
     renderPage();
-    await waitFor(() => expect(fetchSignupStatus).toHaveBeenCalled());
+    // The footer is gated on the query resolving — wait for the invite copy to
+    // land (it isn't rendered during the loading window).
+    expect(await screen.findByText(/have an invite\?/i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /create an account/i })).toBeNull();
-    expect(screen.getByText(/have an invite\?/i)).toBeInTheDocument();
+  });
+
+  it("does not render footer copy until signup-status resolves (no flicker)", async () => {
+    // Hold the query in-flight so we can observe the loading window: neither the
+    // invite line nor the create-account link should appear while pending.
+    let resolve: (v: { signups_enabled: boolean }) => void = () => {};
+    vi.mocked(fetchSignupStatus).mockReturnValue(
+      new Promise<{ signups_enabled: boolean }>((r) => {
+        resolve = r;
+      }),
+    );
+    renderPage();
+
+    // While loading: no footer copy at all (the slot is a neutral &nbsp;).
+    expect(screen.queryByText(/have an invite\?/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /create an account/i })).toBeNull();
+
+    // Resolving with signups enabled → the correct copy lands, never the invite line.
+    resolve({ signups_enabled: true });
+    const link = await screen.findByRole("link", { name: /create an account/i });
+    expect(link).toHaveAttribute("href", "/sign-up");
+    expect(screen.queryByText(/have an invite\?/i)).toBeNull();
   });
 
   it("renders a 'Forgot password?' link to /forgot-password", async () => {

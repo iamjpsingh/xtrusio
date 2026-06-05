@@ -6,7 +6,7 @@ import { ErrorState } from "@/components/error-state";
 import { Forbidden } from "@/components/forbidden";
 import { StatCard } from "@/components/stat-card";
 import { fetchPlatformStats } from "@/lib/api";
-import { isForbiddenError } from "@/lib/errors";
+import { isForbiddenError, isSessionExpiredError } from "@/lib/errors";
 import { getDefaultLandingPath, useMe } from "@/lib/me-adapter";
 import { qk } from "@/lib/query-keys";
 
@@ -30,6 +30,12 @@ export function PlatformDashboardPage() {
   // network failures get the retryable error state.
   const forbidden = isError && isForbiddenError(error);
 
+  // A 401 / SessionExpired means a sign-out redirect is imminent (the auth
+  // store's SIGNED_OUT branch drives it). Render the loading skeletons rather
+  // than flash <ErrorState> for one frame before the redirect lands.
+  const sessionExpired = isError && isSessionExpiredError(error);
+  const loading = isPending || sessionExpired;
+
   return (
     <>
       <PageHeader
@@ -38,7 +44,7 @@ export function PlatformDashboardPage() {
       />
       {forbidden ? (
         <Forbidden landingPath={getDefaultLandingPath(me)} />
-      ) : isError ? (
+      ) : isError && !sessionExpired ? (
         <ErrorState
           title="Couldn't load metrics"
           description="We couldn't load the platform metrics. Check your connection and try again."
@@ -47,17 +53,17 @@ export function PlatformDashboardPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {(isPending || data?.client_tenants != null) && (
+            {(loading || data?.client_tenants != null) && (
               <StatCard
                 icon={Building2}
                 label="Client tenants"
                 value={
                   data?.client_tenants != null ? data.client_tenants.toLocaleString() : undefined
                 }
-                loading={isPending}
+                loading={loading}
               />
             )}
-            {(isPending || data?.active_platform_users != null) && (
+            {(loading || data?.active_platform_users != null) && (
               <StatCard
                 icon={Users}
                 label="Platform users"
@@ -67,10 +73,10 @@ export function PlatformDashboardPage() {
                     : undefined
                 }
                 hint="active"
-                loading={isPending}
+                loading={loading}
               />
             )}
-            {(isPending || data?.recent_activity != null) && (
+            {(loading || data?.recent_activity != null) && (
               <StatCard
                 icon={Activity}
                 label="Recent activity"
@@ -78,7 +84,7 @@ export function PlatformDashboardPage() {
                   data?.recent_activity != null ? data.recent_activity.toLocaleString() : undefined
                 }
                 hint="last 7 days"
-                loading={isPending}
+                loading={loading}
               />
             )}
           </div>

@@ -6,7 +6,7 @@ import { ErrorState } from "@/components/error-state";
 import { Forbidden } from "@/components/forbidden";
 import { StatCard } from "@/components/stat-card";
 import { fetchWorkspaceStats } from "@/lib/api";
-import { isForbiddenError } from "@/lib/errors";
+import { isForbiddenError, isSessionExpiredError } from "@/lib/errors";
 import { qk } from "@/lib/query-keys";
 import { findTenant, getDefaultLandingPath, useMe } from "@/lib/me-adapter";
 
@@ -35,6 +35,12 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
   // the retryable <ErrorState> for 5xx / network failures.
   const forbidden = isError && isForbiddenError(error);
 
+  // A 401 / SessionExpired means a sign-out redirect is imminent (the auth
+  // store's SIGNED_OUT branch drives it). Render the loading skeletons rather
+  // than flash <ErrorState> for one frame before the redirect lands.
+  const sessionExpired = isError && isSessionExpiredError(error);
+  const loading = isPending || sessionExpired;
+
   return (
     <>
       <PageHeader
@@ -43,7 +49,7 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
       />
       {forbidden ? (
         <Forbidden landingPath={getDefaultLandingPath(me)} />
-      ) : isError ? (
+      ) : isError && !sessionExpired ? (
         <ErrorState
           title="Couldn't load metrics"
           description="We couldn't load this workspace's metrics. Check your connection and try again."
@@ -52,16 +58,16 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {(isPending || data?.members != null) && (
+            {(loading || data?.members != null) && (
               <StatCard
                 icon={Users}
                 label="Members"
                 value={data?.members != null ? data.members.toLocaleString() : undefined}
                 hint="in this workspace"
-                loading={isPending}
+                loading={loading}
               />
             )}
-            {(isPending || data?.pending_invites != null) && (
+            {(loading || data?.pending_invites != null) && (
               <StatCard
                 icon={Mail}
                 label="Pending invites"
@@ -69,10 +75,10 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
                   data?.pending_invites != null ? data.pending_invites.toLocaleString() : undefined
                 }
                 hint="awaiting acceptance"
-                loading={isPending}
+                loading={loading}
               />
             )}
-            {(isPending || data?.recent_activity != null) && (
+            {(loading || data?.recent_activity != null) && (
               <StatCard
                 icon={Activity}
                 label="Recent activity"
@@ -80,7 +86,7 @@ export function WorkspaceOverviewPage({ workspaceId }: WorkspaceOverviewPageProp
                   data?.recent_activity != null ? data.recent_activity.toLocaleString() : undefined
                 }
                 hint="last 7 days"
-                loading={isPending}
+                loading={loading}
               />
             )}
           </div>

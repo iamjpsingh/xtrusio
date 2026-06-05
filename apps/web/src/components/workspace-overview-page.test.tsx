@@ -31,7 +31,7 @@ vi.mock("@/lib/api", async () => {
 });
 
 import * as api from "@/lib/api";
-import { ApiError } from "@/lib/api";
+import { ApiError, SessionExpiredError } from "@/lib/api";
 
 const mockedMe = vi.mocked(api.fetchMe);
 const mockedStats = vi.mocked(api.fetchWorkspaceStats);
@@ -120,5 +120,25 @@ describe("<WorkspaceOverviewPage />", () => {
     );
     expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+  });
+
+  it("suppresses the error flash on a SessionExpiredError — renders the loader, not ErrorState", async () => {
+    mockedStats.mockRejectedValue(new SessionExpiredError());
+    const { container } = renderWith(newClient());
+    // A sign-out redirect is imminent: show skeletons, never the error surface.
+    await waitFor(() =>
+      expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(3),
+    );
+    expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /try again/i })).toBeNull();
+  });
+
+  it("suppresses the error flash on a raw 401 — renders the loader, not ErrorState", async () => {
+    mockedStats.mockRejectedValue(new ApiError(401, { detail: "expired" }));
+    const { container } = renderWith(newClient());
+    await waitFor(() =>
+      expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(3),
+    );
+    expect(screen.queryByText(/couldn't load metrics/i)).toBeNull();
   });
 });
