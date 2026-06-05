@@ -21,6 +21,9 @@ export const qk = {
   // and `workspaceInvites` (workspace-members view) target different backend
   // resources, so the tuples stay distinct — only the shape is unified.
   tenantInvites: (tenantId: string) => ["tenant", tenantId, "invites"] as const,
+  // Platform-scope client detail (info + members) keyed by slug — read from the
+  // platform endpoint, distinct from the workspace-scoped `me.tenants` view.
+  platformClient: (slug: string) => ["platform", "client", slug] as const,
   workspaceInvites: (workspaceId: string) => ["workspace", workspaceId, "invites"] as const,
   // P6d list/settings keys. The infinite-query lists key on the base tuple;
   // pages live inside one cache entry (no per-cursor key).

@@ -6,6 +6,7 @@ export * from "./audit-log";
 export * from "./platform-user-list";
 export * from "./platform-user-create";
 export * from "./platform-stats";
+export * from "./platform-client-detail";
 export * from "./workspace-member-list";
 export * from "./workspace-settings";
 export * from "./workspace-stats";

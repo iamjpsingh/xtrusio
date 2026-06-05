@@ -4,6 +4,7 @@ import type {
   AuditEventsPage,
   MeResponse,
   PermissionsCatalog,
+  PlatformClientDetail,
   PlatformRoleGrantOut,
   PlatformRoleGrantsPage,
   PlatformRoleIn,
@@ -300,6 +301,12 @@ export async function fetchTenantInvites(tenantId: string): Promise<{ items: Ten
 
 export async function deleteTenantInvite(tenantId: string, id: string): Promise<void> {
   await apiFetchVoid(`/api/tenants/${tenantId}/invites/${id}`, { method: "DELETE" });
+}
+
+// Platform-scope client detail (info + members) for a non-member platform
+// operator. Gated server-side by `platform.clients.read`.
+export async function fetchPlatformClient(slug: string): Promise<PlatformClientDetail> {
+  return apiFetch<PlatformClientDetail>(`/api/platform/clients/${slug}`);
 }
 
 export async function postAcceptInvite(): Promise<{
