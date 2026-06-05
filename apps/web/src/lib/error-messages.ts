@@ -14,6 +14,10 @@ const MESSAGES: Record<string, string> = {
   email_mismatch: "This invitation was for a different email address.",
   already_provisioned: "Your account is already set up.",
   role_key_taken: "A role with this key already exists.",
+  // Role save (slice #65) returns a sanitized bare `privilege_escalation`
+  // (no perm key, to avoid leaking the RBAC graph). Grants still use the
+  // `privilege_escalation: <perm>` prefixed form handled in errorMessage().
+  privilege_escalation: "You can only include permissions you currently hold.",
   system_role_immutable: "System roles can't be modified.",
   role_scope_mismatch: "That role belongs to a different scope.",
   scope_mismatch: "That permission belongs to a different scope.",

@@ -29,27 +29,19 @@ const ROLES: PlatformRoleOut[] = [
 
 describe("<RolesTable />", () => {
   it("renders every role", () => {
-    render(
-      <RolesTable
-        roles={ROLES}
-        canManage
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />,
-    );
+    render(<RolesTable roles={ROLES} canManage onEdit={() => {}} onDelete={() => {}} />);
     expect(screen.getByText("super_admin")).toBeInTheDocument();
     expect(screen.getByText("dispatcher")).toBeInTheDocument();
   });
 
+  it("renders the permission count for each role", () => {
+    render(<RolesTable roles={ROLES} canManage onEdit={() => {}} onDelete={() => {}} />);
+    expect(screen.getByText("0 permissions")).toBeInTheDocument();
+    expect(screen.getByText("1 permission")).toBeInTheDocument();
+  });
+
   it("shows a system badge for is_system rows and hides their action buttons", () => {
-    render(
-      <RolesTable
-        roles={ROLES}
-        canManage
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />,
-    );
+    render(<RolesTable roles={ROLES} canManage onEdit={() => {}} onDelete={() => {}} />);
     expect(screen.getByText(/system/i)).toBeInTheDocument();
     // The super_admin row's action buttons should be hidden.
     const superRow = screen.getByText("super_admin").closest("tr");
@@ -63,14 +55,7 @@ describe("<RolesTable />", () => {
   });
 
   it("hides all action buttons when canManage is false", () => {
-    render(
-      <RolesTable
-        roles={ROLES}
-        canManage={false}
-        onEdit={() => {}}
-        onDelete={() => {}}
-      />,
-    );
+    render(<RolesTable roles={ROLES} canManage={false} onEdit={() => {}} onDelete={() => {}} />);
     expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
   });
@@ -78,21 +63,10 @@ describe("<RolesTable />", () => {
   it("fires onEdit / onDelete with the row's role", async () => {
     const onEdit = vi.fn();
     const onDelete = vi.fn();
-    render(
-      <RolesTable
-        roles={ROLES}
-        canManage
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />,
-    );
-    await userEvent.click(
-      screen.getByRole("button", { name: /edit dispatcher/i }),
-    );
+    render(<RolesTable roles={ROLES} canManage onEdit={onEdit} onDelete={onDelete} />);
+    await userEvent.click(screen.getByRole("button", { name: /edit dispatcher/i }));
     expect(onEdit).toHaveBeenCalledWith(ROLES[1]);
-    await userEvent.click(
-      screen.getByRole("button", { name: /delete dispatcher/i }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: /delete dispatcher/i }));
     expect(onDelete).toHaveBeenCalledWith(ROLES[1]);
   });
 });
