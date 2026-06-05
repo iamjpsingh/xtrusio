@@ -279,6 +279,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/platform/clients/{slug}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Client Detail */
+    get: operations["get_client_detail_api_platform_clients__slug__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/permissions/catalog": {
     parameters: {
       query?: never;
@@ -359,6 +376,30 @@ export interface paths {
     put?: never;
     /** Signup */
     post: operations["signup_api_signup_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/signup/resend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Signup Resend
+     * @description Resend the signup-confirmation email.
+     *
+     *     Gated behind ``signups_enabled`` and rate-limited identically to /signup
+     *     (5/IP/hr). ALWAYS returns 202 ``confirm_email_sent`` when enabled — there
+     *     is no oracle revealing whether the email exists (non-enumeration).
+     */
+    post: operations["signup_resend_api_signup_resend_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -691,6 +732,58 @@ export interface components {
       /** Items */
       items: components["schemas"]["PermissionDef"][];
     };
+    /**
+     * PlatformClientDetail
+     * @description A client tenant's info + members for a platform operator.
+     *
+     *     ``owner_email`` is the email of the tenant's ``owner`` member (the first
+     *     membership row with ``role = 'owner'``), or ``None`` if no owner row exists
+     *     (e.g. a tenant provisioned but never joined). ``member_count`` is the total
+     *     number of ``tenant_memberships`` rows, independent of the inline ``members``
+     *     list length (they match today since the list is uncapped, but the field is
+     *     explicit so the frontend never has to derive it).
+     */
+    PlatformClientDetail: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Slug */
+      slug: string;
+      /** Name */
+      name: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Owner Email */
+      owner_email?: string | null;
+      /** Member Count */
+      member_count: number;
+      /** Members */
+      members: components["schemas"]["PlatformClientMember"][];
+    };
+    /**
+     * PlatformClientMember
+     * @description One member of a client tenant as seen by the platform client-detail view.
+     */
+    PlatformClientMember: {
+      /**
+       * Auth User Id
+       * Format: uuid
+       */
+      auth_user_id: string;
+      /** Email */
+      email: string | null;
+      role: components["schemas"]["TenantRole"];
+      /**
+       * Joined At
+       * Format: date-time
+       */
+      joined_at: string;
+    };
     /** PlatformContext */
     PlatformContext: {
       role: components["schemas"]["PlatformRole"];
@@ -954,6 +1047,14 @@ export interface components {
       email: string;
       /** Password */
       password: string;
+    };
+    /** SignupResendRequest */
+    SignupResendRequest: {
+      /**
+       * Email
+       * Format: email
+       */
+      email: string;
     };
     /** SignupResponse */
     SignupResponse: {
@@ -2023,6 +2124,39 @@ export interface operations {
       };
     };
   };
+  get_client_detail_api_platform_clients__slug__get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformClientDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_catalog_api_permissions_catalog_get: {
     parameters: {
       query?: never;
@@ -2189,6 +2323,39 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["SignupRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  signup_resend_api_signup_resend_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupResendRequest"];
       };
     };
     responses: {
