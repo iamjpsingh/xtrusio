@@ -15,12 +15,19 @@ describe("qk — TanStack Query key registry", () => {
     expect(qk.workspaceRoles("wid-2")).not.toEqual(qk.workspaceRoles("wid-1"));
   });
 
-  it("returns a stable tuple for platformAudit", () => {
-    expect(qk.platformAudit()).toEqual(["platform", "audit-log"]);
+  it("returns a stable tuple for platformAudit, with the category in the key", () => {
+    expect(qk.platformAudit()).toEqual(["platform", "audit-log", null]);
+    expect(qk.platformAudit("invites")).toEqual(["platform", "audit-log", "invites"]);
   });
 
-  it("namespaces workspaceAudit by workspaceId", () => {
-    expect(qk.workspaceAudit("wid-1")).toEqual(["workspace", "wid-1", "audit-log"]);
+  it("namespaces workspaceAudit by workspaceId, with the category in the key", () => {
+    expect(qk.workspaceAudit("wid-1")).toEqual(["workspace", "wid-1", "audit-log", null]);
+    expect(qk.workspaceAudit("wid-1", "grants")).toEqual([
+      "workspace",
+      "wid-1",
+      "audit-log",
+      "grants",
+    ]);
   });
 
   it("namespaces workspaceInvites by workspaceId", () => {

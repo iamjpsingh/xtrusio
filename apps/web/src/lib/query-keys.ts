@@ -10,10 +10,14 @@ export const qk = {
   signupStatus: () => ["signup-status"] as const,
   platformSettings: () => ["platform", "settings"] as const,
   permissionsCatalog: () => ["permissions", "catalog"] as const,
+  auditCatalog: () => ["audit", "catalog"] as const,
   platformRoles: () => ["platform", "roles"] as const,
   workspaceRoles: (workspaceId: string) => ["workspace", workspaceId, "roles"] as const,
-  platformAudit: () => ["platform", "audit-log"] as const,
-  workspaceAudit: (workspaceId: string) => ["workspace", workspaceId, "audit-log"] as const,
+  // The category filter is part of the key so switching it resets the
+  // useInfiniteQuery accumulator (null = no filter / "all").
+  platformAudit: (category: string | null = null) => ["platform", "audit-log", category] as const,
+  workspaceAudit: (workspaceId: string, category: string | null = null) =>
+    ["workspace", workspaceId, "audit-log", category] as const,
   // Dashboard metrics (one round-trip per dashboard).
   platformStats: () => ["platform", "stats"] as const,
   workspaceStats: (workspaceId: string) => ["workspace", workspaceId, "stats"] as const,

@@ -11,6 +11,7 @@
 
 import { HttpResponse, http } from "msw";
 import type {
+  AuditCatalog,
   AuditEventsPage,
   PermissionsCatalog,
   PlatformRoleGrantsPage,
@@ -38,6 +39,20 @@ export const handlers = [
 
   http.get(`${API}/api/permissions/catalog`, () =>
     HttpResponse.json<PermissionsCatalog>(permissionsCatalog),
+  ),
+
+  // Audit event catalog (activity-feed filter dropdown + action labels).
+  http.get(`${API}/api/audit/catalog`, () =>
+    HttpResponse.json<AuditCatalog>({
+      categories: [
+        { key: "roles", label: "Roles" },
+        { key: "grants", label: "Grants" },
+        { key: "invites", label: "Invites" },
+      ],
+      actions: [
+        { action: "platform_role.create", label: "Created platform role", category: "roles" },
+      ],
+    }),
   ),
 
   // ----- Platform roles -----
