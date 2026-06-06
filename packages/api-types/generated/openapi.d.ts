@@ -313,6 +313,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/audit/catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Catalog */
+    get: operations["get_catalog_api_audit_catalog_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/tenants/{tenant_id}/invites": {
     parameters: {
       query?: never;
@@ -396,8 +413,9 @@ export interface paths {
      * @description Resend the signup-confirmation email.
      *
      *     Gated behind ``signups_enabled`` and rate-limited identically to /signup
-     *     (5/IP/hr). ALWAYS returns 202 ``confirm_email_sent`` when enabled — there
-     *     is no oracle revealing whether the email exists (non-enumeration).
+     *     (5/IP/hr per-IP PLUS the RL-2 per-email throttle). ALWAYS returns 202
+     *     ``confirm_email_sent`` when enabled — there is no oracle revealing whether
+     *     the email exists (non-enumeration).
      */
     post: operations["signup_resend_api_signup_resend_post"];
     delete?: never;
@@ -597,6 +615,29 @@ export interface components {
       /** Tenant Id */
       tenant_id?: string | null;
     };
+    /** AuditActionDef */
+    AuditActionDef: {
+      /** Action */
+      action: string;
+      /** Label */
+      label: string;
+      /** Category */
+      category: string;
+    };
+    /** AuditCatalog */
+    AuditCatalog: {
+      /** Categories */
+      categories: components["schemas"]["AuditCategoryDef"][];
+      /** Actions */
+      actions: components["schemas"]["AuditActionDef"][];
+    };
+    /** AuditCategoryDef */
+    AuditCategoryDef: {
+      /** Key */
+      key: string;
+      /** Label */
+      label: string;
+    };
     /** AuditEventOut */
     AuditEventOut: {
       /** Id */
@@ -624,6 +665,10 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+      /** Action Label */
+      readonly action_label: string;
+      /** Category */
+      readonly category: string;
     };
     /** AuditEventsPage */
     AuditEventsPage: {
@@ -2095,6 +2140,7 @@ export interface operations {
       query?: {
         cursor?: string | null;
         limit?: number;
+        category?: string | null;
       };
       header?: {
         authorization?: string | null;
@@ -2175,6 +2221,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PermissionsCatalog"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_catalog_api_audit_catalog_get: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditCatalog"];
         };
       };
       /** @description Validation Error */
@@ -2841,6 +2918,7 @@ export interface operations {
       query?: {
         cursor?: string | null;
         limit?: number;
+        category?: string | null;
       };
       header?: {
         authorization?: string | null;
