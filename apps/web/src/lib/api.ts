@@ -3,6 +3,7 @@ import { resolveSession } from "./session-cache";
 import type {
   AuditCatalog,
   AuditEventsPage,
+  JobRunsPage,
   MeResponse,
   PermissionsCatalog,
   PlatformClientDetail,
@@ -418,6 +419,13 @@ export async function fetchWorkspaceAuditLog(
   return apiFetch<AuditEventsPage>(
     `/api/workspaces/${workspaceId}/audit-log${auditQuery(cursor, category)}`,
   );
+}
+
+// ----- Worker/system job-run log -----
+
+export async function fetchPlatformJobRuns(cursor?: string): Promise<JobRunsPage> {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  return apiFetch<JobRunsPage>(`/api/platform/job-runs${qs}`);
 }
 
 // ----- Dashboard stats (dashboard-metrics) -----

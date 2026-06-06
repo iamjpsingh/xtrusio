@@ -21,6 +21,7 @@ import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppPlatformIndexRouteImport } from './routes/_app.platform.index'
 import { Route as AppWorkspaceWorkspaceIdRouteImport } from './routes/_app.workspace.$workspaceId'
 import { Route as AppPlatformUsersRouteImport } from './routes/_app.platform.users'
+import { Route as AppPlatformSystemRouteImport } from './routes/_app.platform.system'
 import { Route as AppPlatformSettingsRouteImport } from './routes/_app.platform.settings'
 import { Route as AppPlatformRolesRouteImport } from './routes/_app.platform.roles'
 import { Route as AppPlatformClientsRouteImport } from './routes/_app.platform.clients'
@@ -89,6 +90,11 @@ const AppWorkspaceWorkspaceIdRoute = AppWorkspaceWorkspaceIdRouteImport.update({
 const AppPlatformUsersRoute = AppPlatformUsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformSystemRoute = AppPlatformSystemRouteImport.update({
+  id: '/system',
+  path: '/system',
   getParentRoute: () => AppPlatformRoute,
 } as any)
 const AppPlatformSettingsRoute = AppPlatformSettingsRouteImport.update({
@@ -161,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/platform/roles': typeof AppPlatformRolesRoute
   '/platform/settings': typeof AppPlatformSettingsRoute
+  '/platform/system': typeof AppPlatformSystemRoute
   '/platform/users': typeof AppPlatformUsersRoute
   '/workspace/$workspaceId': typeof AppWorkspaceWorkspaceIdRouteWithChildren
   '/platform/': typeof AppPlatformIndexRoute
@@ -183,6 +190,7 @@ export interface FileRoutesByTo {
   '/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/platform/roles': typeof AppPlatformRolesRoute
   '/platform/settings': typeof AppPlatformSettingsRoute
+  '/platform/system': typeof AppPlatformSystemRoute
   '/platform/users': typeof AppPlatformUsersRoute
   '/platform': typeof AppPlatformIndexRoute
   '/workspace/$workspaceId/audit-log': typeof AppWorkspaceWorkspaceIdAuditLogRoute
@@ -207,6 +215,7 @@ export interface FileRoutesById {
   '/_app/platform/clients': typeof AppPlatformClientsRouteWithChildren
   '/_app/platform/roles': typeof AppPlatformRolesRoute
   '/_app/platform/settings': typeof AppPlatformSettingsRoute
+  '/_app/platform/system': typeof AppPlatformSystemRoute
   '/_app/platform/users': typeof AppPlatformUsersRoute
   '/_app/workspace/$workspaceId': typeof AppWorkspaceWorkspaceIdRouteWithChildren
   '/_app/platform/': typeof AppPlatformIndexRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
     | '/platform/clients'
     | '/platform/roles'
     | '/platform/settings'
+    | '/platform/system'
     | '/platform/users'
     | '/workspace/$workspaceId'
     | '/platform/'
@@ -254,6 +264,7 @@ export interface FileRouteTypes {
     | '/platform/clients'
     | '/platform/roles'
     | '/platform/settings'
+    | '/platform/system'
     | '/platform/users'
     | '/platform'
     | '/workspace/$workspaceId/audit-log'
@@ -277,6 +288,7 @@ export interface FileRouteTypes {
     | '/_app/platform/clients'
     | '/_app/platform/roles'
     | '/_app/platform/settings'
+    | '/_app/platform/system'
     | '/_app/platform/users'
     | '/_app/workspace/$workspaceId'
     | '/_app/platform/'
@@ -385,6 +397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlatformUsersRouteImport
       parentRoute: typeof AppPlatformRoute
     }
+    '/_app/platform/system': {
+      id: '/_app/platform/system'
+      path: '/system'
+      fullPath: '/platform/system'
+      preLoaderRoute: typeof AppPlatformSystemRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
     '/_app/platform/settings': {
       id: '/_app/platform/settings'
       path: '/settings'
@@ -474,6 +493,7 @@ interface AppPlatformRouteChildren {
   AppPlatformClientsRoute: typeof AppPlatformClientsRouteWithChildren
   AppPlatformRolesRoute: typeof AppPlatformRolesRoute
   AppPlatformSettingsRoute: typeof AppPlatformSettingsRoute
+  AppPlatformSystemRoute: typeof AppPlatformSystemRoute
   AppPlatformUsersRoute: typeof AppPlatformUsersRoute
   AppPlatformIndexRoute: typeof AppPlatformIndexRoute
 }
@@ -483,6 +503,7 @@ const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformClientsRoute: AppPlatformClientsRouteWithChildren,
   AppPlatformRolesRoute: AppPlatformRolesRoute,
   AppPlatformSettingsRoute: AppPlatformSettingsRoute,
+  AppPlatformSystemRoute: AppPlatformSystemRoute,
   AppPlatformUsersRoute: AppPlatformUsersRoute,
   AppPlatformIndexRoute: AppPlatformIndexRoute,
 }

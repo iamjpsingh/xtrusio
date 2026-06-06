@@ -13,6 +13,7 @@ import { HttpResponse, http } from "msw";
 import type {
   AuditCatalog,
   AuditEventsPage,
+  JobRunsPage,
   PermissionsCatalog,
   PlatformRoleGrantsPage,
   PlatformRoleOut,
@@ -39,6 +40,11 @@ export const handlers = [
 
   http.get(`${API}/api/permissions/catalog`, () =>
     HttpResponse.json<PermissionsCatalog>(permissionsCatalog),
+  ),
+
+  // Worker/system job-run log (default empty page).
+  http.get(`${API}/api/platform/job-runs`, () =>
+    HttpResponse.json<JobRunsPage>({ items: [], next_cursor: null }),
   ),
 
   // Audit event catalog (activity-feed filter dropdown + action labels).
