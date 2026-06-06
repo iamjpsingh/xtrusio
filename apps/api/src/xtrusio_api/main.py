@@ -43,6 +43,7 @@ from .core.perm_cache import close_perm_cache
 from .core.rate_limit import limiter
 from .core.reconciler_db import get_reconciler_sessionmaker
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
+from .routes import audit_catalog as audit_catalog_routes
 from .routes import health as health_routes
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
@@ -286,6 +287,9 @@ app.include_router(platform_audit_log_routes.router)
 # shadow the static /api/platform/{settings,users,roles,stats,...} sub-paths.
 app.include_router(platform_clients_routes.router)
 app.include_router(permissions_routes.router)
+# GET /api/audit/catalog — authed-only non-secret event catalog (label +
+# category per action), mirrors the permissions catalog.
+app.include_router(audit_catalog_routes.router)
 app.include_router(tenant_invites_routes.router)
 app.include_router(signup_routes.router)
 app.include_router(onboarding_routes.router)

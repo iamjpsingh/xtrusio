@@ -24,13 +24,18 @@ async def write_audit_event(
     actor_id: UUID,
     action: str,
     target_type: str,
-    target_id: UUID,
+    target_id: UUID | str,
     scope: str,
     workspace_id: UUID | None = None,
     before: dict[str, Any] | None = None,
     after: dict[str, Any] | None = None,
 ) -> None:
-    """Insert one row into rbac_audit_log. Caller owns the surrounding tx."""
+    """Insert one row into rbac_audit_log. Caller owns the surrounding tx.
+
+    ``target_id`` is stored as text (the column is ``String(64)``), so callers
+    may pass a non-uuid identifier (e.g. the platform_settings singleton key
+    ``"1"``) as well as a :class:`UUID`.
+    """
     await db.execute(
         text(
             "INSERT INTO rbac_audit_log "

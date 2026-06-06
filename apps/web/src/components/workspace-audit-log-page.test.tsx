@@ -1,17 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  RouterContextProvider,
-  createMemoryHistory,
-  createRouter,
-} from "@tanstack/react-router";
+import { RouterContextProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  AuditEventOut,
-  MeResponse,
-  TenantContext,
-} from "@xtrusio/api-types";
+import type { AuditEventOut, MeResponse, TenantContext } from "@xtrusio/api-types";
 import { routeTree } from "@/routeTree.gen";
 import { WorkspaceAuditLogPage } from "./workspace-audit-log-page";
 
@@ -54,6 +46,8 @@ const EV1: AuditEventOut = {
   workspace_id: WID,
   before: null,
   after: { key: "viewer" },
+  action_label: "Created workspace role",
+  category: "roles",
   created_at: "2026-05-22T10:00:00Z",
 };
 
@@ -92,9 +86,7 @@ describe("<WorkspaceAuditLogPage />", () => {
     });
     renderWith(qc);
     await waitFor(() =>
-      expect(
-        screen.getByText(/don't have access|don't have permission/i),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/don't have access|don't have permission/i)).toBeInTheDocument(),
     );
   });
 
@@ -126,9 +118,7 @@ describe("<WorkspaceAuditLogPage />", () => {
     renderWith(qc);
     await waitFor(() => screen.getByText("workspace_role.create"));
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
-    await waitFor(() =>
-      expect(screen.getByText("workspace_role.delete")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("workspace_role.delete")).toBeInTheDocument());
     expect(api.fetchWorkspaceAuditLog).toHaveBeenLastCalledWith(WID, "next-1");
   });
 });

@@ -232,6 +232,7 @@ async def grant_platform_role(
             "auth_user_id": str(out["auth_user_id"]),
             "role_id": str(out["role_id"]),
             "role_key": role["key"],
+            "role_name": role["name"],
         },
     )
     await perm_cache.invalidate(target_user_id, None)  # PAR-D M16
@@ -261,7 +262,7 @@ async def revoke_platform_role_grant(
             await db.execute(
                 text(
                     "SELECT ur.id, ur.auth_user_id, ur.role_id, ur.workspace_id, "
-                    "r.scope, r.key, r.is_system "
+                    "r.scope, r.key, r.name, r.is_system "
                     "FROM user_roles ur JOIN roles r ON r.id = ur.role_id "
                     "WHERE ur.id = :id"
                 ),
@@ -294,6 +295,7 @@ async def revoke_platform_role_grant(
             "auth_user_id": str(grant["auth_user_id"]),
             "role_id": str(grant["role_id"]),
             "role_key": grant["key"],
+            "role_name": grant["name"],
         },
     )
     await perm_cache.invalidate(user_id, None)  # PAR-D M16

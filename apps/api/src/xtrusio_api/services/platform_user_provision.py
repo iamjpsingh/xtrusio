@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
 
+from ..core.audit import write_audit_event
 from ..core.config import get_settings
 from ..core.permissions import set_actor
 from ..models.platform_user import PlatformRole, PlatformUser
@@ -91,5 +92,17 @@ async def create_platform_user(
         if "platform_users_pkey" in constraint or "platform_users_email_key" in constraint:
             raise PlatformUserExistsError() from e
         raise
+
+    # Audit coverage (same tx — route owns the commit). target is the new
+    # platform_users row; actor is the provisioning operator.
+    await write_audit_event(
+        db,
+        actor_id=actor_id,
+        action="platform_user.create",
+        target_type="platform_user",
+        target_id=user_id,
+        scope="platform",
+        after={"email": email, "role": PlatformRole.ADMIN.value},
+    )
 
     return PlatformUserCreated(id=user_id, email=email, role="admin", is_active=True)

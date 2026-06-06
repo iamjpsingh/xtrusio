@@ -121,6 +121,22 @@ async def _audit_count_for_grant(db: AsyncSession, *, grant_id: UUID, action: st
     )
 
 
+async def _audit_payload(
+    db: AsyncSession, *, grant_id: UUID, action: str, column: str
+) -> dict[str, object]:
+    """Return the before/after JSON of the audit row for this grant + action."""
+    row = (
+        await db.execute(
+            text(
+                f"SELECT {column} AS payload FROM rbac_audit_log "
+                "WHERE target_id = :id AND action = :a"
+            ),
+            {"id": str(grant_id), "a": action},
+        )
+    ).scalar_one()
+    return dict(row)
+
+
 # --- grant -----------------------------------------------------------------
 
 
@@ -147,6 +163,18 @@ async def test_grant_happy_path(
             )
             == 1
         )
+        # A1: the audit `after` payload carries BOTH role_key and the human
+        # role_name (the admin system role's actual display name from the DB).
+        after = await _audit_payload(
+            db_session, grant_id=grant_id, action="platform_role.grant", column="after"
+        )
+        expected_name = (
+            await db_session.execute(
+                text("SELECT name FROM roles WHERE id = :rid"), {"rid": str(admin_role_id)}
+            )
+        ).scalar_one()
+        assert after["role_key"] == "admin"
+        assert after["role_name"] == expected_name
     finally:
         await _cleanup_user(target_id)
 
@@ -337,6 +365,17 @@ async def test_revoke_happy_path(
             )
             == 1
         )
+        # A1: revoke `before` payload also carries role_name (DB display name).
+        before = await _audit_payload(
+            db_session, grant_id=grant_id, action="platform_role.revoke", column="before"
+        )
+        expected_name = (
+            await db_session.execute(
+                text("SELECT name FROM roles WHERE id = :rid"), {"rid": str(admin_role_id)}
+            )
+        ).scalar_one()
+        assert before["role_key"] == "admin"
+        assert before["role_name"] == expected_name
     finally:
         await _cleanup_user(target_id)
 

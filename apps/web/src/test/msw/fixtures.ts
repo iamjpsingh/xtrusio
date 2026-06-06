@@ -130,6 +130,8 @@ export const auditEventCreate: AuditEventOut = {
   workspace_id: null,
   before: null,
   after: { key: "auditor", name: "Auditor" },
+  action_label: "Created platform role",
+  category: "roles",
   created_at: "2026-05-22T00:00:01Z",
 };
 
@@ -144,5 +146,7 @@ export const auditEventDelete: AuditEventOut = {
   workspace_id: null,
   before: { key: "auditor", name: "Auditor" },
   after: null,
+  action_label: "Deleted platform role",
+  category: "roles",
   created_at: "2026-05-22T00:00:02Z",
 };

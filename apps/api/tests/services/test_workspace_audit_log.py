@@ -133,6 +133,95 @@ async def test_pagination_round_trip(db_session: AsyncSession) -> None:
     }
 
 
+async def test_category_filter_includes_matching_excludes_others(
+    db_session: AsyncSession,
+) -> None:
+    """A workspace-scope row in category X is returned for ?category=X and a
+    different-category row is excluded. Real catalog actions:
+    ``workspace_role.grant`` (grants) vs ``tenant_invite.create`` (invites)."""
+    actor, tid = await _seed_actor_and_workspace()
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="workspace_role.grant",
+        target_type="user_role",
+        target_id=uuid4(),
+        scope="workspace",
+        workspace_id=tid,
+    )
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="tenant_invite.create",
+        target_type="invite",
+        target_id=uuid4(),
+        scope="workspace",
+        workspace_id=tid,
+    )
+    await db_session.commit()
+
+    grants_rows, _ = await list_workspace_audit_events(
+        db_session, workspace_id=tid, limit=200, category="grants"
+    )
+    actions = {r["action"] for r in grants_rows}
+    assert "workspace_role.grant" in actions
+    assert "tenant_invite.create" not in actions
+
+    invites_rows, _ = await list_workspace_audit_events(
+        db_session, workspace_id=tid, limit=200, category="invites"
+    )
+    inv_actions = {r["action"] for r in invites_rows}
+    assert "tenant_invite.create" in inv_actions
+    assert "workspace_role.grant" not in inv_actions
+
+
+async def test_category_filter_paginates(db_session: AsyncSession) -> None:
+    """Cursor pagination works WITH a category filter on the workspace viewer."""
+    from xtrusio_api.services.platform_audit_log import _decode_audit_cursor
+
+    actor, tid = await _seed_actor_and_workspace()
+    for action in ("workspace_role.grant", "workspace_role.revoke", "workspace_role.grant"):
+        await write_audit_event(
+            db_session,
+            actor_id=actor,
+            action=action,
+            target_type="user_role",
+            target_id=uuid4(),
+            scope="workspace",
+            workspace_id=tid,
+        )
+    # a non-matching invite row that must never appear in the filtered walk
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="tenant_invite.create",
+        target_type="invite",
+        target_id=uuid4(),
+        scope="workspace",
+        workspace_id=tid,
+    )
+    await db_session.commit()
+
+    collected: list[dict[str, object]] = []
+    cursor: tuple[object, int] | None = None
+    safety = 0
+    while safety < 50:
+        rows, next_cursor = await list_workspace_audit_events(
+            db_session,
+            workspace_id=tid,
+            cursor=cursor,  # type: ignore[arg-type]
+            limit=2,
+            category="grants",
+        )
+        collected.extend(rows)
+        if next_cursor is None:
+            break
+        cursor = _decode_audit_cursor(next_cursor)
+        safety += 1
+    assert len(collected) == 3
+    assert all(str(r["action"]).startswith("workspace_role.") for r in collected)
+
+
 async def test_workspace_actor_email_populated_when_actor_exists(
     db_session: AsyncSession,
 ) -> None:

@@ -34,6 +34,7 @@ async def list_events(
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
+    category: Annotated[str | None, Query()] = None,
 ) -> AuditEventsPage:
     await require_permission(db, user.user_id, "platform.audit.read")
     effective_limit = limit if limit > 0 else DEFAULT_LIMIT
@@ -43,7 +44,9 @@ async def list_events(
             decoded = _decode_audit_cursor(cursor)
         except ValueError as e:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from e
-    rows, next_cursor = await list_platform_audit_events(db, cursor=decoded, limit=effective_limit)
+    rows, next_cursor = await list_platform_audit_events(
+        db, cursor=decoded, limit=effective_limit, category=category
+    )
     return AuditEventsPage(
         items=[AuditEventOut.model_validate(r) for r in rows],
         next_cursor=next_cursor,

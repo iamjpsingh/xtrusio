@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.audit import write_audit_event
 from ..models.platform_settings import PlatformSettings
 from ..models.platform_user import PlatformUser
 
@@ -31,8 +32,21 @@ async def update_settings(
     db: AsyncSession, *, signups_enabled: bool, updated_by: UUID
 ) -> tuple[PlatformSettings, str | None]:
     row = (await db.execute(select(PlatformSettings).where(PlatformSettings.id == 1))).scalar_one()
+    old_signups_enabled = row.signups_enabled
     row.signups_enabled = signups_enabled
     row.updated_by = updated_by
+    # Audit coverage (same tx — route owns the commit). The settings singleton's
+    # text target id is "1"; before/after carry the toggled flag.
+    await write_audit_event(
+        db,
+        actor_id=updated_by,
+        action="platform.settings.updated",
+        target_type="platform_settings",
+        target_id="1",
+        scope="platform",
+        before={"signups_enabled": old_signups_enabled},
+        after={"signups_enabled": signups_enabled},
+    )
     # PAR-D M1: caller-owns-transaction — flush so the read-back below sees the
     # change within this tx; the route commits.
     await db.flush()

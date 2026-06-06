@@ -16,6 +16,8 @@ const EVENTS: AuditEventOut[] = [
     workspace_id: null,
     before: null,
     after: { key: "dispatcher" },
+    action_label: "Updated platform role",
+    category: "roles",
     created_at: "2026-05-22T10:00:00Z",
   },
   {
@@ -29,6 +31,8 @@ const EVENTS: AuditEventOut[] = [
     workspace_id: null,
     before: null,
     after: null,
+    action_label: "System Event",
+    category: "other",
     created_at: "2026-05-22T09:00:00Z",
   },
 ];
@@ -55,12 +59,8 @@ describe("<AuditTable />", () => {
 
   it("truncates target_id and exposes the full id as a title attribute", () => {
     render(<AuditTable events={EVENTS} onSelect={() => {}} />);
-    const target = screen.getByTitle(
-      "11111111-1111-1111-1111-111111111111",
-    );
-    expect(target.textContent).not.toEqual(
-      "11111111-1111-1111-1111-111111111111",
-    );
+    const target = screen.getByTitle("11111111-1111-1111-1111-111111111111");
+    expect(target.textContent).not.toEqual("11111111-1111-1111-1111-111111111111");
     expect(target.textContent?.length ?? 0).toBeLessThan(20);
   });
 

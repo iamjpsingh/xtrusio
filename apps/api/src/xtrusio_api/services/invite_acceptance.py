@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.audit import write_audit_event
 from ..models.platform_invite import PlatformInvite
 from ..models.platform_user import PlatformUser
 from ..models.tenant_invite import TenantInvite
@@ -81,6 +82,17 @@ async def _accept_platform(
     if invite.role.value == "admin":
         await grant_role(db, auth_user_id=user_id, scope="platform", key="admin")
     invite.accepted_at = datetime.now(UTC)
+    # Audit coverage (same tx — route owns the commit). Actor is the accepting
+    # user; target is the invite id.
+    await write_audit_event(
+        db,
+        actor_id=user_id,
+        action="platform_invite.accept",
+        target_type="invite",
+        target_id=invite_id,
+        scope="platform",
+        after={"email": email, "role": invite.role.value},
+    )
     # PAR-D M1: caller-owns-transaction — flush (not commit) so a uniqueness
     # conflict still surfaces as AlreadyProvisioned here; the route commits on
     # success and rolls back on any raised error.
@@ -124,6 +136,18 @@ async def _accept_tenant(
         workspace_id=invite.tenant_id,
     )
     invite.accepted_at = datetime.now(UTC)
+    # Audit coverage (same tx — route owns the commit). Workspace-scope event
+    # for the invite's tenant; actor is the accepting user.
+    await write_audit_event(
+        db,
+        actor_id=user_id,
+        action="tenant_invite.accept",
+        target_type="invite",
+        target_id=invite_id,
+        scope="workspace",
+        workspace_id=invite.tenant_id,
+        after={"email": email, "role": invite.role.value},
+    )
     # PAR-D M1: flush (not commit); the route owns commit/rollback.
     try:
         await db.flush()
