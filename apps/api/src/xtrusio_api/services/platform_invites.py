@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from supabase import create_client
 
+from ..core.audit import write_audit_event
 from ..core.config import get_settings
 from ..core.logging import get_logger
 from ..models.platform_invite import PlatformInvite
@@ -100,10 +101,20 @@ async def create_platform_invite(
         app_metadata={"platform_invite_id": str(invite_id), "platform_role": role.value},
         writeback={"table": "platform_invites", "id": str(invite_id)},
     )
+    # Audit coverage (same tx — route owns the commit). target_id is the invite id.
+    await write_audit_event(
+        db,
+        actor_id=invited_by,
+        action="platform_invite.create",
+        target_type="invite",
+        target_id=invite_id,
+        scope="platform",
+        after={"email": email, "role": role.value},
+    )
     return invite
 
 
-async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
+async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID, actor_id: UUID) -> None:
     invite = (
         await db.execute(
             select(PlatformInvite).where(PlatformInvite.id == invite_id).with_for_update()
@@ -115,7 +126,20 @@ async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID) -> None:
         raise InviteAlreadyAcceptedError()
     if invite.revoked_at is not None:
         return  # already revoked — idempotent no-op, skip duplicate Supabase cleanup
+    # Capture the before-payload from the loaded row BEFORE mutating it.
+    before = {"email": invite.email, "role": invite.role.value}
     invite.revoked_at = datetime.now(UTC)
+    # Audit row in the SAME tx as the revoke — this fn self-commits, so the
+    # event MUST be written before the commit below.
+    await write_audit_event(
+        db,
+        actor_id=actor_id,
+        action="platform_invite.revoke",
+        target_type="invite",
+        target_id=invite_id,
+        scope="platform",
+        before=before,
+    )
     await db.commit()
 
     # Best-effort: delete the unconfirmed Supabase auth user by the id we

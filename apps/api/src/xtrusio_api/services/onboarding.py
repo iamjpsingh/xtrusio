@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.audit import write_audit_event
 from ..models.tenant import Tenant
 from ..models.tenant_membership import TenantMembership, TenantRole
 from ..rbac.grants import grant_role
@@ -82,6 +83,18 @@ async def create_tenant_with_owner(
         scope="workspace",
         key="owner",
         workspace_id=tenant.id,
+    )
+    # Audit coverage (same tx — route owns the commit). Workspace-scope event
+    # for the freshly-created tenant; actor is the onboarding user.
+    await write_audit_event(
+        db,
+        actor_id=user_id,
+        action="tenant.create",
+        target_type="tenant",
+        target_id=tenant.id,
+        scope="workspace",
+        workspace_id=tenant.id,
+        after={"slug": tenant.slug, "name": tenant.name},
     )
     # PAR-D M1: caller-owns-transaction — the route commits on success and rolls
     # back on a typed error. ``tenant`` is flushed (id populated) but not yet

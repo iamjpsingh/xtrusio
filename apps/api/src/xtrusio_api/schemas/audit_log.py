@@ -12,7 +12,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
+
+from ..core.audit_catalog import describe_action
 
 
 class AuditEventOut(BaseModel):
@@ -29,6 +31,19 @@ class AuditEventOut(BaseModel):
     before: dict[str, Any] | None
     after: dict[str, Any] | None
     created_at: datetime
+
+    # Derived from ``action`` via the event catalog (no service change — these
+    # serialise automatically). No name clash: the model has no ``category``
+    # field, so ``action_label``/``category`` are safe per the plan.
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def action_label(self) -> str:
+        return describe_action(self.action)[0]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def category(self) -> str:
+        return describe_action(self.action)[1]
 
 
 class AuditEventsPage(BaseModel):

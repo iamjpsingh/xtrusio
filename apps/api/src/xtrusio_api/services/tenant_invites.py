@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import and_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.audit import write_audit_event
 from ..core.permissions import require_permission
 from ..models.tenant_invite import TenantInvite
 from ..models.tenant_membership import TenantMembership, TenantRole
@@ -131,6 +132,17 @@ async def create_tenant_invite(
             "tenant_role": role.value,
         },
     )
+    # Audit coverage (same tx — route owns the commit).
+    await write_audit_event(
+        db,
+        actor_id=inviter_id,
+        action="tenant_invite.create",
+        target_type="invite",
+        target_id=invite_id,
+        scope="workspace",
+        workspace_id=tenant_id,
+        after={"email": email, "role": role.value},
+    )
     return invite
 
 
@@ -185,7 +197,21 @@ async def revoke_tenant_invite(
         raise InviteAlreadyAcceptedError()
     if invite.revoked_at is not None:
         return  # already revoked — idempotent no-op
+    # Capture the before-payload from the loaded row BEFORE mutating it.
+    before = {"email": invite.email, "role": invite.role.value}
     invite.revoked_at = datetime.now(UTC)
+    # Audit row in the SAME tx as the revoke — this fn self-commits, so the
+    # event MUST be written before the commit below.
+    await write_audit_event(
+        db,
+        actor_id=requester_id,
+        action="tenant_invite.revoke",
+        target_type="invite",
+        target_id=invite_id,
+        scope="workspace",
+        workspace_id=tenant_id,
+        before=before,
+    )
     await db.commit()
     # NOTE: unlike revoke_platform_invite, we intentionally do NOT delete the
     # Supabase auth.users row here. A tenant invite's email may belong to a

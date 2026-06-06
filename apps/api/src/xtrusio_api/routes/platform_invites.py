@@ -95,7 +95,7 @@ async def revoke(
 ) -> Response:
     require_super_admin(user)
     try:
-        await revoke_platform_invite(db, invite_id=invite_id)
+        await revoke_platform_invite(db, invite_id=invite_id, actor_id=user.user_id)
     except InviteAlreadyAcceptedError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, "invite_already_accepted") from e
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -215,6 +215,131 @@ async def test_actor_email_none_when_actor_auth_user_id_is_null(
     await db_session.commit()
 
 
+async def test_category_filter_includes_matching_excludes_others(
+    db_session: AsyncSession,
+) -> None:
+    """A row in category X is returned for ?category=X and excluded for a
+    different category. Uses real catalog actions: ``platform_role.grant``
+    (category ``grants``) vs ``platform_invite.create`` (category ``invites``).
+    """
+    actor = uuid4()
+    await _seed_actor(db_session, actor, "catfilter")
+    grant_target = uuid4()
+    invite_target = uuid4()
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="platform_role.grant",
+        target_type="user_role",
+        target_id=grant_target,
+        scope="platform",
+    )
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="platform_invite.create",
+        target_type="invite",
+        target_id=invite_target,
+        scope="platform",
+    )
+    await db_session.commit()
+
+    grants_rows, _ = await list_platform_audit_events(db_session, limit=200, category="grants")
+    mine = [r for r in grants_rows if r["actor_auth_user_id"] == actor]
+    assert len(mine) == 1
+    assert mine[0]["action"] == "platform_role.grant"
+
+    invites_rows, _ = await list_platform_audit_events(db_session, limit=200, category="invites")
+    mine_inv = [r for r in invites_rows if r["actor_auth_user_id"] == actor]
+    assert len(mine_inv) == 1
+    assert mine_inv[0]["action"] == "platform_invite.create"
+
+
+async def test_category_filter_empty_category_returns_zero_rows(
+    db_session: AsyncSession,
+) -> None:
+    """A reserved/empty category (``auth``) yields zero rows for THIS actor —
+    no action maps to it yet (= ANY('{}'))."""
+    actor = uuid4()
+    await _seed_actor(db_session, actor, "emptycat")
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="platform_role.grant",
+        target_type="user_role",
+        target_id=uuid4(),
+        scope="platform",
+    )
+    await db_session.commit()
+    rows, _ = await list_platform_audit_events(db_session, limit=200, category="auth")
+    mine = [r for r in rows if r["actor_auth_user_id"] == actor]
+    assert mine == []
+
+
+async def test_category_filter_unknown_category_applies_no_filter(
+    db_session: AsyncSession,
+) -> None:
+    """An unknown category key is treated as 'no filter' — the row still shows."""
+    actor = uuid4()
+    await _seed_actor(db_session, actor, "unkcat")
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="platform_role.grant",
+        target_type="user_role",
+        target_id=uuid4(),
+        scope="platform",
+    )
+    await db_session.commit()
+    rows, _ = await list_platform_audit_events(db_session, limit=200, category="does_not_exist")
+    mine = [r for r in rows if r["actor_auth_user_id"] == actor]
+    assert len(mine) == 1
+
+
+async def test_category_filter_paginates(db_session: AsyncSession) -> None:
+    """Cursor pagination still works WITH a category filter applied: seed 3
+    grant-category rows, page through with limit=2 + the filter, collect all 3.
+    """
+    actor = uuid4()
+    await _seed_actor(db_session, actor, "catpage")
+    # 2 distinct grant-category actions so the filter has >1 matching action,
+    # plus a non-matching invite row that must never appear in the filtered walk.
+    for action in ("platform_role.grant", "platform_role.revoke", "platform_role.grant"):
+        await write_audit_event(
+            db_session,
+            actor_id=actor,
+            action=action,
+            target_type="user_role",
+            target_id=uuid4(),
+            scope="platform",
+        )
+    await write_audit_event(
+        db_session,
+        actor_id=actor,
+        action="platform_invite.create",
+        target_type="invite",
+        target_id=uuid4(),
+        scope="platform",
+    )
+    await db_session.commit()
+
+    collected: list[dict[str, object]] = []
+    cursor: tuple[datetime, int] | None = None
+    safety = 0
+    while safety < 50:
+        rows, next_cursor = await list_platform_audit_events(
+            db_session, cursor=cursor, limit=2, category="grants"
+        )
+        collected.extend(r for r in rows if r["actor_auth_user_id"] == actor)
+        if next_cursor is None:
+            break
+        cursor = _decode_audit_cursor(next_cursor)
+        safety += 1
+    # All 3 grant-category rows collected; the invite row never leaked in.
+    assert len(collected) == 3
+    assert all(str(r["action"]).startswith("platform_role.") for r in collected)
+
+
 async def test_actor_email_none_when_actor_hard_deleted(
     db_session: AsyncSession,
 ) -> None:

@@ -139,6 +139,25 @@ async def test_grant_happy_path(db_session: AsyncSession) -> None:
     assert result["role_key"] == "admin"
     assert UUID(str(result["auth_user_id"])) == member_id
     assert UUID(str(result["workspace_id"])) == tid
+    # A1: the audit `after` payload carries role_key + the human role_name
+    # (whatever the workspace 'admin' system role's display name is).
+    grant_id = UUID(str(result["id"]))
+    after = (
+        await db_session.execute(
+            text(
+                "SELECT after FROM rbac_audit_log "
+                "WHERE target_id = :id AND action = 'workspace_role.grant'"
+            ),
+            {"id": str(grant_id)},
+        )
+    ).scalar_one()
+    expected_name = (
+        await db_session.execute(
+            text("SELECT name FROM roles WHERE id = :rid"), {"rid": str(admin_role)}
+        )
+    ).scalar_one()
+    assert after["role_key"] == "admin"
+    assert after["role_name"] == expected_name
 
 
 async def test_grant_404_for_non_member(db_session: AsyncSession) -> None:
@@ -263,6 +282,23 @@ async def test_revoke_happy_path(db_session: AsyncSession) -> None:
         )
     ).scalar_one()
     assert int(gone) == 0
+    # A1: revoke `before` payload carries role_key + role_name.
+    before = (
+        await db_session.execute(
+            text(
+                "SELECT before FROM rbac_audit_log "
+                "WHERE target_id = :id AND action = 'workspace_role.revoke'"
+            ),
+            {"id": str(grant_id)},
+        )
+    ).scalar_one()
+    expected_name = (
+        await db_session.execute(
+            text("SELECT name FROM roles WHERE id = :rid"), {"rid": str(admin_role)}
+        )
+    ).scalar_one()
+    assert before["role_key"] == "admin"
+    assert before["role_name"] == expected_name
 
 
 async def test_revoke_owner_floor_409_when_last_owner(
