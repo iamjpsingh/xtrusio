@@ -45,6 +45,7 @@ from .core.reconciler_db import get_reconciler_sessionmaker
 from .rbac.reconcile import reconcile_rbac, reconcile_user_roles_from_enums
 from .routes import audit_catalog as audit_catalog_routes
 from .routes import health as health_routes
+from .routes import internal_auth_events as internal_auth_events_routes
 from .routes import invite_acceptance as invite_acceptance_routes
 from .routes import me as me_routes
 from .routes import onboarding as onboarding_routes
@@ -285,6 +286,7 @@ app.include_router(platform_users_routes.router)
 app.include_router(platform_stats_routes.router)
 app.include_router(platform_audit_log_routes.router)
 app.include_router(platform_job_runs_routes.router)
+app.include_router(internal_auth_events_routes.router)
 # GET /api/platform/clients/{slug} — its own prefix so the {slug} param can't
 # shadow the static /api/platform/{settings,users,roles,stats,...} sub-paths.
 app.include_router(platform_clients_routes.router)

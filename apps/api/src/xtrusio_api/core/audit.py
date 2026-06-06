@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 async def write_audit_event(
     db: AsyncSession,
     *,
-    actor_id: UUID,
+    actor_id: UUID | None,
     action: str,
     target_type: str,
     target_id: UUID | str,
@@ -35,6 +35,10 @@ async def write_audit_event(
     ``target_id`` is stored as text (the column is ``String(64)``), so callers
     may pass a non-uuid identifier (e.g. the platform_settings singleton key
     ``"1"``) as well as a :class:`UUID`.
+
+    ``actor_id`` may be ``None`` for system-/externally-originated events with no
+    user actor (e.g. an anonymous failed-login auth event); the column is
+    nullable and the actor_email LEFT JOIN in the viewers tolerates it.
     """
     await db.execute(
         text(
@@ -45,7 +49,7 @@ async def write_audit_event(
             "        CAST(:b AS jsonb), CAST(:af AS jsonb))"
         ),
         {
-            "a": str(actor_id),
+            "a": str(actor_id) if actor_id else None,
             "act": action,
             "tt": target_type,
             "tid": str(target_id),

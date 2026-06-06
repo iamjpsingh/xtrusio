@@ -65,6 +65,22 @@ _ACTIONS: dict[str, tuple[str, str]] = {
     # settings
     "platform.settings.updated": ("Updated platform settings", "settings"),
     "workspace.settings.updated": ("Updated workspace settings", "settings"),
+    # auth (GoTrue audit events, ingested via the auth-event webhook). The
+    # action is ``auth.<gotrue_action>``; the common GoTrue actions are mapped
+    # here. An unmapped GoTrue action falls through to ``other`` (still visible
+    # in the unfiltered feed) — extend this list as new actions appear.
+    "auth.login": ("Signed in", "auth"),
+    "auth.logout": ("Signed out", "auth"),
+    "auth.token_refreshed": ("Refreshed session", "auth"),
+    "auth.token_revoked": ("Revoked session", "auth"),
+    "auth.user_signedup": ("Signed up", "auth"),
+    "auth.user_invited": ("Invited (auth)", "auth"),
+    "auth.user_confirmation_requested": ("Requested email confirmation", "auth"),
+    "auth.user_recovery_requested": ("Requested password recovery", "auth"),
+    "auth.user_reauthenticate_requested": ("Requested reauthentication", "auth"),
+    "auth.user_modified": ("Account modified", "auth"),
+    "auth.user_deleted": ("Account deleted", "auth"),
+    "auth.email_changed": ("Changed email", "auth"),
 }
 
 
