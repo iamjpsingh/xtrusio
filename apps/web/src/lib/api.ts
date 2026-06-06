@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { resolveSession } from "./session-cache";
 import type {
+  AuditCatalog,
   AuditEventsPage,
   MeResponse,
   PermissionsCatalog,
@@ -388,19 +389,35 @@ export async function deleteWorkspaceRole(workspaceId: string, id: string): Prom
   });
 }
 
-// ----- Audit-log (P6c Slice 2) -----
+// ----- Audit-log (P6c Slice 2 + activity-feed) -----
 
-export async function fetchPlatformAuditLog(cursor?: string): Promise<AuditEventsPage> {
-  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  return apiFetch<AuditEventsPage>(`/api/platform/audit-log${qs}`);
+function auditQuery(cursor?: string, category?: string | null): string {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (category) params.set("category", category);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function fetchAuditCatalog(): Promise<AuditCatalog> {
+  return apiFetch<AuditCatalog>("/api/audit/catalog");
+}
+
+export async function fetchPlatformAuditLog(
+  cursor?: string,
+  category?: string | null,
+): Promise<AuditEventsPage> {
+  return apiFetch<AuditEventsPage>(`/api/platform/audit-log${auditQuery(cursor, category)}`);
 }
 
 export async function fetchWorkspaceAuditLog(
   workspaceId: string,
   cursor?: string,
+  category?: string | null,
 ): Promise<AuditEventsPage> {
-  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  return apiFetch<AuditEventsPage>(`/api/workspaces/${workspaceId}/audit-log${qs}`);
+  return apiFetch<AuditEventsPage>(
+    `/api/workspaces/${workspaceId}/audit-log${auditQuery(cursor, category)}`,
+  );
 }
 
 // ----- Dashboard stats (dashboard-metrics) -----

@@ -57,6 +57,7 @@ vi.mock("@/lib/api", async () => {
     ...actual,
     fetchMe: vi.fn(),
     fetchWorkspaceAuditLog: vi.fn(),
+    fetchAuditCatalog: vi.fn().mockResolvedValue({ categories: [], actions: [] }),
   };
 });
 
@@ -101,7 +102,7 @@ describe("<WorkspaceAuditLogPage />", () => {
     });
     renderWith(qc);
     await waitFor(() => screen.getByText("workspace_role.create"));
-    expect(api.fetchWorkspaceAuditLog).toHaveBeenCalledWith(WID, undefined);
+    expect(api.fetchWorkspaceAuditLog).toHaveBeenCalledWith(WID, undefined, null);
   });
 
   it("accumulates pages when Load more is clicked", async () => {
@@ -119,6 +120,6 @@ describe("<WorkspaceAuditLogPage />", () => {
     await waitFor(() => screen.getByText("workspace_role.create"));
     await userEvent.click(screen.getByRole("button", { name: /load more/i }));
     await waitFor(() => expect(screen.getByText("workspace_role.delete")).toBeInTheDocument());
-    expect(api.fetchWorkspaceAuditLog).toHaveBeenLastCalledWith(WID, "next-1");
+    expect(api.fetchWorkspaceAuditLog).toHaveBeenLastCalledWith(WID, "next-1", null);
   });
 });

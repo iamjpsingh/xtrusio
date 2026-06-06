@@ -44,17 +44,29 @@ function firstEvent(): AuditEventOut {
 }
 
 describe("<AuditTable />", () => {
-  it("renders four columns and every row", () => {
+  it("renders the human action label plus the raw action for every row", () => {
     render(<AuditTable events={EVENTS} onSelect={() => {}} />);
     expect(screen.getByText("ana@acme.com")).toBeInTheDocument();
+    // Human label is primary, raw machine action is the mono subtitle.
+    expect(screen.getByText("Updated platform role")).toBeInTheDocument();
     expect(screen.getByText("platform_role.update")).toBeInTheDocument();
+    expect(screen.getByText("System Event")).toBeInTheDocument();
     expect(screen.getByText("system_event")).toBeInTheDocument();
   });
 
-  it("renders '—' for null actor_email", () => {
+  it("renders the role label from the snapshot and the category badge", () => {
     render(<AuditTable events={EVENTS} onSelect={() => {}} />);
+    // role pulled from after.key ("dispatcher")
+    expect(screen.getByText("dispatcher")).toBeInTheDocument();
+    expect(screen.getByText("roles")).toBeInTheDocument();
+    expect(screen.getByText("other")).toBeInTheDocument();
+  });
+
+  it("renders '—' for null actor_email and a roleless event", () => {
+    render(<AuditTable events={EVENTS} onSelect={() => {}} />);
+    // event 2 has a null actor AND no role → at least two em-dashes.
     const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBeGreaterThanOrEqual(1);
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
   });
 
   it("truncates target_id and exposes the full id as a title attribute", () => {

@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/error-state";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { AuditTable } from "@/components/audit/audit-table";
 import { AuditDetailDrawer } from "@/components/audit/audit-detail-drawer";
+import { AuditCategoryFilter } from "@/components/audit/audit-category-filter";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 
 export function PlatformAuditLogPage() {
@@ -25,12 +26,17 @@ export function PlatformAuditLogPage() {
 }
 
 function Body() {
+  // The category filter is part of the query key, so switching it transparently
+  // resets the useInfiniteQuery accumulator (re-fetches from cursor=null).
+  const [category, setCategory] = useState<string | null>(null);
+  const [selected, setSelected] = useState<AuditEventOut | null>(null);
+
   // H3: useInfiniteQuery owns the page accumulator — no useState mutated inside
   // queryFn. TanStack keeps pages cached across nav, so the user resumes where
   // they left off instead of re-fetching from cursor=null.
   const query = useInfiniteQuery({
-    queryKey: qk.platformAudit(),
-    queryFn: ({ pageParam }) => fetchPlatformAuditLog(pageParam ?? undefined),
+    queryKey: qk.platformAudit(category),
+    queryFn: ({ pageParam }) => fetchPlatformAuditLog(pageParam ?? undefined, category),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
@@ -41,41 +47,50 @@ function Body() {
   );
   const nextCursor = query.hasNextPage ? "more" : null;
 
-  const [selected, setSelected] = useState<AuditEventOut | null>(null);
-
-  const header = (
-    <PageHeader
-      title="Platform audit log"
-      description="Every platform-scope RBAC mutation in reverse-chronological order. Click a row to inspect before/after JSON."
-    />
+  const toolbar = (
+    <>
+      <PageHeader
+        title="Platform audit log"
+        description="Every platform-scope action in reverse-chronological order. Click a row to inspect the before/after detail."
+      />
+      <div className="mb-4 flex items-center justify-end">
+        <AuditCategoryFilter value={category} onChange={setCategory} />
+      </div>
+    </>
   );
 
-  if (query.isPending) {
-    return (
-      <>
-        {header}
-        <TableSkeleton columns={4} columnWidths={["w-40", "w-52", "w-32", "w-44"]} />
-      </>
-    );
-  }
-
-  if (query.isError) {
-    return (
-      <>
-        {header}
-        <ErrorState onRetry={() => void query.refetch()} />
-      </>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
-      <>
-        {header}
+  function content() {
+    if (query.isPending) {
+      return (
+        <TableSkeleton
+          columns={6}
+          columnWidths={["w-40", "w-48", "w-40", "w-28", "w-20", "w-40"]}
+        />
+      );
+    }
+    if (query.isError) {
+      return <ErrorState onRetry={() => void query.refetch()} />;
+    }
+    if (events.length === 0) {
+      return (
         <EmptyState
           icon={ScrollText}
           title="No activity yet"
-          description="Platform-scope RBAC changes will appear here as they happen."
+          description={
+            category
+              ? "No activity in this category yet. Try a different filter."
+              : "Platform-scope actions will appear here as they happen."
+          }
+        />
+      );
+    }
+    return (
+      <>
+        <AuditTable events={events} onSelect={setSelected} />
+        <LoadMoreButton
+          nextCursor={nextCursor}
+          pending={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
         />
       </>
     );
@@ -83,13 +98,8 @@ function Body() {
 
   return (
     <>
-      {header}
-      <AuditTable events={events} onSelect={setSelected} />
-      <LoadMoreButton
-        nextCursor={nextCursor}
-        pending={query.isFetchingNextPage}
-        onClick={() => void query.fetchNextPage()}
-      />
+      {toolbar}
+      {content()}
       <AuditDetailDrawer
         event={selected}
         onOpenChange={(o) => {

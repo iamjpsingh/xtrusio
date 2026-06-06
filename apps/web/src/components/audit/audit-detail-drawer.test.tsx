@@ -24,8 +24,18 @@ const DELETE_EVENT: AuditEventOut = {
   ...CREATE_EVENT,
   id: 2,
   action: "platform_role.delete",
+  action_label: "Deleted platform role",
   before: { key: "old", permission_keys: [] },
   after: null,
+};
+
+const UPDATE_EVENT: AuditEventOut = {
+  ...CREATE_EVENT,
+  id: 3,
+  action: "platform_role.update",
+  action_label: "Updated platform role",
+  before: { name: "Old name" },
+  after: { name: "New name" },
 };
 
 describe("<AuditDetailDrawer />", () => {
@@ -34,16 +44,29 @@ describe("<AuditDetailDrawer />", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("renders the 'after' JSON for a create event and shows 'before' as empty", () => {
+  it("renders the action label, category, and the 'after' leaf for a create event", () => {
     render(<AuditDetailDrawer event={CREATE_EVENT} onOpenChange={() => {}} />);
-    expect(screen.getByText(/dispatcher/i)).toBeInTheDocument();
-    // 'before' should render with an explicit empty marker.
-    expect(screen.getByText(/before/i)).toBeInTheDocument();
+    expect(screen.getByText("Created platform role")).toBeInTheDocument();
+    expect(screen.getByText("roles")).toBeInTheDocument();
+    // structured diff renders the value as a leaf, not raw JSON.stringify.
+    expect(screen.getByText("dispatcher")).toBeInTheDocument();
+    // a humanized field label appears for the snapshot keys.
+    expect(screen.getByText("Permission keys")).toBeInTheDocument();
+    // before side of a create is explicitly empty (≥1 "empty" marker).
+    expect(screen.getAllByText(/empty/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it("renders the 'before' JSON for a delete event and shows 'after' as empty", () => {
+  it("renders the 'before' leaf for a delete event", () => {
     render(<AuditDetailDrawer event={DELETE_EVENT} onOpenChange={() => {}} />);
-    expect(screen.getByText(/"key": "old"/)).toBeInTheDocument();
+    expect(screen.getByText("old")).toBeInTheDocument();
+  });
+
+  it("highlights a changed field row for an update event", () => {
+    render(<AuditDetailDrawer event={UPDATE_EVENT} onOpenChange={() => {}} />);
+    expect(screen.getByText("Old name")).toBeInTheDocument();
+    expect(screen.getByText("New name")).toBeInTheDocument();
+    const changedRow = document.querySelector('tr[data-changed="true"]');
+    expect(changedRow).not.toBeNull();
   });
 
   it("fires onOpenChange(false) when the close affordance is clicked", async () => {

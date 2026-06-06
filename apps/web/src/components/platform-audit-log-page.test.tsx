@@ -112,6 +112,8 @@ describe("<PlatformAuditLogPage />", () => {
     renderWith(newClient());
     await waitFor(() => screen.getByText("platform_role.create"));
     await userEvent.click(screen.getByText("platform_role.create"));
-    await waitFor(() => expect(screen.getByText(/"key": "auditor"/)).toBeInTheDocument());
+    // The structured drawer renders snapshot values as leaves (not raw JSON):
+    // the `key` field's "auditor" value appears only inside the drawer.
+    await waitFor(() => expect(screen.getByText("auditor")).toBeInTheDocument());
   });
 });

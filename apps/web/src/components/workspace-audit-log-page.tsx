@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/error-state";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { AuditTable } from "@/components/audit/audit-table";
 import { AuditDetailDrawer } from "@/components/audit/audit-detail-drawer";
+import { AuditCategoryFilter } from "@/components/audit/audit-category-filter";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 
 export function WorkspaceAuditLogPage({ workspaceId }: { workspaceId: string }) {
@@ -24,10 +25,15 @@ export function WorkspaceAuditLogPage({ workspaceId }: { workspaceId: string }) 
 }
 
 function Body({ workspaceId }: { workspaceId: string }) {
-  // H3: useInfiniteQuery owns the accumulator (no setState inside queryFn).
+  const [category, setCategory] = useState<string | null>(null);
+  const [selected, setSelected] = useState<AuditEventOut | null>(null);
+
+  // H3: useInfiniteQuery owns the accumulator (no setState inside queryFn). The
+  // category filter is part of the key, so switching it resets the pages.
   const query = useInfiniteQuery({
-    queryKey: qk.workspaceAudit(workspaceId),
-    queryFn: ({ pageParam }) => fetchWorkspaceAuditLog(workspaceId, pageParam ?? undefined),
+    queryKey: qk.workspaceAudit(workspaceId, category),
+    queryFn: ({ pageParam }) =>
+      fetchWorkspaceAuditLog(workspaceId, pageParam ?? undefined, category),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
@@ -38,41 +44,50 @@ function Body({ workspaceId }: { workspaceId: string }) {
   );
   const nextCursor = query.hasNextPage ? "more" : null;
 
-  const [selected, setSelected] = useState<AuditEventOut | null>(null);
-
-  const header = (
-    <PageHeader
-      title="Workspace audit log"
-      description="Every RBAC mutation in this workspace, reverse-chronological."
-    />
+  const toolbar = (
+    <>
+      <PageHeader
+        title="Workspace audit log"
+        description="Every action in this workspace, reverse-chronological."
+      />
+      <div className="mb-4 flex items-center justify-end">
+        <AuditCategoryFilter value={category} onChange={setCategory} />
+      </div>
+    </>
   );
 
-  if (query.isPending) {
-    return (
-      <>
-        {header}
-        <TableSkeleton columns={4} columnWidths={["w-40", "w-52", "w-32", "w-44"]} />
-      </>
-    );
-  }
-
-  if (query.isError) {
-    return (
-      <>
-        {header}
-        <ErrorState onRetry={() => void query.refetch()} />
-      </>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
-      <>
-        {header}
+  function content() {
+    if (query.isPending) {
+      return (
+        <TableSkeleton
+          columns={6}
+          columnWidths={["w-40", "w-48", "w-40", "w-28", "w-20", "w-40"]}
+        />
+      );
+    }
+    if (query.isError) {
+      return <ErrorState onRetry={() => void query.refetch()} />;
+    }
+    if (events.length === 0) {
+      return (
         <EmptyState
           icon={ScrollText}
           title="No activity yet"
-          description="RBAC changes in this workspace will appear here as they happen."
+          description={
+            category
+              ? "No activity in this category yet. Try a different filter."
+              : "Actions in this workspace will appear here as they happen."
+          }
+        />
+      );
+    }
+    return (
+      <>
+        <AuditTable events={events} onSelect={setSelected} />
+        <LoadMoreButton
+          nextCursor={nextCursor}
+          pending={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
         />
       </>
     );
@@ -80,13 +95,8 @@ function Body({ workspaceId }: { workspaceId: string }) {
 
   return (
     <>
-      {header}
-      <AuditTable events={events} onSelect={setSelected} />
-      <LoadMoreButton
-        nextCursor={nextCursor}
-        pending={query.isFetchingNextPage}
-        onClick={() => void query.fetchNextPage()}
-      />
+      {toolbar}
+      {content()}
       <AuditDetailDrawer
         event={selected}
         onOpenChange={(o) => {
