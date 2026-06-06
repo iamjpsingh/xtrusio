@@ -4,6 +4,7 @@ export * from "./permission";
 export * from "./role";
 export * from "./audit-log";
 export * from "./audit-catalog";
+export * from "./job-runs";
 export * from "./platform-user-list";
 export * from "./platform-user-create";
 export * from "./platform-stats";

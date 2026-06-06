@@ -52,6 +52,7 @@ from .routes import permissions as permissions_routes
 from .routes import platform_audit_log as platform_audit_log_routes
 from .routes import platform_clients as platform_clients_routes
 from .routes import platform_invites as platform_invites_routes
+from .routes import platform_job_runs as platform_job_runs_routes
 from .routes import platform_role_grants as platform_role_grants_routes
 from .routes import platform_roles as platform_roles_routes
 from .routes import platform_settings as platform_settings_routes
@@ -283,6 +284,7 @@ app.include_router(platform_users_routes.router)
 # Static sub-path GET /api/platform/stats — distinct from the /users sub-paths.
 app.include_router(platform_stats_routes.router)
 app.include_router(platform_audit_log_routes.router)
+app.include_router(platform_job_runs_routes.router)
 # GET /api/platform/clients/{slug} — its own prefix so the {slug} param can't
 # shadow the static /api/platform/{settings,users,roles,stats,...} sub-paths.
 app.include_router(platform_clients_routes.router)
