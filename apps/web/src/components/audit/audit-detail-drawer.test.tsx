@@ -15,6 +15,8 @@ const CREATE_EVENT: AuditEventOut = {
   workspace_id: null,
   before: null,
   after: { key: "dispatcher", permission_keys: ["platform.users.read"] },
+  action_label: "Created platform role",
+  category: "roles",
   created_at: "2026-05-22T10:00:00Z",
 };
 
@@ -33,26 +35,20 @@ describe("<AuditDetailDrawer />", () => {
   });
 
   it("renders the 'after' JSON for a create event and shows 'before' as empty", () => {
-    render(
-      <AuditDetailDrawer event={CREATE_EVENT} onOpenChange={() => {}} />,
-    );
+    render(<AuditDetailDrawer event={CREATE_EVENT} onOpenChange={() => {}} />);
     expect(screen.getByText(/dispatcher/i)).toBeInTheDocument();
     // 'before' should render with an explicit empty marker.
     expect(screen.getByText(/before/i)).toBeInTheDocument();
   });
 
   it("renders the 'before' JSON for a delete event and shows 'after' as empty", () => {
-    render(
-      <AuditDetailDrawer event={DELETE_EVENT} onOpenChange={() => {}} />,
-    );
+    render(<AuditDetailDrawer event={DELETE_EVENT} onOpenChange={() => {}} />);
     expect(screen.getByText(/"key": "old"/)).toBeInTheDocument();
   });
 
   it("fires onOpenChange(false) when the close affordance is clicked", async () => {
     const onOpenChange = vi.fn();
-    render(
-      <AuditDetailDrawer event={CREATE_EVENT} onOpenChange={onOpenChange} />,
-    );
+    render(<AuditDetailDrawer event={CREATE_EVENT} onOpenChange={onOpenChange} />);
     await userEvent.click(screen.getByRole("button", { name: /close/i }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
