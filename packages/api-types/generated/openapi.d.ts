@@ -279,6 +279,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/platform/job-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Events */
+    get: operations["list_events_api_platform_job_runs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/platform/clients/{slug}": {
     parameters: {
       query?: never;
@@ -721,6 +738,47 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** JobRunOut */
+    JobRunOut: {
+      /** Id */
+      id: number;
+      /** Job Name */
+      job_name: string;
+      /** Status */
+      status: string;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /**
+       * Finished At
+       * Format: date-time
+       */
+      finished_at: string;
+      /** Duration Ms */
+      duration_ms: number;
+      /** Items Processed */
+      items_processed: number;
+      /** Items Succeeded */
+      items_succeeded: number;
+      /** Items Failed */
+      items_failed: number;
+      /** Detail */
+      detail: Record<string, never> | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** JobRunsPage */
+    JobRunsPage: {
+      /** Items */
+      items: components["schemas"]["JobRunOut"][];
+      /** Next Cursor */
+      next_cursor?: string | null;
     };
     /** MeResponse */
     MeResponse: {
@@ -2157,6 +2215,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AuditEventsPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_events_api_platform_job_runs_get: {
+    parameters: {
+      query?: {
+        cursor?: string | null;
+        limit?: number;
+        job_name?: string | null;
+      };
+      header?: {
+        authorization?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobRunsPage"];
         };
       };
       /** @description Validation Error */

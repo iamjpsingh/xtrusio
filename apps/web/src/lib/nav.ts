@@ -5,6 +5,7 @@ import {
   Settings,
   Shield,
   ScrollText,
+  Cpu,
   type LucideIcon,
 } from "lucide-react";
 
@@ -103,6 +104,12 @@ export const platformNav: NavItem[] = [
     to: "/platform/audit-log",
     label: "Audit log",
     icon: ScrollText,
+    required_perm: "platform.audit.read",
+  },
+  {
+    to: "/platform/system",
+    label: "System jobs",
+    icon: Cpu,
     required_perm: "platform.audit.read",
   },
   {

@@ -20,6 +20,7 @@ import asyncio
 import json
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -32,6 +33,9 @@ from supabase import create_client
 
 from ..core.config import get_settings
 from ..core.logging import get_logger
+from .job_runs import record_job_run
+
+_JOB_NAME = "invite_email_outbox"
 
 _log = get_logger(__name__)
 
@@ -185,9 +189,11 @@ async def process_due_batch(session_factory: SessionFactory, *, limit: int = 10)
 
     The Supabase calls run with NO DB transaction open (the claim tx is committed
     first); success/failure is recorded in a fresh tx per row."""
+    started_at = datetime.now(UTC)
     async with session_factory() as db:
         claimed = await _claim_due(db, limit)
     sent = 0
+    errors: list[str] = []
     for row in claimed:
         try:
             sb_user_id = await _send_one(row["payload"])
@@ -195,8 +201,49 @@ async def process_due_batch(session_factory: SessionFactory, *, limit: int = 10)
             async with session_factory() as db:
                 await _mark_failure(db, row["id"], int(row["attempts"]), str(e))
             _log.warning("invite_outbox_send_failed", outbox_id=str(row["id"]), error=str(e))
+            errors.append(str(e))
             continue
         async with session_factory() as db:
             await _mark_success(db, row["id"], row["payload"], sb_user_id)
         sent += 1
+
+    # System-log the batch — but only when it actually did work (idle polls are
+    # not recorded, so job_runs reflects real activity, not the poll heartbeat).
+    if claimed:
+        await _record_run(
+            session_factory, started_at, processed=len(claimed), sent=sent, errors=errors
+        )
     return sent
+
+
+async def _record_run(
+    session_factory: SessionFactory,
+    started_at: datetime,
+    *,
+    processed: int,
+    sent: int,
+    errors: list[str],
+) -> None:
+    """Write a job_runs row for this batch. Best-effort — a logging failure must
+    never break the email-sending it describes."""
+    finished_at = datetime.now(UTC)
+    failed = processed - sent
+    status = "success" if failed == 0 else ("partial" if sent > 0 else "error")
+    detail = {"errors": errors[:20]} if errors else None
+    try:
+        async with session_factory() as db:
+            await record_job_run(
+                db,
+                job_name=_JOB_NAME,
+                status=status,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=int((finished_at - started_at).total_seconds() * 1000),
+                items_processed=processed,
+                items_succeeded=sent,
+                items_failed=failed,
+                detail=detail,
+            )
+            await db.commit()
+    except Exception:
+        _log.exception("invite_outbox_job_run_record_failed")

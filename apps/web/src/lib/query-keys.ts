@@ -18,6 +18,7 @@ export const qk = {
   platformAudit: (category: string | null = null) => ["platform", "audit-log", category] as const,
   workspaceAudit: (workspaceId: string, category: string | null = null) =>
     ["workspace", workspaceId, "audit-log", category] as const,
+  platformJobRuns: () => ["platform", "job-runs"] as const,
   // Dashboard metrics (one round-trip per dashboard).
   platformStats: () => ["platform", "stats"] as const,
   workspaceStats: (workspaceId: string) => ["workspace", workspaceId, "stats"] as const,
