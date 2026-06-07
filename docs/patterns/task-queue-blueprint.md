@@ -282,7 +282,7 @@ on_startup:                                         # answer "what config am I r
     LOG.info("worker_boot", {
         broker: mask_password(BROKER_URL),
         concurrency: N, timeouts: TIMEOUTS,
-        feature_flags: { ... },                     # e.g. TIKTOK_RELAY: on
+        feature_flags: { ... },                     # whatever toggles affect behavior
         schedules: scheduler.list_names() })
 ```
 
@@ -478,13 +478,13 @@ delay = BASE_DELAY * (2 ^ attempt) * (1 + random(-0.2, +0.2))   # ±20% jitter
 
 ### ㉗ Keyed limiters + tenant fairness *(upgrades ⑥)*
 
-⑥ is one global limiter. But Meta and TikTok have different limits, and on a
-single shared queue one client's 500-campaign sync starves every other tenant.
+⑥ is one global limiter. But different downstreams have different limits, and on a
+single shared queue one heavy tenant's large batch starves every other tenant.
 
 ```
-limiter[provider] = { max, per }            # per-provider rate ceilings
+limiter[downstream] = { max, per }          # per-downstream rate ceilings
 # fairness: shard work so no single tenant monopolizes the worker
-queue_for(tenant) = "sync:" + (tenant.tier == "big" ? tenant.id : "shared")
+queue_for(tenant) = "work:" + (tenant.tier == "heavy" ? tenant.id : "shared")
 # or weighted round-robin across per-tenant queues
 ```
 
@@ -698,55 +698,54 @@ Know-when-to-stop : DAG/sagas→Temporal · autoscaling/sharding→infra · hand
 
 ## Part I — Boundaries: when to STOP hand-rolling
 
-Adding these would **mess with the blueprint's purpose** — a portable,
-hand-buildable queue. They turn a *queue* spec into a *workflow-engine* spec, or
-couple it to *infra*, or reach into the *product*. Recognize the signal and adopt
-the right tool instead of extending the pattern.
+These are **not principles to add — they are signals to stop.** Building them into
+the queue changes *what it is*: a *queue* becomes a *workflow engine*, or it gets
+welded to *infrastructure*, or it absorbs *product logic*. Each is portable as a
+**decision**, not as code.
 
-| You need…                                          | Don't extend the blueprint — adopt                                                                 |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **DAG / job chains / workflows** (C after A+B)      | **Temporal · Inngest · River** — durable workflow engines. Hand-rolling this is a multi-month project. |
-| **Sagas / multi-step compensation** (undo partial) | A workflow/saga engine. The queue runs the *steps*; the engine owns the *orchestration*.            |
-| **Worker autoscaling on queue depth**              | Your platform: K8s **HPA / KEDA** / cloud autoscaler. ㉘ emits the signal; the *action* is infra, not portable code. |
-| **Broker sharding / partitioning**                 | Broker-native clustering (Redis Cluster, Kafka partitions). Deployment topology, not a code principle. |
+| You need…                                                | Don't extend the blueprint — adopt                                                                            |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **DAG / job chains / multi-step workflows** (C after A+B) | A durable **workflow engine** (Temporal, Inngest, River). Orchestration is its own discipline; hand-rolling it is a multi-month project. |
+| **Sagas / compensation** (undo a partially-applied job)  | A workflow/saga engine. The queue runs the *steps*; the engine owns the *orchestration and rollback*.         |
+| **Autoscaling workers on backlog**                       | The deployment platform (K8s HPA / KEDA, cloud autoscaler). ㉘ emits the signal; acting on it is infra, not portable code. |
+| **Broker sharding / partitioning**                       | Broker-native clustering (Redis Cluster, Kafka partitions). Topology, not a code principle.                   |
 
-**The one that outranks all of them — handler correctness (Section J).** The
-blueprint is the **pipe**, not the **payload**. A queue scoring 100/100 still
-ships wrong numbers if the handler's token rotation, override-safe upserts, or
-weighted aggregation are wrong. That correctness lives in the handler **and its
-tests (⑳)** — it is deliberately **out of scope** here, and it is where the
-product actually lives or dies.
-
----
-
-## Appendix — Example maintenance jobs (illustrative, NOT core)
-
-These are *bodies*, not principles — they are product logic and intentionally
-live outside the core blueprint. They illustrate ⑬ (cron) + ㉒ (alert-dedup).
-Replace with your own domain logic.
-
-**FX-drift check** — illustrates ㉒:
-
-```
-RATE_THRESHOLD_PERCENT = 0.5
-for ccy in tracked_currencies:
-    live   = 1 / fetch_rate(ccy)                   # API quotes "1 USD = X"; invert
-    stored = DB.rate(ccy)
-    drift  = abs((live - stored) / stored) * 100
-    if drift > RATE_THRESHOLD_PERCENT:
-        alert_once("rate_change", ccy, {live, stored, drift})   # ㉒ no spam
-```
-
-**Audit cleanup** — illustrates ⑬ + bounded retention:
-
-```
-cutoff = now() - RETENTION_DAYS * 1_day            # e.g. 90 days
-DB.delete(audit_log WHERE actor_type=="user" AND created_at < cutoff)
-# only trims user rows; keeps compliance/admin records
-```
+**The boundary that outranks them all — handler correctness.** The blueprint is
+the **pipe**, not the **payload**. A queue that scores perfectly on every principle
+above still produces wrong output if the *handler's own logic* is wrong. Handler
+correctness is domain-specific by definition, so it can never be a universal
+principle — it lives in the handler and its tests (⑳). It is deliberately out of
+scope here, and it is where the product actually lives or dies.
 
 ---
 
-*Provenance: distilled from a production BullMQ metric-sync subsystem
-(Meta / Google Ads / TikTok / GA4 sync), generalized to be language- and
-product-agnostic.*
+## Appendix — Worked patterns (illustrative, NOT principles)
+
+These are *bodies*, not principles: generic sketches showing how the cron (⑬),
+retention (③), and alert-dedup (㉒) principles **combine**. They are deliberately
+domain-free — swap in your own logic. They are NOT part of the universal core.
+
+**Scheduled threshold check** — combines ⑬ (cron) + ㉒ (alert-dedup):
+
+```
+# runs on a schedule; alerts once per breaching entity until resolved
+for entity in monitored_entities:
+    current  = measure(entity)                      # whatever metric you track
+    baseline = DB.baseline(entity)
+    if deviation(current, baseline) > THRESHOLD:
+        alert_once("threshold_breach", entity.id, {current, baseline})   # ㉒ no spam
+```
+
+**Bounded retention cleanup** — combines ⑬ (cron) + ③ (retention):
+
+```
+cutoff = now() - RETENTION_PERIOD                   # e.g. 90 days
+DB.delete(records WHERE class == "ephemeral" AND created_at < cutoff)
+# delete only data safe to expire; never touch records under a legal/compliance hold
+```
+
+---
+
+*Provenance: distilled from a production background-sync subsystem and generalized
+to be language- and product-agnostic. Implementable on any broker
+(Redis / Valkey, RabbitMQ, Postgres) in any language.*
