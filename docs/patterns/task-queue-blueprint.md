@@ -535,7 +535,126 @@ log:  redact(payload) before emitting   # belt-and-suspenders for ⑪
 
 ---
 
-## Part F — Implementation cheat-sheet
+## Part F — Operability & scale-out hardening (N>1 workers, real deploys)
+
+Earlier tiers assumed correctness; this one assumes **many workers, live
+incidents, and rolling deploys.** Still all universal rules — not product logic.
+
+### ㉜ Effect-level idempotency keys ⭐
+
+At-least-once means a job can apply its effect, then crash **before ack** → it
+re-runs and **double-applies**. ① (concurrent dedup) and ㉕ (outbox) do not cover
+*post-success replay*. Make the **effect** idempotent, not just the enqueue.
+
+```
+key = job.id + ":" + effect_name                   # stable across re-runs
+if EFFECTS.seen(key): return                        # already applied → skip
+apply_effect(...)
+EFFECTS.record(key, ttl=...)
+# DB-native form: INSERT ... ON CONFLICT (idempotency_key) DO NOTHING
+```
+
+### ㉝ Poison-pill / max-delivery guard ⭐
+
+A handler that **crashes the process** (OOM, segfault, OS-kill) bypasses every
+`try/catch` in ②/⑦ — the broker re-claims the job forever and kills worker after
+worker. Guard on **delivery count**, which the broker tracks independently of your
+code.
+
+```
+if job.delivery_count > MAX_DELIVERIES:             # e.g. 5
+    DLQ.push(job, "poison_pill: exceeded max deliveries")   # quarantine WITHOUT running
+    return BROKER.ack(job)
+```
+
+### ㉞ Shared (distributed) breaker & limiter state ⭐
+
+⑰ breaker and ⑥/㉗ limiters as written are **in-process** → at N workers you get N
+independent breakers and **N× the rate ceiling**. The state must live in the
+broker.
+
+```
+# limiter: atomic token bucket in the broker (INCR+EXPIRE / Lua), keyed by provider
+# breaker: shared key  breaker:{provider} = {state, failures, open_until}
+#          read + CAS-update in the broker so all workers trip together
+```
+
+### ㉟ Leader-gated scheduler & catch-up ⭐
+
+At N workers, ⑬ cron and ⑭ catch-up fire **N times** every deploy. Elect one
+owner.
+
+```
+if acquire_leader_lock("scheduler", ttl=30s, renew=true):   # single holder
+    run_scheduler(); run_catch_up()
+# everyone else skips; lock auto-expires if the leader dies → automatic failover
+```
+
+### ㊱ Telemetry: histograms + correlation tracing
+
+Counters (⑫) can't tell you p99. Emit time-series + a **correlation id** threaded
+producer → worker → downstream.
+
+```
+metrics: histogram(job_duration_seconds, labels=[type, status])
+         gauge(queue_depth), gauge(oldest_waiting_age)          # ㉘
+trace:   correlation_id created at enqueue, carried in payload meta,
+         attached to every log line and every downstream call
+```
+
+### ㊲ Pause / resume / drain-quiesce
+
+Incident control + safe deploys need a real mechanism, not just a comment.
+
+```
+pause(queue):  set flag → workers finish in-flight, stop pulling new
+resume(queue): clear flag
+drain():       pause + wait until in_flight == 0   # then deploy safely
+               # rolling deploy (old+new workers at once) → ㉚ payload versioning covers mixed shapes
+```
+
+### ㊳ Large-arg & large-result offloading
+
+Big payloads/results bloat the broker and hit size limits. Store the blob, pass a
+pointer (extends ㉛ IDs-only).
+
+```
+if size(arg) > INLINE_MAX: payload.arg_ref = BLOB.put(arg)   # else inline
+# same for results: write to object store, return pointer + TTL — never stuff in the broker
+```
+
+### ㊴ Cancellation / revoke
+
+```
+cancel(jobId):
+    if queued:  BROKER.remove(jobId)
+    if running: set cancel-flag; handler checks it at safe points (cooperative)
+```
+
+### ㊵ Fan-in completion (batch / group join) — partner of ⑩
+
+⑩ fans out but never learns when the group is done. Track a counter.
+
+```
+on fan-out:         GROUPS.set(groupId, total=count)
+on each child done: if GROUPS.decr(groupId) == 0: enqueue("on_group_complete", groupId)
+```
+
+### ㊶ Smaller universal rules (add by name — each is a few lines)
+
+- **Priority lanes / SLA classes** — separate `high`/`default`/`low` queues; drain high first.
+- **Delayed / run-at-future jobs** — first-class `run_at` (not only retry/cron).
+- **FIFO-per-key** — when order matters, serialize per key (① already single-flights per resource).
+- **Enqueue-time payload validation** — validate inbound at `enqueue`, not only the DLQ (㉓/⑲); reject bad shapes at the door.
+- **Tenant-isolated DLQ** — tag/shard the DLQ by tenant too, not just live queues (㉗).
+- **On-demand backfill** — a range-parameterized job (`run(window=[from,to])`), distinct from ⑭'s "now".
+- **Push / webhook results** — emit a completion webhook as an alternative to client polling (㉔).
+- **DST-safe scheduling** — schedule in UTC or a DST-aware lib; beware skipped/duplicated wall-clock hours (⑬).
+- **Broker security baseline** — auth + TLS in transit + encryption at rest on the broker; rotate credentials.
+
+---
+
+## Part G — Implementation cheat-sheet
 
 Which library gives you each principle natively (✅) vs. you build it (manual):
 
@@ -558,7 +677,7 @@ Which library gives you each principle natively (✅) vs. you build it (manual):
 
 ---
 
-## Part G — Maturity ladder (build in this order)
+## Part H — Maturity ladder (build in this order)
 
 ```
 MVP         : ①enqueue ②worker-loop ③atomic-claim ④handler           # works
@@ -569,7 +688,34 @@ Self-healing: +⑬cron +⑭catch-up +㉑terminal-states                    # sur
 Hardened    : +⑰breaker +⑱token-refresh +⑲typed-DLQ +⑳tests +㉒alert-dedup +㉔smart-poll
 At-scale    : +㉕outbox⭐ +㉖jitter +㉗keyed/fair-limiters +㉘backpressure
               +㉙DLQ-replay +㉚payload-versioning +㉛IDs-only-payloads  # correct under load+deploys
+N>1 + ops   : +㉜idempotency-keys⭐ +㉝poison-guard⭐ +㉞shared-breaker/limiter⭐
+              +㉟leader-election⭐ +㊱telemetry +㊲pause/drain +㊳blob-offload
+              +㊴cancel +㊵fan-in +㊶smalls                            # correct at N>1 + live ops
+Know-when-to-stop : DAG/sagas→Temporal · autoscaling/sharding→infra · handler→product(⑳)  # Part I
 ```
+
+---
+
+## Part I — Boundaries: when to STOP hand-rolling
+
+Adding these would **mess with the blueprint's purpose** — a portable,
+hand-buildable queue. They turn a *queue* spec into a *workflow-engine* spec, or
+couple it to *infra*, or reach into the *product*. Recognize the signal and adopt
+the right tool instead of extending the pattern.
+
+| You need…                                          | Don't extend the blueprint — adopt                                                                 |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **DAG / job chains / workflows** (C after A+B)      | **Temporal · Inngest · River** — durable workflow engines. Hand-rolling this is a multi-month project. |
+| **Sagas / multi-step compensation** (undo partial) | A workflow/saga engine. The queue runs the *steps*; the engine owns the *orchestration*.            |
+| **Worker autoscaling on queue depth**              | Your platform: K8s **HPA / KEDA** / cloud autoscaler. ㉘ emits the signal; the *action* is infra, not portable code. |
+| **Broker sharding / partitioning**                 | Broker-native clustering (Redis Cluster, Kafka partitions). Deployment topology, not a code principle. |
+
+**The one that outranks all of them — handler correctness (Section J).** The
+blueprint is the **pipe**, not the **payload**. A queue scoring 100/100 still
+ships wrong numbers if the handler's token rotation, override-safe upserts, or
+weighted aggregation are wrong. That correctness lives in the handler **and its
+tests (⑳)** — it is deliberately **out of scope** here, and it is where the
+product actually lives or dies.
 
 ---
 
