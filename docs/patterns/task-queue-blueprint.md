@@ -432,7 +432,110 @@ function poll(jobId):
 
 ---
 
-## Part E — Implementation cheat-sheet
+## Part E — Distributed-systems hardening (correctness at scale)
+
+These are the rules that separate "works on one worker" from "correct under
+load, multi-tenant, and across deploys." All are universal shapes — not product
+logic.
+
+### ㉕ Transactional enqueue (outbox pattern) ⭐ *(the biggest correctness gap)*
+
+Plain `enqueue()` is **not atomic with your DB transaction.** Two failure modes:
+enqueue inside a txn that later rolls back → a job runs for data that never
+existed; or the data commits but the process crashes before enqueue → the job is
+lost. At-least-once delivery does **not** cover this enqueue-vs-commit seam.
+
+**Fix:** write the job to an `outbox` table **in the same DB transaction** as the
+business data. A separate relay polls the outbox and publishes to the broker.
+
+```
+# inside the request's DB transaction
+function enqueue_tx(txn, jobType, payload):
+    txn.insert(outbox, { id, type: jobType, payload, status:"pending", created_at: now() })
+    # NO broker call here — atomic with the business write; rollback drops both
+
+# RELAY (own loop, separate from workers)
+function outbox_relay():
+    rows = DB.claim(outbox WHERE status="pending"
+                    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT batch)   # like core-loop claim
+    for row in rows:
+        enqueue_dedup(row.type, row.payload, row.id)   # ① dedup makes relay retries safe
+        DB.update(outbox, row.id, status="published")
+```
+
+> The relay is itself at-least-once, so the broker may see a row twice → **①
+> deduplication is what makes the outbox safe.** xtrusio already runs this exact
+> pattern (`invite_email_outbox` + `FOR UPDATE SKIP LOCKED`).
+
+### ㉖ Retry jitter *(upgrades ②)*
+
+Pure exponential means 50 jobs that failed at 02:00:00 all retry at the same
+instants → thundering herd that re-trips the API.
+
+```
+delay = BASE_DELAY * (2 ^ attempt) * (1 + random(-0.2, +0.2))   # ±20% jitter
+```
+
+### ㉗ Keyed limiters + tenant fairness *(upgrades ⑥)*
+
+⑥ is one global limiter. But Meta and TikTok have different limits, and on a
+single shared queue one client's 500-campaign sync starves every other tenant.
+
+```
+limiter[provider] = { max, per }            # per-provider rate ceilings
+# fairness: shard work so no single tenant monopolizes the worker
+queue_for(tenant) = "sync:" + (tenant.tier == "big" ? tenant.id : "shared")
+# or weighted round-robin across per-tenant queues
+```
+
+### ㉘ Backpressure / queue-depth signal *(upgrades ⑫)*
+
+⑫ reports processed/failed — not **backlog**. If producers outpace workers you
+should be told, not discover it hours late.
+
+```
+health.metrics += { depth: BROKER.queue_depth(queue),
+                    oldest_waiting_age: now() - BROKER.oldest_waiting(queue).enqueued_at }
+alert_once("backlog", queue, ...) WHEN depth > DEPTH_MAX OR oldest_waiting_age > AGE_MAX
+```
+
+### ㉙ DLQ replay *(upgrades ⑦/⑲)*
+
+Storing failures without a way to requeue them after a fix is half the value.
+
+```
+function replay(dlqId):
+    rec = DLQ.get(dlqId)
+    enqueue_dedup(rec.original.type, rec.original.payload, rec.original.resourceId)  # ①
+    DLQ.mark(dlqId, "replayed")
+# expose as an admin action or CLI: replay one, or replay-all by error class
+```
+
+### ㉚ Payload versioning *(deploy safety)*
+
+On deploy, jobs enqueued with the **old** payload shape are still in the broker;
+the new handler may choke on them.
+
+```
+enqueue: payload.v = CURRENT_PAYLOAD_VERSION
+handler: if payload.v < CURRENT: migrate_payload(payload)   # tolerate N-1
+         # alternative: drain the queue before deploying a breaking shape
+```
+
+### ㉛ Secret hygiene — IDs-only payloads
+
+⑪ logs payloads, and payloads sit in the broker (often plaintext). A token/PII in
+a payload leaks into both logs and the broker.
+
+```
+RULE: payloads carry IDs ONLY — never tokens, secrets, or PII.
+      the handler re-fetches the sensitive material by ID at run time.
+log:  redact(payload) before emitting   # belt-and-suspenders for ⑪
+```
+
+---
+
+## Part F — Implementation cheat-sheet
 
 Which library gives you each principle natively (✅) vs. you build it (manual):
 
@@ -446,14 +549,16 @@ Which library gives you each principle natively (✅) vs. you build it (manual):
 | ⑬ cron             | scheduler   | `beat`         | `cron()` ✅ | `Scheduler` | `schedule()`         |
 | ⑭ catch-up         | app code    | app code       | app code  | app code    | app code             |
 | ㉑ terminal states | app code    | app code       | app code  | app code    | app code             |
+| ㉕ outbox enqueue  | app code    | app code       | app code  | app code    | app code             |
+| ㉖ retry jitter    | manual      | manual         | manual    | builtin opt | manual               |
 
-> ⑭ catch-up and ㉑ terminal states are always **your** code — no library ships
-> them. They are what separate a queue that "usually runs" from one that is
-> correct under downtime and dead tokens.
+> ⑭ catch-up, ㉑ terminal states, and ㉕ outbox enqueue are always **your** code —
+> no library ships them. They are what separate a queue that "usually runs" from
+> one that is correct under downtime, dead tokens, and rolled-back transactions.
 
 ---
 
-## Part F — Maturity ladder (build in this order)
+## Part G — Maturity ladder (build in this order)
 
 ```
 MVP         : ①enqueue ②worker-loop ③atomic-claim ④handler           # works
@@ -462,6 +567,8 @@ Operable    : +⑦DLQ +⑪alerts +⑫health +⑯conn-hardening               # s
 Correct     : +①dedup +⑨guarded-status +⑩fan-out +⑥rate-limit +㉓fail-closed
 Self-healing: +⑬cron +⑭catch-up +㉑terminal-states                    # survives downtime ⭐
 Hardened    : +⑰breaker +⑱token-refresh +⑲typed-DLQ +⑳tests +㉒alert-dedup +㉔smart-poll
+At-scale    : +㉕outbox⭐ +㉖jitter +㉗keyed/fair-limiters +㉘backpressure
+              +㉙DLQ-replay +㉚payload-versioning +㉛IDs-only-payloads  # correct under load+deploys
 ```
 
 ---
