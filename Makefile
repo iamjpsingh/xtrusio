@@ -49,7 +49,7 @@ valkey-up:
 	docker compose up -d valkey
 	@echo "Waiting for xtrusio-valkey to be healthy..."
 	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-valkey 2>/dev/null | grep -q healthy; do sleep 1; done
-	@echo "Valkey ready (host: xtrusio-valkey.orb.local:6379 via OrbStack DNS)."
+	@echo "Valkey ready (host: 127.0.0.1:63792)."
 
 valkey-down:
 	docker compose down
@@ -57,7 +57,7 @@ valkey-down:
 db-up: valkey-up
 	@echo ""
 	@echo "Local infra up:"
-	@echo "  Valkey  xtrusio-valkey.orb.local:6379 (OrbStack DNS)"
+	@echo "  Valkey  127.0.0.1:63792 (docker compose)"
 	@echo ""
 	@echo "Supabase Postgres/Auth/Realtime is managed — see .env for the project URL."
 

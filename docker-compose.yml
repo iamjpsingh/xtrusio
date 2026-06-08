@@ -4,10 +4,11 @@ name: xtrusio
 # .env). This file owns only the local infra that isn't part of Supabase —
 # currently just Valkey for caches/queues.
 #
-# Networking: no host ports are published. Reach services from the host via
-# OrbStack DNS — `xtrusio-valkey.orb.local:6379` resolves to the container's
-# internal port. This guarantees zero conflict with other local Docker stacks.
-# (Docker Desktop users without DNS would need to add a `ports:` mapping.)
+# Networking: Valkey is published on the host loopback at 127.0.0.1:63792 (a
+# non-default host port, mapped to the container's 6379, so it can't clash with
+# any system Redis already on 6379). The API + worker run on the host and reach
+# it at `127.0.0.1:63792`. A published port works on every Docker engine
+# (Docker Desktop, plain dockerd, etc.) — no engine-specific DNS required.
 
 networks:
   xtrusio-net:
@@ -19,6 +20,10 @@ services:
     container_name: xtrusio-valkey
     image: valkey/valkey:8
     restart: unless-stopped
+    # Published on the host loopback only (not 0.0.0.0) so Valkey is never
+    # exposed to the LAN. Host side 63792 -> container 6379.
+    ports:
+      - "127.0.0.1:63792:6379"
     networks:
       - xtrusio-net
     command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
