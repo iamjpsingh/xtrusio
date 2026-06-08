@@ -92,6 +92,14 @@ class Settings(BaseSettings):
     # cannot forge / tamper with an opaque cursor. No default — fail fast.
     cursor_hmac_key: str = Field(alias="CURSOR_HMAC_KEY")
 
+    # Shared secret the Supabase Database Webhook (on auth.audit_log_entries)
+    # presents in the X-Webhook-Secret header when POSTing GoTrue auth events to
+    # POST /api/internal/auth-events. The endpoint is unauthenticated (called by
+    # Supabase, not a user); this secret is its only gate. REQUIRED — no default
+    # (an empty/known secret would let anyone forge auth-event rows). Prod refuses
+    # to boot on the dev placeholder or a secret < 32 chars.
+    auth_webhook_secret: str = Field(alias="AUTH_WEBHOOK_SECRET")
+
     # PAR-D M16: TTL (seconds) for the Valkey-backed effective-permission cache
     # consumed by GET /me. Short by design — the authz gate (require_permission)
     # is never cached, so this only bounds /me display staleness.
@@ -167,6 +175,25 @@ class Settings(BaseSettings):
                 f"CURSOR_HMAC_KEY is too short for prod ({len(key)} < "
                 f"{_MIN_CURSOR_KEY_LEN} chars). Generate a strong key: "
                 'python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _reject_weak_webhook_secret_in_prod(self) -> Self:
+        """Fail fast in prod on a known-weak / too-short AUTH_WEBHOOK_SECRET.
+
+        This secret is the ONLY gate on the unauthenticated auth-event ingest
+        endpoint, so a shipped placeholder / low-entropy value would let anyone
+        forge auth-event audit rows. Dev/test stay frictionless (the placeholder
+        keeps working locally)."""
+        if self.env != "prod":
+            return self
+        secret = self.auth_webhook_secret
+        if secret.startswith(_WEAK_CURSOR_KEY_PREFIX) or len(secret) < _MIN_CURSOR_KEY_LEN:
+            raise ValueError(
+                "AUTH_WEBHOOK_SECRET is the dev placeholder or too short "
+                f"(< {_MIN_CURSOR_KEY_LEN} chars) in prod. Generate a strong "
+                'secret: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         return self
 
