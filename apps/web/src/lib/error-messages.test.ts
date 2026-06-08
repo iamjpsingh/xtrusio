@@ -69,7 +69,7 @@ describe("errorMessage — auth-pages codes (2026-06-02)", () => {
     expect(errorMessage("email_not_confirmed")).toMatch(/verif/i);
   });
   it("maps invalid_credentials", () => {
-    expect(errorMessage("invalid_credentials")).toBe("Email or password is incorrect.");
+    expect(errorMessage("invalid_credentials")).toBe("Wrong email or password.");
   });
   it("maps rate_limited and over_request_rate_limit", () => {
     expect(errorMessage("rate_limited")).toMatch(/too many/i);
