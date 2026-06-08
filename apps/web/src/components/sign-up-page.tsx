@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
-import { fetchSignupStatus, postSignup, postSignupResend } from "@/lib/api";
+import { ApiError, fetchSignupStatus, postSignup, postSignupResend } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { authErrorMessage } from "@/lib/error-messages";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
@@ -46,10 +46,7 @@ function CheckEmailScreen({ email }: { email: string }) {
       footer={<SignInFooter />}
     >
       <div className="space-y-4 text-center">
-        <p className="text-sm text-muted-foreground">
-          Click the link in the email to finish setting up your account. If you already have an
-          account, we've emailed you a sign-in or password-reset link instead.
-        </p>
+        <p className="text-sm text-muted-foreground">Check your email to verify your account.</p>
         <p className="text-sm text-muted-foreground">
           Didn't get it? Check your spam folder, or resend below.
         </p>
@@ -175,9 +172,19 @@ export function SignUpPage() {
         </div>
 
         {m.error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {authErrorMessage(m.error)}
-          </p>
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-destructive">
+              {authErrorMessage(m.error)}
+            </p>
+            {m.error instanceof ApiError && m.error.code === "email_exists" ? (
+              <Link
+                to="/sign-in"
+                className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                Sign in
+              </Link>
+            ) : null}
+          </div>
         ) : null}
         <Button
           type="submit"

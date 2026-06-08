@@ -6,9 +6,13 @@ import { SignInPage } from "./sign-in-page";
 import type { SignInResult } from "@/lib/auth";
 
 const signInMock = vi.fn<(email: string, password: string) => Promise<SignInResult>>();
+const resendMock = vi.fn<(args: { type: string; email: string }) => Promise<{ error: unknown }>>();
 
-vi.mock("@/lib/api", () => ({ fetchSignupStatus: vi.fn(), postSignupResend: vi.fn() }));
+vi.mock("@/lib/api", () => ({ fetchSignupStatus: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ signIn: signInMock }) }));
+vi.mock("@/lib/supabase", () => ({
+  supabase: { auth: { resend: (args: { type: string; email: string }) => resendMock(args) } },
+}));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
   Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
@@ -18,7 +22,7 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
-import { fetchSignupStatus, postSignupResend } from "@/lib/api";
+import { fetchSignupStatus } from "@/lib/api";
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -32,7 +36,7 @@ function renderPage() {
 describe("SignInPage", () => {
   beforeEach(() => {
     vi.mocked(fetchSignupStatus).mockReset();
-    vi.mocked(postSignupResend).mockReset();
+    resendMock.mockReset();
     signInMock.mockReset();
   });
 
@@ -93,15 +97,18 @@ describe("SignInPage", () => {
     await user.type(screen.getByLabelText(/email/i), "alice@example.com");
     await user.type(screen.getByLabelText("Password"), "wrongpass1");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
-    await waitFor(() =>
-      expect(screen.getByText("Email or password is incorrect.")).toBeInTheDocument(),
+    await waitFor(() => expect(screen.getByText("Wrong email or password.")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /resend verification link/i })).toBeNull();
+    // Forgot-password link stays available on bad credentials.
+    expect(screen.getByRole("link", { name: /forgot password\?/i })).toHaveAttribute(
+      "href",
+      "/forgot-password",
     );
-    expect(screen.queryByRole("button", { name: /resend verification email/i })).toBeNull();
   });
 
-  it("offers a resend-verification button on email_not_confirmed and calls postSignupResend", async () => {
+  it("offers a resend-verification button on email_not_confirmed and calls supabase resend", async () => {
     vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: true });
-    vi.mocked(postSignupResend).mockResolvedValue(undefined);
+    resendMock.mockResolvedValue({ error: null });
     signInMock.mockResolvedValue({
       error: "Email not confirmed",
       code: "email_not_confirmed",
@@ -112,11 +119,12 @@ describe("SignInPage", () => {
     await user.type(screen.getByLabelText(/email/i), "unconfirmed@example.com");
     await user.type(screen.getByLabelText("Password"), "correcthorse");
     await user.click(screen.getByRole("button", { name: /sign in/i }));
+    expect(await screen.findByText("Your email isn't verified yet.")).toBeInTheDocument();
     const resendBtn = await screen.findByRole("button", {
-      name: /resend verification email/i,
+      name: /resend verification link/i,
     });
     await user.click(resendBtn);
-    expect(postSignupResend).toHaveBeenCalledWith("unconfirmed@example.com");
+    expect(resendMock).toHaveBeenCalledWith({ type: "signup", email: "unconfirmed@example.com" });
     await waitFor(() => expect(screen.getByText(/verification email sent/i)).toBeInTheDocument());
   });
 });

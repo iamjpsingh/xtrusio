@@ -52,7 +52,9 @@ describe("SignUpPage", () => {
     await user.type(screen.getByLabelText(/email/i), "alice@example.com");
     await user.type(screen.getByLabelText("Password"), "Password1!");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
-    await waitFor(() => expect(screen.getByText(/check your email/i)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Check your email to verify your account.")).toBeTruthy(),
+    );
     expect(postSignup).toHaveBeenCalledWith("alice@example.com", "Password1!");
   });
 
@@ -73,7 +75,9 @@ describe("SignUpPage", () => {
     await user.type(screen.getByLabelText(/email/i), "alice@example.com");
     await user.type(screen.getByLabelText("Password"), "Password1!");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
-    await waitFor(() => expect(screen.getByText(/check your email/i)).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByText("Check your email to verify your account.")).toBeTruthy(),
+    );
 
     const resendBtn = screen.getByRole("button", { name: /resend email/i });
     await user.click(resendBtn);
@@ -94,9 +98,25 @@ describe("SignUpPage", () => {
     await user.type(screen.getByLabelText(/email/i), "bob@example.com");
     await user.type(screen.getByLabelText("Password"), "Password1!");
     await user.click(screen.getByRole("button", { name: /sign up/i }));
+    await waitFor(() => expect(screen.getByText("Signups are disabled.")).toBeInTheDocument());
+  });
+
+  it("shows 'email exists' message + a Sign in link on a 409 email_exists", async () => {
+    vi.mocked(fetchSignupStatus).mockResolvedValue({ signups_enabled: true });
+    vi.mocked(postSignup).mockRejectedValue(new ApiError(409, { detail: "email_exists" }));
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => screen.getByLabelText(/email/i));
+    await user.type(screen.getByLabelText(/email/i), "taken@example.com");
+    await user.type(screen.getByLabelText("Password"), "Password1!");
+    await user.click(screen.getByRole("button", { name: /sign up/i }));
     await waitFor(() =>
-      expect(screen.getByText("Signups are currently disabled.")).toBeInTheDocument(),
+      expect(screen.getByText("This email already has an account.")).toBeInTheDocument(),
     );
+    // The 409 surfaces a sign-in link pointing at /sign-in (separate from the
+    // always-present footer "Sign in" link, so scope to the alert's sibling).
+    const links = screen.getAllByRole("link", { name: /^sign in$/i });
+    expect(links.some((l) => l.getAttribute("href") === "/sign-in")).toBe(true);
   });
 
   it("maps a 429 rate-limit response to the rate-limited message", async () => {
