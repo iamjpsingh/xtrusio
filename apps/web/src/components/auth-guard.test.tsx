@@ -11,15 +11,31 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
 
-vi.mock("../lib/api", () => ({
-  fetchMe: vi.fn(),
+// fetchMe is mocked; ApiError/SessionExpiredError are real-enough stub classes so
+// lib/errors' `instanceof` checks (pulled in by AuthGuard) work without loading
+// the real lib/api (which throws on a missing VITE_API_BASE_URL in the test env).
+vi.mock("../lib/api", () => {
+  class ApiError extends Error {
+    constructor(
+      public status: number,
+      public body: unknown,
+    ) {
+      super("api");
+    }
+  }
+  class SessionExpiredError extends Error {}
+  return { fetchMe: vi.fn(), ApiError, SessionExpiredError };
+});
+
+vi.mock("../lib/supabase", () => ({
+  supabase: { auth: { signOut: vi.fn(() => Promise.resolve()) } },
 }));
 
 vi.mock("../lib/auth", () => ({
   useAuth: () => ({ session: "fake-session", loading: false }),
 }));
 
-import { fetchMe } from "../lib/api";
+import { fetchMe, SessionExpiredError } from "../lib/api";
 import { AuthGuard } from "./auth-guard";
 
 function renderGuard() {
@@ -77,6 +93,27 @@ describe("AuthGuard", () => {
     });
     renderGuard();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith({ to: "/onboarding" }));
+  });
+
+  it("renders a recovery surface (NOT the authed shell) when /me errors with a live session", async () => {
+    // The blank-page bug: resolveRoute returns "render" for a null `me`, so a
+    // settled /me ERROR (dead/rejected account) used to fall through and mount
+    // the authed shell with no identity → white page. It must show recovery.
+    mockPathname = "/platform";
+    vi.mocked(fetchMe).mockRejectedValue(new Error("backend rejected the user"));
+    renderGuard();
+    await waitFor(() => expect(screen.getByText("We couldn't load your account")).toBeTruthy());
+    expect(screen.queryByTestId("child")).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("shows the loader (not an error flash) when /me throws SessionExpiredError", async () => {
+    // apiFetch already signed out + a redirect is imminent — never the shell.
+    mockPathname = "/platform";
+    vi.mocked(fetchMe).mockRejectedValue(new SessionExpiredError());
+    renderGuard();
+    await waitFor(() => expect(screen.queryByTestId("child")).toBeNull());
+    expect(screen.queryByText("We couldn't load your account")).toBeNull();
   });
 
   test("inherits staleTime from production queryClient defaults", () => {
