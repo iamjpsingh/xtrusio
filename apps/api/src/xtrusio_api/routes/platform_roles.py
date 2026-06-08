@@ -13,7 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -44,7 +44,7 @@ router = APIRouter(prefix="/api/platform/roles", tags=["platform-roles"])
 
 @router.get("", response_model=PlatformRolesPage)
 async def list_roles(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -65,7 +65,7 @@ async def list_roles(
 @router.post("", response_model=PlatformRoleOut, status_code=status.HTTP_201_CREATED)
 async def create_role(
     body: PlatformRoleIn,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformRoleOut:
     await require_permission(db, user.user_id, "platform.roles.manage")
@@ -103,7 +103,7 @@ async def create_role(
 @router.get("/{role_id}", response_model=PlatformRoleOut)
 async def get_role(
     role_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformRoleOut:
     await require_permission(db, user.user_id, "platform.roles.manage")
@@ -118,7 +118,7 @@ async def get_role(
 async def update_role(
     role_id: UUID,
     body: PlatformRolePatch,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformRoleOut:
     await require_permission(db, user.user_id, "platform.roles.manage")
@@ -158,7 +158,7 @@ async def update_role(
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_role(
     role_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await require_permission(db, user.user_id, "platform.roles.manage")

@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.permissions import has_permission, require_permission
 from ..schemas.platform_stats import PlatformStats
@@ -31,7 +31,7 @@ _METRIC_PERMS = (
 
 @router.get("/stats", response_model=PlatformStats)
 async def get_stats(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformStats:
     await require_permission(db, user.user_id, "platform.users.read")

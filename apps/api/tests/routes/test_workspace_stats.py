@@ -28,11 +28,18 @@ from xtrusio_api.core.db import SessionLocal
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
 
-async def _provision_owner_workspace(member_role: str = "read_only") -> tuple[UUID, UUID, UUID]:
+async def _provision_owner_workspace(
+    member_role: str = "read_only", *, platform_user: bool = True
+) -> tuple[UUID, UUID, UUID]:
     """Seed (workspace, owner_id, member_id). Owner holds every workspace perm;
     the member holds whatever ``member_role`` implies (``read_only`` →
     ``workspace.members.read`` + ``workspace.settings.read``, but NOT
-    ``workspace.audit.read``)."""
+    ``workspace.audit.read``).
+
+    ``platform_user=False`` reproduces a REAL client: a tenant member with NO
+    ``platform_users`` row (platform users = super_admin only, #63). Workspace
+    endpoints must accept them — auth is `require_authenticated` (auth.users),
+    authz is `require_permission(workspace_id)` — NOT a platform_users check."""
     owner_id, tid, member_id = uuid4(), uuid4(), uuid4()
     o_email = f"wstats-owner-{owner_id.hex[:8]}@example.com"
     m_email = f"wstats-mem-{member_id.hex[:8]}@example.com"
@@ -48,13 +55,14 @@ async def _provision_owner_workspace(member_role: str = "read_only") -> tuple[UU
                 ),
                 {"id": str(uid), "e": email},
             )
-            await s.execute(
-                text(
-                    "INSERT INTO platform_users (id, email, role, is_active) "
-                    "VALUES (:id, :e, 'editor', true)"
-                ),
-                {"id": str(uid), "e": email},
-            )
+            if platform_user:
+                await s.execute(
+                    text(
+                        "INSERT INTO platform_users (id, email, role, is_active) "
+                        "VALUES (:id, :e, 'editor', true)"
+                    ),
+                    {"id": str(uid), "e": email},
+                )
         await s.execute(
             text("INSERT INTO tenants (id, slug, name, created_by) VALUES (:t,:s,:n,:u)"),
             {"t": str(tid), "s": f"wstats-{tid.hex[:8]}", "n": "ws-stats", "u": str(owner_id)},
@@ -116,6 +124,24 @@ async def _get_stats(
 async def test_stats_requires_auth(http_client: AsyncClient) -> None:
     res = await http_client.get(f"/api/workspaces/{uuid4()}/stats")
     assert res.status_code == 401
+
+
+async def test_workspace_owner_without_platform_user_can_read_stats(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """Regression (real client): a workspace owner has a tenant_memberships row
+    but NO platform_users row. They must be able to read their own workspace.
+    Before the fix, the route's `get_current_user` dependency required a
+    platform_users row → 401 'user not provisioned' on EVERY workspace endpoint.
+    The gate must be `require_authenticated` + `require_permission(workspace_id)`."""
+    tid, owner_id, _member = await _provision_owner_workspace(platform_user=False)
+    token = make_jwt(sub=owner_id)
+    res = await http_client.get(
+        f"/api/workspaces/{tid}/stats", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert isinstance(body["members"], int)
 
 
 async def test_stats_403_for_non_member(

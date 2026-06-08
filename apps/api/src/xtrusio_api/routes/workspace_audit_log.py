@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT
 from ..core.permissions import require_permission
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspace-audit-log"])
 @router.get("/{workspace_id}/audit-log", response_model=AuditEventsPage)
 async def list_events(
     workspace_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,

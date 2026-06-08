@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.permissions import require_permission
 from ..schemas.platform_settings import (
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/platform/settings", tags=["platform-settings"])
 
 @router.get("", response_model=PlatformSettingsResponse)
 async def read(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformSettingsResponse:
     await require_permission(db, user.user_id, "platform.settings.read")
@@ -36,7 +36,7 @@ async def read(
 @router.put("", response_model=PlatformSettingsResponse)
 async def update(
     body: UpdatePlatformSettingsRequest,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformSettingsResponse:
     await require_permission(db, user.user_id, "platform.settings.manage")

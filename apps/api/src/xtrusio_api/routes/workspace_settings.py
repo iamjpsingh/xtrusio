@@ -13,7 +13,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.permissions import require_permission
 from ..schemas.workspace_settings import (
@@ -35,7 +35,7 @@ router = APIRouter(
 @router.get("", response_model=WorkspaceSettingsOut)
 async def get_workspace_settings_route(
     workspace_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceSettingsOut:
     await require_permission(db, user.user_id, "workspace.settings.read", workspace_id=workspace_id)
@@ -50,7 +50,7 @@ async def get_workspace_settings_route(
 async def put_settings(
     workspace_id: UUID,
     body: WorkspaceSettingsUpdate,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceSettingsOut:
     await require_permission(

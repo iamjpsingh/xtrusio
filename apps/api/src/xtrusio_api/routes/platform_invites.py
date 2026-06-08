@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user, require_super_admin
+from ..core.auth import AuthIdentity, require_authenticated, require_super_admin
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -39,10 +39,10 @@ router = APIRouter(prefix="/api/platform/users/invites", tags=["platform-invites
 @router.post("", response_model=PlatformInviteResponse, status_code=status.HTTP_201_CREATED)
 async def create(
     body: CreatePlatformInviteRequest,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformInviteResponse:
-    require_super_admin(user)
+    await require_super_admin(db, user.user_id)
     # PAR-D M1: caller-owns-transaction — build the response from the live
     # (pre-commit) ORM row, then commit; roll back on any typed error. PAR-D H5:
     # the invite email is staged in the outbox and sent by the worker, so this
@@ -67,7 +67,7 @@ async def create(
 
 @router.get("", response_model=PlatformInvitesPage)
 async def list_invites(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -90,10 +90,10 @@ async def list_invites(
 @router.delete("/{invite_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def revoke(
     invite_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
-    require_super_admin(user)
+    await require_super_admin(db, user.user_id)
     try:
         await revoke_platform_invite(db, invite_id=invite_id, actor_id=user.user_id)
     except InviteAlreadyAcceptedError as e:

@@ -20,7 +20,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.permissions import require_permission
 from ..models.tenant_membership import TenantRole
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/api/platform/clients", tags=["platform-clients"])
 @router.get("/{slug}", response_model=PlatformClientDetail)
 async def get_client_detail(
     slug: str,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformClientDetail:
     await require_permission(db, user.user_id, "platform.clients.read")

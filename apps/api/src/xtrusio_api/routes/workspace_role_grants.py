@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspace-role-grants"])
 async def list_grants(
     workspace_id: UUID,
     user_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -81,7 +81,7 @@ async def create_grant(
     workspace_id: UUID,
     user_id: UUID,
     body: WorkspaceRoleGrantIn,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceRoleGrantOut:
     await require_permission(
@@ -132,7 +132,7 @@ async def delete_grant(
     workspace_id: UUID,
     user_id: UUID,
     grant_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await require_permission(
