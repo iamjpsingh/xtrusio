@@ -1,24 +1,44 @@
 name: xtrusio
 
-# Postgres + Auth + Realtime are provided by managed Supabase (project URL in
-# .env). This file owns only the local infra that isn't part of Supabase —
-# currently just Valkey for caches/queues.
+# One Compose project ("xtrusio") owns every piece of LOCAL infra this repo
+# needs, so it all shows up under a single group in Docker Desktop.
 #
-# Networking: no host ports are published. Reach services from the host via
-# OrbStack DNS — `xtrusio-valkey.orb.local:6379` resolves to the container's
-# internal port. This guarantees zero conflict with other local Docker stacks.
-# (Docker Desktop users without DNS would need to add a `ports:` mapping.)
+# Postgres + Auth + Realtime normally come from managed Supabase (project URL in
+# .env), so the only ALWAYS-ON service here is Valkey (cache / rate-limit / queue).
+# A throwaway local Postgres lives behind the opt-in `local` PROFILE for
+# contributors who can't / won't provision a managed Supabase project — the
+# default dev runtime stays managed Supabase (docs/superpowers/ENGINEERING_PRINCIPLES.md §8a).
+#
+#   make valkey-up                          # default services only (Valkey)
+#   make dev-local                          # + the `local` profile (postgres-local)
+#   docker compose up -d                    # = Valkey only (profiles inactive)
+#   docker compose --profile local up -d    # = Valkey + postgres-local
+#
+# Host ports: Valkey 127.0.0.1:63792, postgres-local 127.0.0.1:5433. All ports
+# are published (no engine-specific DNS), so this works on any Docker engine —
+# Docker Desktop, plain dockerd, etc.
 
 networks:
   xtrusio-net:
     name: xtrusio-net
     driver: bridge
 
+volumes:
+  xtrusio-valkey-data:
+    name: xtrusio-valkey-data
+  xtrusio-postgres-local-data:
+    name: xtrusio-postgres-local-data
+
 services:
+  # --- always-on -----------------------------------------------------------
   valkey:
     container_name: xtrusio-valkey
     image: valkey/valkey:8
     restart: unless-stopped
+    # Published on the host loopback only (not 0.0.0.0) so Valkey is never
+    # exposed to the LAN. Host side 63792 -> container 6379.
+    ports:
+      - "127.0.0.1:63792:6379"
     networks:
       - xtrusio-net
     command: ["valkey-server", "--save", "60", "1", "--appendonly", "yes"]
@@ -33,6 +53,39 @@ services:
       com.xtrusio.stack: "true"
       com.xtrusio.role: "cache"
 
-volumes:
-  xtrusio-valkey-data:
-    name: xtrusio-valkey-data
+  # --- opt-in: `local` profile (a throwaway Postgres) ----------------------
+  # NOT part of `make dev`. The default dev runtime is managed Supabase; this is
+  # a convenience for contributors without a Supabase project. It gives the
+  # extensions the schema needs (pgcrypto, citext, vector) + a minimal
+  # `auth.users` stub, enough to run `make migrate` and the Supabase-free test
+  # subset (`uv run pytest apps/api/tests -m "not requires_supabase"`). It does
+  # NOT provide GoTrue (`auth`), real JWT/JWKS, or Realtime. Point DATABASE_URL
+  # at it: postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/postgres
+  postgres-local:
+    profiles: ["local"]
+    container_name: xtrusio-postgres-local
+    # pgvector image == postgres:16 + the `vector` extension migration 0000 needs.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    # 5433 on the host to avoid clashing with any host-local Postgres on 5432.
+    ports:
+      - "127.0.0.1:5433:5432"
+    networks:
+      - xtrusio-net
+    volumes:
+      - xtrusio-postgres-local-data:/var/lib/postgresql/data
+      # Run once on first init: create extensions + the auth.users stub so
+      # migrations targeting auth.users(id) resolve.
+      - ./.github/ci/ephemeral-db-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      com.xtrusio.stack: "true"
+      com.xtrusio.role: "db-local"
