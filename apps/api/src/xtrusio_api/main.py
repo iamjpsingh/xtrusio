@@ -202,6 +202,12 @@ app.add_middleware(SlowAPIMiddleware)
 for _probe in (health_routes.live, health_routes.ready, health_routes.health):
     limiter.exempt(_probe)  # type: ignore[no-untyped-call]
 
+# Exempt the GoTrue auth-event webhook ingest from the catch-all: it's called by
+# Supabase (single egress IP, tokenless → IP-keyed bucket), and a busy project's
+# login/token-refresh volume could otherwise trip the 60/min default limit. The
+# endpoint has its own shared-secret gate (AUTH_WEBHOOK_SECRET).
+limiter.exempt(internal_auth_events_routes.ingest_auth_event)  # type: ignore[no-untyped-call]
+
 
 # PAR-B M13: global exception handlers — every error response carries the
 # request_id so a user-reported error can be traced in logs without
