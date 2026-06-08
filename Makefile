@@ -52,7 +52,7 @@ valkey-up:
 	@echo "Valkey ready (host: 127.0.0.1:63792)."
 
 valkey-down:
-	docker compose down
+	docker compose rm -sf valkey
 
 db-up: valkey-up
 	@echo ""
@@ -70,16 +70,16 @@ dev-local:
 	@echo "Starting OPT-IN local Postgres (pgvector) on host port 5433..."
 	@echo "DEFAULT dev runtime is managed Supabase — this is a convenience for"
 	@echo "contributors without a Supabase project. See ENGINEERING_PRINCIPLES §8a."
-	docker compose -f docker-compose.local.yml up -d postgres-local
+	docker compose --profile local up -d postgres-local
 	@echo "Waiting for xtrusio-postgres-local to be healthy..."
 	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-postgres-local 2>/dev/null | grep -q healthy; do sleep 1; done
 	@echo ""
 	@echo "Local Postgres ready. Point DATABASE_URL at it, then 'make migrate':"
-	@echo "  DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/postgres"
+	@echo "  DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/postgres"
 	@echo "Supabase-free tests:  uv run pytest apps/api/tests -m 'not requires_supabase'"
 
 dev-local-down:
-	docker compose -f docker-compose.local.yml down
+	docker compose --profile local rm -sf postgres-local
 
 api:
 	@if [ -z "$(API_HOST)" ] || [ -z "$(API_PORT)" ]; then \
