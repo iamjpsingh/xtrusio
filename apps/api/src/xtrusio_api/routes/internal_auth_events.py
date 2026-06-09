@@ -54,6 +54,12 @@ router = APIRouter(prefix="/api/internal/auth-events", tags=["internal-auth-even
 
 _AUDIT_TABLE = "audit_log_entries"
 
+# GoTrue actions we deliberately DROP rather than record — pure background noise
+# that would drown the activity feed. ``token_refreshed`` fires on every silent
+# session refresh (~hourly per active user), so a handful of active users would
+# bury every meaningful auth event (login/logout/recovery) under refresh rows.
+_NOISE_ACTIONS = frozenset({"token_refreshed"})
+
 
 class _AuthRecord(BaseModel):
     # The auth.audit_log_entries row Supabase sends as the webhook ``record``.
@@ -110,6 +116,10 @@ async def ingest_auth_event(
         # action). Treat it like the other ignore cases — log + 200, never a
         # retry-triggering non-2xx — so a GoTrue schema change can't retry-loop.
         _log.warning("auth_event_missing_action")
+        return {"status": "ignored"}
+
+    # Drop background-noise actions (e.g. token_refreshed) — 200, not written.
+    if gotrue_action in _NOISE_ACTIONS:
         return {"status": "ignored"}
 
     actor_id = _coerce_uuid(payload.get("actor_id"))

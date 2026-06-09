@@ -186,6 +186,21 @@ async def test_missing_action_is_ignored(http_client: AsyncClient) -> None:
     assert res.json()["status"] == "ignored"
 
 
+async def test_token_refreshed_is_dropped_as_noise(
+    http_client: AsyncClient, auth_user: UUID
+) -> None:
+    # token_refreshed is background noise (fires ~hourly per active session) →
+    # ignored (200), never written, so it can't drown the feed.
+    res = await http_client.post(
+        "/api/internal/auth-events",
+        headers=_HDR,
+        json=_insert_body(action="token_refreshed", actor_id=auth_user),
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+    assert await _row_for_action("auth.token_refreshed") is None
+
+
 # --- happy path ------------------------------------------------------------
 
 
