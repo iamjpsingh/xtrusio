@@ -9,6 +9,21 @@ Read top to bottom before doing anything.
 
 ---
 
+## ⏩ RESUME HERE — 2026-06-09 (auth-flow overhaul + workspace member/owner mgmt — #81 MERGED `1fbf3b3`)
+
+Surfaced by the user running the app for the first time as a real CLIENT (workspace owner, not super_admin). **PR #81** (`fix-auth-single-dependency`, squash) merged the whole batch to `main`:
+
+- **One auth dependency** — `get_current_user`/`CurrentUser` DELETED; everything authenticates via `require_authenticated` (JWT + `auth.users`); `require_super_admin(db, user_id)` looks up the role itself. **Root-cause fix:** workspace-owner-facing endpoints used `get_current_user`, which required a `platform_users` row — but a real client is a tenant member with NO `platform_users` row (platform users = super_admin only, #63), so they got `401 user not provisioned` on EVERY workspace endpoint. The P5 tests masked it (fixtures seeded `platform_users` for owners). Platform vs workspace identity is NOT mixed: workspace authn = `require_authenticated`, authz = `require_permission(workspace_id)`.
+- **Blank-page fix** — `route-resolver` returns `{kind:"render"}` for a null `me` (assuming "still loading"); but `me` is also null when the `/me` query ERRORS. AuthGuard now handles the settled-error state: `SessionExpiredError` → loader (redirect imminent); any other `/me` error with a live session → a Retry/Sign-in recovery surface — never the empty authed shell (white page).
+- **Signup/Signin Flow B** (INTENTIONAL non-enumeration reversal — product decision): signup new email → `sign_up` + verification (202); existing email (verified OR unverified, NOT distinguished) → `409 email_exists` ("already has an account → Sign in", no email sent); sign-in maps `email_not_confirmed`→verify+resend and `invalid_credentials`→"Wrong email or password"; password-reset link ONLY from forgot-password.
+- **Invite-to-signup** — invitee must SET A PASSWORD ("Set a password to join") before joining; the magic-link no longer click-to-auto-joins. Backend invite-send + `/api/invites/accept` unchanged.
+- **Member/owner management** — `DELETE /api/workspaces/{wid}/members/{uid}` (gated `workspace.members.manage`; owners protected → `409 cannot_remove_owner`); clear ACCEPTED invites (DELETE → 204, removes the record, NEVER deletes the now-real Supabase user); granting the workspace `owner` role requires being an owner (`403 owner_grant_requires_owner`); revoking an owner grant requires being an owner (`403 permission_denied`) + the ≥1-owner floor is kept (non-owner can't demote an owner; last owner never removable).
+- **Infra:** test purge disables `statement_timeout` so the tenants-cascade can't be killed mid-run (it was silently failing → test data piled up; cleared 249 stray `@example.com` rows). Switched local container runtime to **Docker Desktop** (Valkey at `127.0.0.1:63792`, single-project compose w/ `local` profile). Operator runbook at `docs/DEPLOYMENT.md`; grounding redirect resolver `core/url_resolve.py` (for the future Scan feature).
+
+**🔴 OPERATOR GATE for Flow B:** signup verification emails only arrive if the Supabase project has **Confirm-email ON + working SMTP** (`docs/DEPLOYMENT.md` §4) — otherwise the account is created but no email is sent and the user can't verify/sign-in. **Cosmetic:** the Vite-8/Rolldown `jsx` warning (fix = `@vitejs/plugin-react-oxc`). Verified: ruff + mypy --strict (224); backend signup/workspace/invite tests; web tsc + full vitest. CI paused repo-wide (local gates only).
+
+---
+
 ## ⏩ RESUME HERE — 2026-06-05 (deep auth + UX audit → remediation COMPLETE; #77 auth-event capture was the last item — merged 2026-06-08)
 
 Two deep read-only audits (18 Opus agents, exploitability-verified). Full record + findings table + slice plan: **`docs/superpowers/specs/2026-06-05-auth-security-audit-and-remediation.md`**.
