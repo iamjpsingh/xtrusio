@@ -4,7 +4,7 @@
 
 **Goal:** Land the parked review-fix backlog (HANDOFF item 7) before P4. Adds CI as a merge gate, eliminates unbounded list queries, hardens external-boundary error handling, and tightens startup posture — without touching the P4/P5/P6b scope or the gated enum-column drop.
 
-**Architecture:** One branch, four slices in order: **(A) CI lands** so every later slice is gated → **(B) pagination** brings list endpoints into compliance with principles §3/§9 → **(C) boundary hardening** (JWKS coalescing, typed signup error, fail-fast startup) → **(D) frontend `AuthGuard` cleanup**. One end-of-slice `make check`-equivalent gate by the controller, one Opus code-quality review at the end, one PR. P4 resumes from a fully-green `main`.
+**Architecture:** One branch, four slices in order: **(A) CI lands** so every later slice is gated → **(B) pagination** brings list endpoints into compliance with principles section 3/section 9 → **(C) boundary hardening** (JWKS coalescing, typed signup error, fail-fast startup) → **(D) frontend `AuthGuard` cleanup**. One end-of-slice `make check`-equivalent gate by the controller, one Opus code-quality review at the end, one PR. P4 resumes from a fully-green `main`.
 
 **Tech Stack:** GitHub Actions, FastAPI/SQLAlchemy, supabase-py 2.10 (gotrue `AuthApiError` class hierarchy), pydantic v2, pytest-asyncio, ruff/mypy --strict, React 19 + TanStack Query.
 
@@ -23,7 +23,7 @@
 
 ## Decisions (locked 2026-05-20)
 
-1. **CI test DB:** dedicated managed Supabase project ("xtrusio-ci"), separate from dev/prod. GitHub Actions `concurrency: group=ci-test-db, cancel-in-progress=false` so only one job at a time touches the DB. Tests already namespace data via `@example.com` and use the session-scoped `_cleanup` fixture — that's the "ephemeral" isolation mechanism. **Why this is not literal per-run schema:** Supabase's `auth` schema is project-global; our migrations and tests insert directly into `auth.users`, so a per-run application-schema would still share `auth.users` and gain nothing. A dedicated CI project + `_cleanup` is the cleanest honoring of the spirit (ephemeral, isolated, on managed Supabase). Principles §8 will be updated to permit "managed-Supabase test project OR Postgres test container" so this is in spec, not in violation.
+1. **CI test DB:** dedicated managed Supabase project ("xtrusio-ci"), separate from dev/prod. GitHub Actions `concurrency: group=ci-test-db, cancel-in-progress=false` so only one job at a time touches the DB. Tests already namespace data via `@example.com` and use the session-scoped `_cleanup` fixture — that's the "ephemeral" isolation mechanism. **Why this is not literal per-run schema:** Supabase's `auth` schema is project-global; our migrations and tests insert directly into `auth.users`, so a per-run application-schema would still share `auth.users` and gain nothing. A dedicated CI project + `_cleanup` is the cleanest honoring of the spirit (ephemeral, isolated, on managed Supabase). Principles section 8 will be updated to permit "managed-Supabase test project OR Postgres test container" so this is in spec, not in violation.
 
 2. **Startup reconcile:** fail-fast by default; opt-in `STARTUP_RECONCILE_TOLERANT=1` env flag restores current swallow-and-continue (local dev only).
 
@@ -59,7 +59,7 @@
 | `apps/api/src/xtrusio_api/core/config.py` | `startup_reconcile_tolerant: bool = Field(False, alias="STARTUP_RECONCILE_TOLERANT")` |
 | `.env.example` | document `STARTUP_RECONCILE_TOLERANT` (default `false`) |
 | `apps/web/src/components/auth-guard.tsx:14-20` | drop duplicate `staleTime` (global already sets 30_000) |
-| `docs/superpowers/ENGINEERING_PRINCIPLES.md:111` | rewrite §8 test-container clause to allow managed-Supabase test project |
+| `docs/superpowers/ENGINEERING_PRINCIPLES.md:111` | rewrite section 8 test-container clause to allow managed-Supabase test project |
 | `apps/api/tests/routes/test_platform_invites.py`, `test_tenant_invites.py`, `test_tenants.py` | new pagination tests |
 | `apps/web/src/components/auth-guard.test.tsx` | sanity test that AuthGuard inherits global `staleTime` |
 
@@ -75,12 +75,12 @@
 
 Goal: every later slice is automatically gated. CI must reproduce `make check` + `make test` against an isolated managed Supabase project.
 
-### Task A1: Principles §8 amendment
+### Task A1: Principles section 8 amendment
 
 **Files:**
 - Modify: `docs/superpowers/ENGINEERING_PRINCIPLES.md:111`
 
-- [ ] **Step 1: Rewrite the §8 test-container clause**
+- [ ] **Step 1: Rewrite the section 8 test-container clause**
 
 Replace line 111:
 
@@ -98,7 +98,7 @@ with:
 
 ```bash
 git add docs/superpowers/ENGINEERING_PRINCIPLES.md
-git commit -m "docs(principles): §8 permit managed-Supabase test project alongside test containers"
+git commit -m "docs(principles): section 8 permit managed-Supabase test project alongside test containers"
 ```
 
 ### Task A2: CI workflow
@@ -148,10 +148,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ban .js/.jsx/.mjs/.cjs in frontend paths (§2.0)
+      - name: Ban .js/.jsx/.mjs/.cjs in frontend paths (section 2.0)
         run: |
           if git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs' | grep -q .; then
-            echo "::error::Frontend path contains a .js/.jsx/.mjs/.cjs file. See ENGINEERING_PRINCIPLES.md §2.0."
+            echo "::error::Frontend path contains a .js/.jsx/.mjs/.cjs file. See ENGINEERING_PRINCIPLES.md section 2.0."
             git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs'
             exit 1
           fi
@@ -243,7 +243,7 @@ Run: `gh pr create --draft` and watch `gh pr checks <n>`. If secrets are missing
 
 ## Slice B — Pagination & bounded queries
 
-Goal: zero unbounded list queries (principles §3 line 88, §9 line 121). Cursor-based across the board for forward-only consistency with `ORDER BY created_at DESC`.
+Goal: zero unbounded list queries (principles section 3 line 88, section 9 line 121). Cursor-based across the board for forward-only consistency with `ORDER BY created_at DESC`.
 
 ### Task B1: Cursor primitive
 
@@ -792,7 +792,7 @@ git commit -m "feat(api): cursor pagination on tenant-invites list"
 
 This is a structural test — it walks the FastAPI route table and asserts that any
 handler returning a *Page model has a `limit` query param with `le=MAX_LIMIT`.
-Prevents §3/§9 regressions where a future endpoint forgets pagination.
+Prevents section 3/section 9 regressions where a future endpoint forgets pagination.
 """
 
 from __future__ import annotations
@@ -837,7 +837,7 @@ If the metadata-walking introspection turns out to be fragile across FastAPI ver
 
 ```bash
 git add apps/api/tests/integration/test_no_unbounded_lists.py
-git commit -m "test(api): §3/§9 invariant — every list endpoint caps `limit` at MAX_LIMIT"
+git commit -m "test(api): section 3/section 9 invariant — every list endpoint caps `limit` at MAX_LIMIT"
 ```
 
 ### Slice B end-of-slice gate (controller-run)
@@ -1187,7 +1187,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 ```
 
-Why `except Exception` is acceptable here (vs §5 "no bare except"): reconcile composes many SQL operations whose specific failure modes (`OperationalError`, `IntegrityError`, transient network failures inside SQLAlchemy) aren't a closed set we want to enumerate at boot. The principle's intent is "don't silently swallow"; this version logs *and* re-raises by default, satisfying the spirit. The escape hatch is opt-in and named.
+Why `except Exception` is acceptable here (vs section 5 "no bare except"): reconcile composes many SQL operations whose specific failure modes (`OperationalError`, `IntegrityError`, transient network failures inside SQLAlchemy) aren't a closed set we want to enumerate at boot. The principle's intent is "don't silently swallow"; this version logs *and* re-raises by default, satisfying the spirit. The escape hatch is opt-in and named.
 
 - [ ] **Step 5: Commit**
 
@@ -1268,7 +1268,7 @@ Resolve any blocking findings; non-blocking nits land in a follow-up.
 
 ### Task W3: PR body + open + merge
 
-- [ ] **Step 1:** Write `docs/superpowers/PR-rbac-p3-5-body.md` summarising the four slices, the principle §8 amendment, and explicit "not done" callouts (enum-column drop deferred per HANDOFF item 6).
+- [ ] **Step 1:** Write `docs/superpowers/PR-rbac-p3-5-body.md` summarising the four slices, the principle section 8 amendment, and explicit "not done" callouts (enum-column drop deferred per HANDOFF item 6).
 
 - [ ] **Step 2:** `gh pr create --base main --head rbac-p3-5-review-fix-backlog --title "P3.5 — review-fix backlog (CI, pagination, boundary hardening, AuthGuard)" --body-file docs/superpowers/PR-rbac-p3-5-body.md`
 
@@ -1285,7 +1285,7 @@ Resolve any blocking findings; non-blocking nits land in a follow-up.
 1. **Spec coverage:** every review finding (1–6) maps to a task — A2/A3 (CI), B2/B3/B4/B5 (pagination + invariant), C2 (signup string match), C3 (lifespan bare-except), C1 (JWKS lock), D1 (AuthGuard duplicate). ✅
 2. **Placeholder scan:** no "TBD", "implement later", "similar to Task N"; every code step has the actual code. ✅
 3. **Type consistency:** `MAX_LIMIT` / `DEFAULT_LIMIT` / `CursorParams` / `encode_cursor` / `decode_cursor` named identically in Tasks B1 through B5. `EmailTakenError` / `AuthApiError` consistent in C2. ✅
-4. **HANDOFF respect:** enum-column drop not touched; reconcile module not refactored; principles §8 amendment is in scope (line 111 only). ✅
+4. **HANDOFF respect:** enum-column drop not touched; reconcile module not refactored; principles section 8 amendment is in scope (line 111 only). ✅
 5. **User memory respect:** `feedback_no_claude_coauthor` (commits clean), `feedback_no_hardcoded_config` (new flag goes through Settings), `feedback_test_data_hygiene` (all test rows `@example.com`, never creates super_admin), `feedback_lean_review_workflow` (one full-suite per slice, controller-run, not subagent). ✅
 
 ---

@@ -20,7 +20,7 @@ Surfaced by the user running the app for the first time as a real CLIENT (worksp
 - **Member/owner management** — `DELETE /api/workspaces/{wid}/members/{uid}` (gated `workspace.members.manage`; owners protected → `409 cannot_remove_owner`); clear ACCEPTED invites (DELETE → 204, removes the record, NEVER deletes the now-real Supabase user); granting the workspace `owner` role requires being an owner (`403 owner_grant_requires_owner`); revoking an owner grant requires being an owner (`403 permission_denied`) + the ≥1-owner floor is kept (non-owner can't demote an owner; last owner never removable).
 - **Infra:** test purge disables `statement_timeout` so the tenants-cascade can't be killed mid-run (it was silently failing → test data piled up; cleared 249 stray `@example.com` rows). Switched local container runtime to **Docker Desktop** (Valkey at `127.0.0.1:63792`, single-project compose w/ `local` profile). Operator runbook at `docs/DEPLOYMENT.md`; grounding redirect resolver `core/url_resolve.py` (for the future Scan feature).
 
-**🔴 OPERATOR GATE for Flow B:** signup verification emails only arrive if the Supabase project has **Confirm-email ON + working SMTP** (`docs/DEPLOYMENT.md` §4) — otherwise the account is created but no email is sent and the user can't verify/sign-in. **Cosmetic:** the Vite-8/Rolldown `jsx` warning (fix = `@vitejs/plugin-react-oxc`). Verified: ruff + mypy --strict (224); backend signup/workspace/invite tests; web tsc + full vitest. CI paused repo-wide (local gates only).
+**🔴 OPERATOR GATE for Flow B:** signup verification emails only arrive if the Supabase project has **Confirm-email ON + working SMTP** (`docs/DEPLOYMENT.md` section 4) — otherwise the account is created but no email is sent and the user can't verify/sign-in. **Cosmetic:** the Vite-8/Rolldown `jsx` warning (fix = `@vitejs/plugin-react-oxc`). Verified: ruff + mypy --strict (224); backend signup/workspace/invite tests; web tsc + full vitest. CI paused repo-wide (local gates only).
 
 ---
 
@@ -78,7 +78,7 @@ Two deep read-only audits (18 Opus agents, exploitability-verified). Full record
 2. Set `RECONCILE_DATABASE_URL=postgresql+asyncpg://xtrusio_reconciler:<PW>@db.<ref>.supabase.co:5432/postgres`.
 3. **Smoke-test the production path live** — boot with `RECONCILE_DATABASE_URL` set and confirm the reconcile completes (reads non-zero rows, writes succeed). This path **cannot** be validated in dev (there reconcile runs as `postgres`/owner and bypasses RLS by ownership; the `TO xtrusio_reconciler` policies are inert). Until smoke-tested, leave `RECONCILE_DATABASE_URL` unset (the dev fallback is safe and correct).
 
-**Still DEFERRED (the one non-shipped audit sub-item): §6.2.3 `granted_by NOT NULL` + system sentinel** — its FK target is the Supabase-owned `auth.users`, and onboarding + invite-accept self-grant with `granted_by=NULL` relying on the short-circuit; dropping it without rerouting those request-path flows would break both. Needs a live DB to validate. Tracked as a follow-up, not a regression.
+**Still DEFERRED (the one non-shipped audit sub-item): section 6.2.3 `granted_by NOT NULL` + system sentinel** — its FK target is the Supabase-owned `auth.users`, and onboarding + invite-accept self-grant with `granted_by=NULL` relying on the short-circuit; dropping it without rerouting those request-path flows would break both. Needs a live DB to validate. Tracked as a follow-up, not a regression.
 
 ---
 
@@ -123,7 +123,7 @@ Spec: `docs/superpowers/specs/2026-06-01-ui-states-layer-polish-design.md`. (PAR
 | P3b (#5) | `core/permissions.py` (`require_permission` calling the resolvers); all 10 routes + tenant-invite service authz converted enum→resolver; `/me` additive effective-perm keys |
 | P3c (#6) | `0008`: helpers → **pure resolver** (enum disjunct retired, reversible); pre-RBAC rls canaries reframed to grants. **Cutover complete.** |
 | P6a (#2) | Frontend: pathless `_app` shell (shell-bleed fixed), shared `AuthLayout`, auth-page polish, public `/api/signup-status` rename |
-| P3.5 (#8) | Review-fix backlog: CI workflow (`.github/workflows/ci.yml`), cursor pagination on 3 list endpoints + structural invariant test, JWKS coalescing lock, signup duplicate-email by `AuthApiError` class, lifespan fail-fast (`STARTUP_RECONCILE_TOLERANT` escape hatch), AuthGuard duplicate-staleTime cleanup. Principles §8 amended to permit managed-Supabase test project. |
+| P3.5 (#8) | Review-fix backlog: CI workflow (`.github/workflows/ci.yml`), cursor pagination on 3 list endpoints + structural invariant test, JWKS coalescing lock, signup duplicate-email by `AuthApiError` class, lifespan fail-fast (`STARTUP_RECONCILE_TOLERANT` escape hatch), AuthGuard duplicate-staleTime cleanup. Principles section 8 amended to permit managed-Supabase test project. |
 | type-the-tests (#10) | Annotated 10 P3a/P3b-era test files for `mypy --strict`; project-wide `ruff format` cleanup. `make check` fully green on `main`. |
 | P4 (#11) | **Platform RBAC admin (API + governance).** Migration `0009` adds DB triggers (privilege-escalation, immutable platform-system-roles); `core/audit.py` writes one row per RBAC mutation. `GET/POST/PATCH/DELETE /api/platform/roles[/{id}]`. `GET/POST/DELETE /api/platform/users/{user_id}/roles[/{grant_id}]`. `GET /api/platform/audit-log`. Service-layer enforcement mirrors DB triggers for friendly 403/409 errors. |
 | P5 (#13) | **Workspace RBAC admin (API only).** Per-workspace mirror of P4 surface, scope-isolated to one `workspace_id`. `GET/POST/PATCH/DELETE /api/workspaces/{wid}/roles[/{id}]`. `GET/POST/DELETE /api/workspaces/{wid}/members/{uid}/roles[/{grant_id}]`. `GET /api/workspaces/{wid}/audit-log`. Service-layer ≥1-active-owner floor + per-workspace privilege-escalation pre-check + workspace-system-role immutability. |
@@ -163,7 +163,7 @@ The 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remedi
 
    **PAR-F backend follow-up (low priority, not blocking):** `rbac_audit_log` `before`/`after` should get a typed Pydantic snapshot model so the `audit-log.ts` `Record<string,unknown>|null` re-export override (working around FastAPI's empty-object schema for `dict[str, Any]|None`) can go away. The `frontend-coverage` job's `continue-on-error` was removed (enforcing at 60%); the e2e + secret-gated CI jobs no-op until GitHub Actions secrets are added.
 
-**Locked decisions (PAR spec §14):** Supavisor in prod / direct in dev; Valkey rate-limit backend in BOTH dev and prod (no in-memory fallback); 30s perm-cache TTL; brief-lock migration 0010 backfill (pre-launch DB); full OpenAPI codegen replace; Playwright on every push; 70/60 coverage with monthly ratchet.
+**Locked decisions (PAR spec section 14):** Supavisor in prod / direct in dev; Valkey rate-limit backend in BOTH dev and prod (no in-memory fallback); 30s perm-cache TTL; brief-lock migration 0010 backfill (pre-launch DB); full OpenAPI codegen replace; Playwright on every push; 70/60 coverage with monthly ratchet.
 
 **🔒 LATE cleanup (unchanged from 2026-05-23):** drop `platform_users.role` + `tenant_memberships.role` enum columns + the `platform_role`/`tenant_role` enum types via a new migration — only after every backend enum read is gone and `0008` is no longer reversible.
 
@@ -197,7 +197,7 @@ All feature/polish/PAR branches deleted post-merge. Two branches remain on origi
 
 **RBAC specs:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (RBAC engine), `docs/superpowers/specs/2026-05-22-rbac-p6c-admin-uis-design.md` (P6c + P6d scope split).
 
-**PAR remediation spec (2026-05-26):** `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` — 60-finding audit response in 6 phases (A–F). §14 lists the locked decisions; §11 the sequencing; §12 the per-phase acceptance gates. PAR-A (#25) + PAR-B (#26) merged; PAR-C is the next dispatch.
+**PAR remediation spec (2026-05-26):** `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` — 60-finding audit response in 6 phases (A–F). section 14 lists the locked decisions; section 11 the sequencing; section 12 the per-phase acceptance gates. PAR-A (#25) + PAR-B (#26) merged; PAR-C is the next dispatch.
 
 **PAR PR bodies:** `docs/superpowers/PR-par-a-body.md`, `PR-par-b-body.md`, `PR-par-c-body.md`, `PR-par-d-slice-{1,2a,2b-i,2b-ii}-body.md`, `PR-par-e-body.md`, `PR-par-f-body.md`.
 

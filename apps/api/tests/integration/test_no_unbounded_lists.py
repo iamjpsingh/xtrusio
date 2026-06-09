@@ -8,7 +8,7 @@ Structural test — walks the FastAPI route table and asserts:
     handler typed ``-> list[FooOut]`` slipped through unbounded. Such returns
     must either page (a ``*Page`` model) or be explicitly allowlisted as a
     finite, bounded-domain list.
-Prevents §3/§9 regressions where a future endpoint forgets pagination.
+Prevents section 3/section 9 regressions where a future endpoint forgets pagination.
 """
 
 from __future__ import annotations

@@ -10,17 +10,17 @@ Migration `0007_rls_permission_engine` (single Alembic head, fully reversible �
 - Reversible `downgrade()`: restore-`0006`-policies → restore-pure-enum-`0003`-helper-bodies → drop-resolvers.
 - RLS test matrix in `tests/rls/test_permission_engine_rls.py` (resolver correctness both scopes, cross-scope isolation, genuinely-deprecated-present permission, delegation behaviour-preservation) + superseded the now-stale P1 `test_interim_rls_policies_present` with a forward `test_rbac_table_perm_aware_policies_present`.
 
-Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §5 (corrected — see below). Plan: `docs/superpowers/plans/2026-05-17-rbac-p2-rls-permission-engine.md`.
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 5 (corrected — see below). Plan: `docs/superpowers/plans/2026-05-17-rbac-p2-rls-permission-engine.md`.
 
 Tasks 1, 2 (+ a mid-flight spec correction), 3, 3b, 4 — each via TDD with two-stage review + final whole-branch review → **READY TO MERGE** (no Critical/Important findings).
 
-## ⚠️ Spec §5 correction landed in this PR (important)
+## ⚠️ Spec section 5 correction landed in this PR (important)
 
-Spec §5 originally prescribed *pure* delegation (`is_super_admin → has_platform_perm(...)` alone). The review/gate process **proved that wrong**: P1's backfill is a one-time snapshot; enum-era onboarding/invite code keeps creating `tenant_memberships`/`platform_users` rows with no `user_roles` grant until P3, so pure delegation **locks newly-onboarded owners out** (pre-RBAC `tests/rls/` passes at `0006`, fails under pure-`0007`). Corrected to the transition-safe `resolver OR 0003-enum` superset (contradiction with §7.5 "nothing breaks mid-flight" resolved). Spec §5 + HANDOFF document this.
+Spec section 5 originally prescribed *pure* delegation (`is_super_admin → has_platform_perm(...)` alone). The review/gate process **proved that wrong**: P1's backfill is a one-time snapshot; enum-era onboarding/invite code keeps creating `tenant_memberships`/`platform_users` rows with no `user_roles` grant until P3, so pure delegation **locks newly-onboarded owners out** (pre-RBAC `tests/rls/` passes at `0006`, fails under pure-`0007`). Corrected to the transition-safe `resolver OR 0003-enum` superset (contradiction with section 7.5 "nothing breaks mid-flight" resolved). Spec section 5 + HANDOFF document this.
 
 ## 🔒 P2→P3 sequencing constraint (must-read for whoever does P3)
 
-The legacy disjunct is **load-bearing** for the P2→P3 window. **P3 must (a) make `user_roles` the write path (onboarding/invite-acceptance write `user_roles`), (b) fully reconcile existing `tenant_memberships`/`platform_users` into `user_roles`, (c) rewrite these 3 helper bodies to pure-resolver, and only THEN drop the enum columns.** Dropping enum columns before retiring the disjunct breaks every enum-only principal. Recorded in spec §5 + HANDOFF.
+The legacy disjunct is **load-bearing** for the P2→P3 window. **P3 must (a) make `user_roles` the write path (onboarding/invite-acceptance write `user_roles`), (b) fully reconcile existing `tenant_memberships`/`platform_users` into `user_roles`, (c) rewrite these 3 helper bodies to pure-resolver, and only THEN drop the enum columns.** Dropping enum columns before retiring the disjunct breaks every enum-only principal. Recorded in spec section 5 + HANDOFF.
 
 ## Test status
 

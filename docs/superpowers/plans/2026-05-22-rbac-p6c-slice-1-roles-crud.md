@@ -2652,7 +2652,7 @@ git push
 
 ## Self-review checklist (run before declaring Slice 1 done)
 
-- [ ] Every spec §3 row marked P6c is implemented or explicitly out-of-scope-for-Slice-2/3
+- [ ] Every spec section 3 row marked P6c is implemented or explicitly out-of-scope-for-Slice-2/3
 - [ ] No `TBD` / `TODO` markers in shipped code or tests
 - [ ] Every test file has at least one assertion that exercises an error path (not only happy paths)
 - [ ] `qk.*` is the only source of TanStack Query keys in Slice 1 code (no inline `["platform","roles"]`)

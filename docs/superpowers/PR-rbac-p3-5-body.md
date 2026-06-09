@@ -8,10 +8,10 @@ Four slices, eleven commits, all on `rbac-p3-5-review-fix-backlog` off `main` at
 
 ### Slice A — CI lands (merge gate)
 
-- `.github/workflows/ci.yml` + `README.md` — runs `make install / migrate / test-clean / lint / typecheck / test`, enforces the `.js`/`.jsx`/`.mjs`/`.cjs` ban (§2.0), `concurrency: ci-test-db` so a single shared CI Supabase project is touched by one job at a time.
-- `docs/superpowers/ENGINEERING_PRINCIPLES.md` §8 amended: tests run against EITHER a Postgres test container OR a dedicated managed-Supabase test project (`xtrusio-ci`). Same change drops the `(when CI lands)` caveat at line 35.
+- `.github/workflows/ci.yml` + `README.md` — runs `make install / migrate / test-clean / lint / typecheck / test`, enforces the `.js`/`.jsx`/`.mjs`/`.cjs` ban (section 2.0), `concurrency: ci-test-db` so a single shared CI Supabase project is touched by one job at a time.
+- `docs/superpowers/ENGINEERING_PRINCIPLES.md` section 8 amended: tests run against EITHER a Postgres test container OR a dedicated managed-Supabase test project (`xtrusio-ci`). Same change drops the `(when CI lands)` caveat at line 35.
 
-### Slice B — Pagination & bounded queries (§3 line 88, §9 line 121)
+### Slice B — Pagination & bounded queries (section 3 line 88, section 9 line 121)
 
 - `core/pagination.py` — opaque base64url cursor primitive (`CursorParams`, `encode_cursor`, `decode_cursor`, `DEFAULT_LIMIT=50`, `MAX_LIMIT=200`). Cursors encode `(created_at, id)`; tampering raises `ValueError` so routes can return 400.
 - `GET /api/tenants` — was unbounded, now cursor-paginated with `TenantsPage` envelope.
@@ -19,7 +19,7 @@ Four slices, eleven commits, all on `rbac-p3-5-review-fix-backlog` off `main` at
 - `GET /api/tenants/{tenant_id}/invites` — same.
 - `tests/integration/test_no_unbounded_lists.py` — structural invariant: walks `app.routes`, asserts every `*Page`-returning GET has a `limit` query param with `le=MAX_LIMIT`. Sanity-verified by deliberately breaking one endpoint and confirming the test correctly named the offender.
 
-### Slice C — Boundary hardening (§5)
+### Slice C — Boundary hardening (section 5)
 
 - **JWKS coalescing.** `core/auth.py` splits `_fetch_jwks` into a cached wrapper + `_fetch_jwks_uncached`, with a per-URL `asyncio.Lock`. N concurrent cold-start callers now produce 1 underlying httpx fetch (test proves it with a slow stub + `asyncio.gather` of 10 callers; `calls == 1`).
 - **Signup duplicate-email by class, not string match.** `services/signup.py` catches `gotrue.errors.AuthApiError` and checks `.code in {email_exists, user_already_exists}`. Drops the brittle `"already" in str(e)` heuristic and the `Any`-typed `_call`. The route-level `test_signup_email_taken_returns_409` updated to raise a real `AuthApiError`; new service-level tests cover both the email-taken mapping and the pass-through for unrelated codes.
@@ -52,7 +52,7 @@ All five point at a dedicated `xtrusio-ci` managed Supabase project (separate fr
 ## What's intentionally NOT done
 
 - **Enum column drop on `platform_users.role` / `tenant_memberships.role`.** HANDOFF item 6: deferred until P6b removes frontend enum consumption AND every backend enum read is gone. `0008` downgrade still requires those columns to exist.
-- **Switch all tests to literal Postgres test containers.** §8 was amended to permit managed-Supabase test projects instead — keeps the "no local DB stack" stance intact.
+- **Switch all tests to literal Postgres test containers.** section 8 was amended to permit managed-Supabase test projects instead — keeps the "no local DB stack" stance intact.
 - **Fix pre-existing test-file typecheck debt.** Discovered during this slice: `uv run mypy apps/api` reports ~49 `no-untyped-def` errors in pre-existing test files (test_onboarding, test_me, test_signup, test_platform_settings, test_invite_acceptance, test_tenants, test_platform_invites, test_tenant_invites, etc.) — last touched during P3a/P3b. P3.5 contributes zero new mypy errors; every new source file and new test function in this PR is fully typed. Proposed follow-up: a small "type the tests" phase before P4, or absorb into P4 prep.
 - **`gotrue` → `supabase_auth` migration.** supabase-py 2.x emits a `DeprecationWarning` saying `gotrue` is being replaced by `supabase_auth`. Worth a follow-up phase to migrate imports cleanly; not in P3.5 scope.
 

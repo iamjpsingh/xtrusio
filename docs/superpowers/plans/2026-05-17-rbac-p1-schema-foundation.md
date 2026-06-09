@@ -4,11 +4,11 @@
 
 **Goal:** Land the data-driven RBAC schema (tables, models, code-defined permission catalog, system-role seeds, enum→role backfill) as a single reversible Alembic migration `0006` plus an idempotent reconciler, with zero behaviour change for existing code.
 
-**Architecture:** Migration `0006` (pure raw SQL, the codebase convention — see every existing migration) creates the five RBAC tables, grants, triggers, the single-super_admin DB invariant, seeds **system role rows**, backfills `user_roles` from the existing `platform_users.role` / `tenant_memberships.role` enum rows, and adds nullable `role_id` columns to the invite tables (backfilled, enum kept). The **permission catalog** lives in code (`xtrusio_api.rbac.catalog`); an idempotent **reconciler** (`xtrusio_api.rbac.reconcile`) projects that catalog into the `permissions` table and attaches each system role's `role_permissions`. This split keeps migrations pure-SQL while honouring spec §4 ("reconciler runs on migrate/startup") and §7. The old enum columns on identity/membership tables are NOT dropped here — nothing reads the new model until P3, so existing behaviour is untouched.
+**Architecture:** Migration `0006` (pure raw SQL, the codebase convention — see every existing migration) creates the five RBAC tables, grants, triggers, the single-super_admin DB invariant, seeds **system role rows**, backfills `user_roles` from the existing `platform_users.role` / `tenant_memberships.role` enum rows, and adds nullable `role_id` columns to the invite tables (backfilled, enum kept). The **permission catalog** lives in code (`xtrusio_api.rbac.catalog`); an idempotent **reconciler** (`xtrusio_api.rbac.reconcile`) projects that catalog into the `permissions` table and attaches each system role's `role_permissions`. This split keeps migrations pure-SQL while honouring spec section 4 ("reconciler runs on migrate/startup") and section 7. The old enum columns on identity/membership tables are NOT dropped here — nothing reads the new model until P3, so existing behaviour is untouched.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.x (async, `Mapped`/`mapped_column`), Alembic (raw `op.execute`), asyncpg, Postgres (Supabase managed), pytest + pytest-asyncio, `uv`, `make`.
 
-**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (§2–§7, §10 row P1, §11).
+**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` (section 2–section 7, section 10 row P1, section 11).
 
 ---
 
@@ -60,7 +60,7 @@
 ## Permission catalog for P1 (the canonical seed set)
 
 These are the keys the catalog ships with in P1. Phases P2–P6 add more as features land. Format
-`scope.resource.action`. `category` drives the future role-builder UI grouping (spec §4).
+`scope.resource.action`. `category` drives the future role-builder UI grouping (spec section 4).
 
 | scope | key | category | description |
 |---|---|---|---|
@@ -174,7 +174,7 @@ Create `apps/api/src/xtrusio_api/rbac/catalog.py`:
 """Code-defined RBAC permission catalog — the single source of truth.
 
 Developers add `scope.resource.action` keys here as features ship. Roles are
-data; permission primitives are NOT (spec §2.1). The reconciler projects this
+data; permission primitives are NOT (spec section 2.1). The reconciler projects this
 into the `permissions` table; migration `0006` seeds system roles whose
 `role_permissions` are derived from SYSTEM_ROLE_PERMISSIONS.
 """
@@ -544,7 +544,7 @@ Revision ID: 0006
 Revises: 0005
 Create Date: 2026-05-17
 
-Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md (§3, §6, §7).
+Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md (section 3, section 6, section 7).
 Pure raw SQL (codebase convention). Permission catalog rows + system-role
 role_permissions are projected by the reconciler (xtrusio_api.rbac.reconcile),
 NOT this migration — see plan Architecture note.
@@ -817,7 +817,7 @@ async def test_membership_enum_backfilled_to_user_roles() -> None:
 
 
 async def test_invites_have_role_id_backfilled() -> None:
-    # The platform 'editor' enum is deliberately NOT a system role (spec §2.7/§7),
+    # The platform 'editor' enum is deliberately NOT a system role (spec section 2.7/section 7),
     # so a legacy platform_invites row with role='editor' correctly keeps
     # role_id NULL — exclude it from the orphan assertion. Every tenant-invite
     # role (admin/editor/read_only) maps to a workspace system role, so the
@@ -895,7 +895,7 @@ In `0006_rbac_foundation.py`, replace the `# Seeds + backfill:` comment line in 
     # --- backfill user_roles from platform_users.role ---------------------
     # Only super_admin and admin exist as enum values that map to system roles
     # (the legacy 'editor' platform enum has no system role and is intentionally
-    # dropped from the new model — it becomes a custom role later, spec §2.7).
+    # dropped from the new model — it becomes a custom role later, spec section 2.7).
     op.execute(
         """
         INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by)
@@ -1104,7 +1104,7 @@ Create `apps/api/src/xtrusio_api/rbac/reconcile.py`:
 
 - Upserts every CATALOG entry into `permissions` (un-deprecates if it returned).
 - Soft-deprecates any non-catalog `permissions` row (never deletes, never
-  cascades into role_permissions — spec §4).
+  cascades into role_permissions — spec section 4).
 - Ensures every is_system role's role_permissions exactly match
   SYSTEM_ROLE_PERMISSIONS (platform roles + per-workspace roles).
 
@@ -1322,7 +1322,7 @@ git commit -m "feat(rbac): reconcile on startup + make rbac-seed target"
 
 ### Task 7: Make the `test_no_super_admin_creation` guard RBAC-precise
 
-**Context (discovered during execution):** `apps/api/tests/test_no_super_admin_creation.py` enforces a real rule (spec §11: no test may CREATE a super_admin). Its old `_FORBIDDEN` regex flagged any bare `'super_admin'` / `role='super_admin'` string. RBAC introduces `'super_admin'` as a legitimate **role-catalog key** that read-only RBAC tests reference in SQL/assertions (`WHERE key='super_admin'`, `SYSTEM_ROLE_PERMISSIONS["super_admin"]`, `SELECT … WHERE role='super_admin'`). Those are reads, not creation, so the guard now false-fails on `tests/rbac/*`. Keep the rule; make the detector match only **creation** signals.
+**Context (discovered during execution):** `apps/api/tests/test_no_super_admin_creation.py` enforces a real rule (spec section 11: no test may CREATE a super_admin). Its old `_FORBIDDEN` regex flagged any bare `'super_admin'` / `role='super_admin'` string. RBAC introduces `'super_admin'` as a legitimate **role-catalog key** that read-only RBAC tests reference in SQL/assertions (`WHERE key='super_admin'`, `SYSTEM_ROLE_PERMISSIONS["super_admin"]`, `SELECT … WHERE role='super_admin'`). Those are reads, not creation, so the guard now false-fails on `tests/rbac/*`. Keep the rule; make the detector match only **creation** signals.
 
 **Files:**
 - Modify: `apps/api/tests/test_no_super_admin_creation.py`
@@ -1414,23 +1414,23 @@ git commit -m "test(hygiene): make no-super_admin guard match creation only, not
 
 ## Self-Review (completed during planning)
 
-**Spec coverage (P1 row + §3/§4/§6/§7):**
-- §3.2 five RBAC tables → Task 3 (DDL) + Task 2 (ORM).
-- §3.3 system role seeds (platform + per-workspace) → Task 4.
-- §4 code catalog + reconciler + soft-deprecate (`is_deprecated`) → Tasks 1, 5.
-- §6.2 single-super_admin DB invariant → Task 3 (`user_roles_one_super_admin` partial unique index).
-- §7.1 tables + grants to `authenticated` → Task 3.
-- §7.2 seed permissions + system roles + role_permissions → Task 4 (roles) + Task 5 (perms/role_permissions).
-- §7.3 backfill `user_roles` from both enum columns → Task 4.
-- §7.4 invite enum → `role_id` (added + backfilled, enum kept) → Task 4.
-- §7.5 identity/membership enum columns NOT dropped (behaviour unchanged) → respected throughout; explicit in Architecture.
-- §7 reversible `downgrade()` + round-trip test → Tasks 3 & 4 Step 5.
-- §11 lint/type baseline, single Alembic head, test-data hygiene → Conventions block + Task 6.
+**Spec coverage (P1 row + section 3/section 4/section 6/section 7):**
+- section 3.2 five RBAC tables → Task 3 (DDL) + Task 2 (ORM).
+- section 3.3 system role seeds (platform + per-workspace) → Task 4.
+- section 4 code catalog + reconciler + soft-deprecate (`is_deprecated`) → Tasks 1, 5.
+- section 6.2 single-super_admin DB invariant → Task 3 (`user_roles_one_super_admin` partial unique index).
+- section 7.1 tables + grants to `authenticated` → Task 3.
+- section 7.2 seed permissions + system roles + role_permissions → Task 4 (roles) + Task 5 (perms/role_permissions).
+- section 7.3 backfill `user_roles` from both enum columns → Task 4.
+- section 7.4 invite enum → `role_id` (added + backfilled, enum kept) → Task 4.
+- section 7.5 identity/membership enum columns NOT dropped (behaviour unchanged) → respected throughout; explicit in Architecture.
+- section 7 reversible `downgrade()` + round-trip test → Tasks 3 & 4 Step 5.
+- section 11 lint/type baseline, single Alembic head, test-data hygiene → Conventions block + Task 6.
 
-**Out of P1 scope (correctly deferred):** privilege-escalation guard/trigger, immutable-system-role trigger, `has_platform_perm`/`has_workspace_perm`, RLS perm-aware policies, `require_permission()`, `/me`, invite-acceptance code change, dropping enum columns, onboarding seeding new tenants' roles, all UI — these are P2/P3/P6 per spec §10. (The interim `*_authenticated_read` RLS policies in Task 3 are explicitly replaced in P2.)
+**Out of P1 scope (correctly deferred):** privilege-escalation guard/trigger, immutable-system-role trigger, `has_platform_perm`/`has_workspace_perm`, RLS perm-aware policies, `require_permission()`, `/me`, invite-acceptance code change, dropping enum columns, onboarding seeding new tenants' roles, all UI — these are P2/P3/P6 per spec section 10. (The interim `*_authenticated_read` RLS policies in Task 3 are explicitly replaced in P2.)
 
 **Placeholder scan:** none — every code/SQL step is complete and concrete.
 
 **Type/name consistency:** `reconcile_rbac` (not `reconcile_permissions`) used consistently across Tasks 5–6 and tests; catalog symbols `CATALOG`/`SYSTEM_ROLE_PERMISSIONS`/`catalog_keys`/`Permission` consistent Tasks 1/5/6; table/index names (`user_roles_one_super_admin`, `roles_scope_ws_key_uq`) consistent between migration and tests; ORM class names consistent with `models/__init__.py` re-exports.
 
-**Deviation noted for reviewer:** spec §7.2 phrases permission/role_permissions seeding as part of the migration; this plan keeps migrations pure-SQL (codebase convention, all of `0001`–`0005`) and projects the catalog via the reconciler — which spec §4 itself defines as the catalog→`permissions` mechanism running "on migrate/startup". Documented `make migrate && make rbac-seed` sequence + startup hook makes this equivalent and self-healing. Flag in P1 spec-compliance review.
+**Deviation noted for reviewer:** spec section 7.2 phrases permission/role_permissions seeding as part of the migration; this plan keeps migrations pure-SQL (codebase convention, all of `0001`–`0005`) and projects the catalog via the reconciler — which spec section 4 itself defines as the catalog→`permissions` mechanism running "on migrate/startup". Documented `make migrate && make rbac-seed` sequence + startup hook makes this equivalent and self-healing. Flag in P1 spec-compliance review.

@@ -115,7 +115,7 @@ orchestration/
     └── meter.py               # cost calculation per call (~150 LoC)
 ```
 
-Every file targets 200-300 LoC per `ENGINEERING_PRINCIPLES.md` §1. Splits are pre-planned.
+Every file targets 200-300 LoC per `ENGINEERING_PRINCIPLES.md` section 1. Splits are pre-planned.
 
 ### 2.3 Request flow (kicking off a run)
 
@@ -665,17 +665,17 @@ Each step has unit tests with mocked providers and tools. Tests assert: input va
 
 ### 13.5 RLS tests
 
-Per spec #1 §6.4: every new table (`runs`, `run_steps`, `run_events`, `artifacts`, `prompts`, `prompt_versions`, `model_pricing`) has RLS isolation tests.
+Per spec #1 section 6.4: every new table (`runs`, `run_steps`, `run_events`, `artifacts`, `prompts`, `prompt_versions`, `model_pricing`) has RLS isolation tests.
 
 ### 13.6 Live LLM smoke (deferred)
 
-Run on demand locally during development: `make smoke-live` invokes the full `company_research_run` flow against a fixed canary URL with a $0.50 budget cap. Catches provider API breakage, prompt regression, tool reliability. Scheduling this nightly via CI/CD is part of the deferred CI work (see §14).
+Run on demand locally during development: `make smoke-live` invokes the full `company_research_run` flow against a fixed canary URL with a $0.50 budget cap. Catches provider API breakage, prompt regression, tool reliability. Scheduling this nightly via CI/CD is part of the deferred CI work (see section 14).
 
 ---
 
 ## 14. CI additions on top of spec #1 (deferred — see project policy)
 
-**Deferred until local development runs cleanly end-to-end** (project policy 2026-05-08, identical to spec #1 §14). The lint rules and integrity checks below are still implemented as **local commands** (runnable via `make lint` / `make check-prompts` / etc.), they are simply not wired into CI runners until the readiness bar is met.
+**Deferred until local development runs cleanly end-to-end** (project policy 2026-05-08, identical to spec #1 section 14). The lint rules and integrity checks below are still implemented as **local commands** (runnable via `make lint` / `make check-prompts` / etc.), they are simply not wired into CI runners until the readiness bar is met.
 
 Local checks to implement:
 - Static check: every `Step` subclass must define `input_schema`, `output_schema`, `name`. Fail-fast at app startup; lint script wraps it.
@@ -722,7 +722,7 @@ Spec #2 is complete when:
 8. Failed runs are inspectable; the failing step is highlighted with full error context.
 9. RLS test suite covers all new tables.
 10. Nightly live-LLM smoke is green.
-11. All files are under 500 LoC per `ENGINEERING_PRINCIPLES.md` §1.
+11. All files are under 500 LoC per `ENGINEERING_PRINCIPLES.md` section 1.
 
 ---
 

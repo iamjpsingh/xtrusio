@@ -3,7 +3,7 @@
 Closes audit findings **C5, H10, M17** and the **6.2.7** RLS refinement, plus **M3**
 (single-super_admin grant race). Part of the 2026-05-26 production-audit
 remediation (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md`,
-§6).
+section 6).
 
 ### What changed
 

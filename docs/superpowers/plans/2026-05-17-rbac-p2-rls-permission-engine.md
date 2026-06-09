@@ -8,7 +8,7 @@
 
 **Tech Stack:** Postgres (Supabase managed), Alembic raw `op.execute`, asyncpg, pytest + pytest-asyncio, `uv`, `make`.
 
-**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §5 (single source of truth), §6 (governance), §10 row P2, §11. **Builds on merged P1** (`main` @ `6be1e2f`: migration `0006`, `rbac/catalog.py`, system-role seeds).
+**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 5 (single source of truth), section 6 (governance), section 10 row P2, section 11. **Builds on merged P1** (`main` @ `6be1e2f`: migration `0006`, `rbac/catalog.py`, system-role seeds).
 
 ---
 
@@ -36,7 +36,7 @@ The catalog (`apps/api/src/xtrusio_api/rbac/catalog.py`, merged) + the `0006` sy
 - workspace `editor` / `read_only` = exactly `workspace.members.read` + `workspace.settings.read`.
 
 Each `0003` helper becomes **`new_resolver OR original_0003_enum_check`** — a true superset
-(spec §5, corrected). Pure delegation (resolver only) is NOT behaviour-preserving in the P2→P3
+(spec section 5, corrected). Pure delegation (resolver only) is NOT behaviour-preserving in the P2→P3
 window and was proven to break the pre-RBAC `tests/rls/` suite (passes at `0006`, fails under
 pure `0007`) because P1's backfill is a one-time snapshot and enum-era onboarding/invites keep
 creating `tenant_memberships`/`platform_users` rows with no `user_roles` grant until P3:
@@ -167,7 +167,7 @@ Revision ID: 0007
 Revises: 0006
 Create Date: 2026-05-17
 
-Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md §5/§6.
+Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md section 5/section 6.
 Pure raw SQL. Resolvers are SECURITY DEFINER (bypass RLS internally — no
 recursion, the 0003 technique) and are the single source of truth both RLS
 and the P3 backend call.
@@ -404,10 +404,10 @@ async def test_owner_admin_member_helpers_behaviour_preserved(
     # Supersede the 0003 enum helpers with TRANSITION-SAFE bodies: the new
     # resolver OR the original 0003 enum check. Same signatures → every
     # existing 0003/0004 policy keeps working unchanged. The OR-legacy
-    # disjunct is mandatory (spec §5, corrected): pure delegation strands
+    # disjunct is mandatory (spec section 5, corrected): pure delegation strands
     # enum-era memberships until P3 (proven: 0006 passes, pure-0007 fails) and
     # would lock newly-onboarded owners out — this superset breaks nothing
-    # mid-flight (§7.5) while giving instant-revoke for RBAC-granted access.
+    # mid-flight (section 7.5) while giving instant-revoke for RBAC-granted access.
     # SECURITY DEFINER → the legacy EXISTS subqueries don't recurse (0003
     # technique). P3 retires the legacy disjunct when user_roles is authoritative.
     op.execute(
@@ -981,12 +981,12 @@ Expected: only the accepted pre-existing baseline; single head `0007`.
 
 ## Self-Review (completed during planning)
 
-**Spec coverage (§5/§6/§10 row P2):**
-- §5 `has_platform_perm`/`has_workspace_perm` SECURITY DEFINER resolvers, single source of truth, RLS-recursion-safe → Task 1.
-- §5/§10 supersede the `0003` `is_super_admin`/`is_tenant_owner_or_admin`/`is_tenant_member` helpers by delegating (every existing policy keeps working, now table-sourced → instant revocation) → Task 2; behaviour-preservation proven via the documented truth-table mapping + the pre-existing `tests/rls/` suite staying green.
-- §5/§6 replace `0006`'s permissive interim RBAC-table policies with perm-aware SELECT policies (removes the P1-flagged cross-tenant `user_roles` over-read; audit-log gated by `*.audit.read`) → Task 3.
-- §10 "full RLS test matrix" → resolver correctness + delegation behaviour-preservation + RBAC-table policy matrix in `test_permission_engine_rls.py` + the untouched pre-existing `tests/rls/` files as the regression guard for the ~13 delegated-helper policies.
-- §11 reversible (downgrade restores `0003` helper bodies + `0006` policies verbatim, ordered so no helper references a dropped resolver), single Alembic head `0007`, pure raw SQL, test-data hygiene (ephemeral `@example.com` + `finally` teardown; real super_admin read-only).
+**Spec coverage (section 5/section 6/section 10 row P2):**
+- section 5 `has_platform_perm`/`has_workspace_perm` SECURITY DEFINER resolvers, single source of truth, RLS-recursion-safe → Task 1.
+- section 5/section 10 supersede the `0003` `is_super_admin`/`is_tenant_owner_or_admin`/`is_tenant_member` helpers by delegating (every existing policy keeps working, now table-sourced → instant revocation) → Task 2; behaviour-preservation proven via the documented truth-table mapping + the pre-existing `tests/rls/` suite staying green.
+- section 5/section 6 replace `0006`'s permissive interim RBAC-table policies with perm-aware SELECT policies (removes the P1-flagged cross-tenant `user_roles` over-read; audit-log gated by `*.audit.read`) → Task 3.
+- section 10 "full RLS test matrix" → resolver correctness + delegation behaviour-preservation + RBAC-table policy matrix in `test_permission_engine_rls.py` + the untouched pre-existing `tests/rls/` files as the regression guard for the ~13 delegated-helper policies.
+- section 11 reversible (downgrade restores `0003` helper bodies + `0006` policies verbatim, ordered so no helper references a dropped resolver), single Alembic head `0007`, pure raw SQL, test-data hygiene (ephemeral `@example.com` + `finally` teardown; real super_admin read-only).
 
 **Out of P2 scope (correctly deferred):** backend `require_permission()` / `/me` effective perms / invite-acceptance→`user_roles` / audit writes / dropping enum columns / privilege-escalation guard enforcement (all P3); admin UIs (P4/P5). P2 changes ONLY the DB layer + tests; zero Python source change.
 
@@ -996,7 +996,7 @@ Expected: only the accepted pre-existing baseline; single head `0007`.
 
 **Risk note for the spec-compliance reviewer:** behaviour-preservation rests on the
 **transition-safe `resolver OR 0003-enum` superset** (NOT pure delegation — pure delegation was
-proven to break onboarding/the pre-RBAC RLS suite; spec §5 was corrected 2026-05-17). The hard
+proven to break onboarding/the pre-RBAC RLS suite; spec section 5 was corrected 2026-05-17). The hard
 acceptance gate: the **entire pre-existing `tests/rls/` suite (test_tenants_rls,
 test_tenant_memberships_rls, test_platform_invites_rls, test_tenant_invites_rls,
 test_platform_settings_rls) must be 100% GREEN at `0007`** — in particular

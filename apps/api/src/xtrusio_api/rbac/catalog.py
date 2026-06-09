@@ -1,7 +1,7 @@
 """Code-defined RBAC permission catalog — the single source of truth.
 
 Developers add `scope.resource.action` keys here as features ship. Roles are
-data; permission primitives are NOT (spec §2.1). The reconciler projects this
+data; permission primitives are NOT (spec section 2.1). The reconciler projects this
 into the `permissions` table; migration `0006` seeds system roles whose
 `role_permissions` are derived from SYSTEM_ROLE_PERMISSIONS.
 """

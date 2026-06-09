@@ -5,7 +5,7 @@ Adds the three missing backend endpoints the P6c admin UIs were waiting on, so t
 ## Summary
 
 - **`GET /api/platform/users`** — cursor-paginated list of platform users with their `granted_role_count` (LEFT JOIN onto `user_roles` filtered to `scope='platform' AND workspace_id IS NULL`). Gated by `platform.users.read`.
-- **`GET /api/workspaces/{wid}/members`** — cursor-paginated list of workspace members with their `granted_role_count` (LEFT JOIN onto `user_roles` filtered to `scope='workspace' AND workspace_id=:wid`). Gated by `workspace.members.read`. LEFT JOIN onto `auth.users` for `email` (defensively typed `EmailStr | None` — see deviation §3 below).
+- **`GET /api/workspaces/{wid}/members`** — cursor-paginated list of workspace members with their `granted_role_count` (LEFT JOIN onto `user_roles` filtered to `scope='workspace' AND workspace_id=:wid`). Gated by `workspace.members.read`. LEFT JOIN onto `auth.users` for `email` (defensively typed `EmailStr | None` — see deviation section 3 below).
 - **`GET /api/workspaces/{wid}/settings`** — reads `{id, slug, name, created_at, updated_at}` for the workspace. Gated by `workspace.settings.read`.
 - **`PUT /api/workspaces/{wid}/settings`** — updates `name` only (MVP). Gated by `workspace.settings.manage`. Writes one audit-log row via `core/audit.write_audit_event` ONLY when `name` actually changed (no-op writes are not logged).
 - **TS mirrors** in `@xtrusio/api-types` + re-exports.
@@ -14,7 +14,7 @@ Adds the three missing backend endpoints the P6c admin UIs were waiting on, so t
 ## Architecture choices
 
 - **Cursor pagination reuses `core/pagination.py:CursorParams`** + the UUID cursor codec, matching `services.platform_role_grants:list_platform_role_grants`. Consistent with every other paginated list endpoint in the codebase.
-- **Permission catalog unchanged.** The plan called for adding `workspace.settings.read` + `workspace.settings.manage` — both keys already exist on `main` (added in P5; bound to `owner`/`workspace_admin` via `_workspace()` and explicitly to `editor`/`read_only` in `SYSTEM_ROLE_PERMISSIONS`). Re-adding would be a duplicate-key insert. See deviation §1.
+- **Permission catalog unchanged.** The plan called for adding `workspace.settings.read` + `workspace.settings.manage` — both keys already exist on `main` (added in P5; bound to `owner`/`workspace_admin` via `_workspace()` and explicitly to `editor`/`read_only` in `SYSTEM_ROLE_PERMISSIONS`). Re-adding would be a duplicate-key insert. See deviation section 1.
 - **Workspace settings is `name`-only for MVP.** The plan's locked decision. `slug` is the URL identifier (separate destructive flow, not in P6d); future polish can add description/logo/timezone via a tenant-attributes JSONB column.
 - **No new migration.** All endpoints read existing tables. Alembic head stays at `0009`.
 - **Prefix-collision ordering in `main.py`:** `platform_users_router` registered AFTER `platform_role_grants_router` (both share prefix `/api/platform/users`; sub-paths differ). `workspace_members_router` registered BEFORE `workspace_role_grants_router` (same pattern, `/api/workspaces/{wid}/members`). FastAPI matches in declared order — without this discipline, `GET /api/platform/users` would shadow `GET /api/platform/users/{user_id}/roles` and vice-versa.

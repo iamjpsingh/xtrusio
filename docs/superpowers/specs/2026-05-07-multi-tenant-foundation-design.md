@@ -97,7 +97,7 @@ xtrusio/
 | **Platform user** | Existing platform super_admin | No tenant; the platform itself | `{ user_id, platform_role, permissions[], is_platform_user: true }` |
 | **Platform user impersonating a tenant** | Platform user clicks "Enter Tenant" | Same platform user, scoped to a tenant | `{ user_id, tenant_id, tenant_slug, mimic_role, permissions[], is_platform_user: true, is_impersonating: true, impersonation_session_id }` |
 
-The "effective session context" is what the FastAPI request handler operates with after middleware enrichment (see §5.4). The raw Supabase JWT only carries `user_id` and standard claims; everything else is computed per request from the database.
+The "effective session context" is what the FastAPI request handler operates with after middleware enrichment (see section 5.4). The raw Supabase JWT only carries `user_id` and standard claims; everything else is computed per request from the database.
 
 Tenant users and platform users are stored in the same `users` table but distinguished by the `is_platform_user` boolean.
 
@@ -116,7 +116,7 @@ For impersonation specifically: the *raw* JWT is unchanged (still the platform u
 - `editor` — work in the app, cannot manage users
 - `read_only` — view-only
 
-Roles map to **permission strings** via the `role_permissions` table (see §6.2 and §10).
+Roles map to **permission strings** via the `role_permissions` table (see section 6.2 and section 10).
 
 ---
 
@@ -185,7 +185,7 @@ The following slugs are reserved and cannot be used as tenant slugs: `platform`,
 
 1. Tenant admin opens `/clients/<slug>/users` → "Invite User".
 2. Form: email, role (admin/editor/read_only — owner cannot be created by admin).
-3. On submit: create `users` row scoped to this tenant, create `tenant_memberships`, send invite email. Identical flow to §5.3 from there.
+3. On submit: create `users` row scoped to this tenant, create `tenant_memberships`, send invite email. Identical flow to section 5.3 from there.
 
 ---
 
@@ -370,7 +370,7 @@ created_at      timestamptz
 
 ### 9.2 `platform_audit_log`
 
-Platform team's accountability log. **Only `super_admin` can read** (and `admin` for their own actions). Note: this table is excluded from the generic `platform_bypass` RLS policy described in §6.3 — it has its own restrictive policy that checks `current_setting('app.platform_role')` is `super_admin`, OR the row's `platform_user_id` matches the current user when their role is `admin`. No tenant user has any access to this table at the RLS level.
+Platform team's accountability log. **Only `super_admin` can read** (and `admin` for their own actions). Note: this table is excluded from the generic `platform_bypass` RLS policy described in section 6.3 — it has its own restrictive policy that checks `current_setting('app.platform_role')` is `super_admin`, OR the row's `platform_user_id` matches the current user when their role is `admin`. No tenant user has any access to this table at the RLS level.
 
 ```
 id                       uuid pk
@@ -444,7 +444,7 @@ features(id, key, name, description, category, default_enabled, created_at)
 -- IMPERSONATION
 impersonation_sessions(id, platform_user_id, target_tenant_id, mimic_role, reason, started_at, ended_at, ip_address, user_agent)
 
--- LOGS (see §9 for full columns)
+-- LOGS (see section 9 for full columns)
 tenant_activity_log(...)
 platform_audit_log(...)
 worker_log(...)

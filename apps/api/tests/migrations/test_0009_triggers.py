@@ -210,7 +210,7 @@ async def test_workspace_system_roles_are_mutable_for_workspace_lifecycle(
     """Workspace-scope is_system roles are per-workspace data and must allow
     DELETE so a tenant deletion can cascade through its roles.
 
-    Spec §3.3: workspace system roles are 'instantiated per workspace'. Their
+    Spec section 3.3: workspace system roles are 'instantiated per workspace'. Their
     immutability is enforced by the application via the workspace.roles.manage
     permission gate (P5), not by the DB trigger.
     """

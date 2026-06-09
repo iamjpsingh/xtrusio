@@ -1559,7 +1559,7 @@ git commit -m "feat(rbac): /api/workspaces/{wid}/roles CRUD endpoints"
 Mirrors `services/platform_role_grants.py` shape with three differences from P4:
 - Every public function takes `workspace_id: UUID`; grants are pinned to it.
 - The single-super_admin invariant is replaced by a **≥1-active-owner floor** check on DELETE only (counts `user_roles` workspace owner-role grants for this workspace; must remain ≥ 1 after the proposed delete).
-- The DELETE SQL filters `WHERE id = :id AND auth_user_id = :user_id AND workspace_id = :wid` — this is **load-bearing scope isolation**, not polish: without it, a grant id from another workspace could be deleted via this endpoint. HANDOFF §follow-ups item flags the analogous gap on platform; P5 closes it natively at workspace scope.
+- The DELETE SQL filters `WHERE id = :id AND auth_user_id = :user_id AND workspace_id = :wid` — this is **load-bearing scope isolation**, not polish: without it, a grant id from another workspace could be deleted via this endpoint. HANDOFF section follow-ups item flags the analogous gap on platform; P5 closes it natively at workspace scope.
 
 ### Task C1: Grant service — exceptions + grant + revoke
 
@@ -3360,7 +3360,7 @@ Use the GitHub UI or `gh pr merge --merge --delete-branch`.
 
 - [ ] **Step 2: Update `docs/superpowers/HANDOFF.md`**
 
-Mark P5 as merged in the status header and shift the NEXT pointer to P6b. Drop the redundant "P5 still TODO" line from §NEXT item 2. Commit:
+Mark P5 as merged in the status header and shift the NEXT pointer to P6b. Drop the redundant "P5 still TODO" line from section NEXT item 2. Commit:
 
 ```bash
 git checkout main

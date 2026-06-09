@@ -25,7 +25,7 @@ export default mergeConfig(
       coverage: {
         provider: "v8",
         reporter: ["text-summary", "cobertura", "html"],
-        // Conservative starting floor (F.2 / spec §9). Ratchet up via PR. Only
+        // Conservative starting floor (F.2 / spec section 9). Ratchet up via PR. Only
         // application source counts — exclude tests, generated route tree, the
         // MSW test harness, and config/entrypoints that aren't unit-tested.
         include: ["src/**/*.{ts,tsx}"],

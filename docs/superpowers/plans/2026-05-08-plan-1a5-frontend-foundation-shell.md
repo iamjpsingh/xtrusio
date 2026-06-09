@@ -1579,7 +1579,7 @@ git commit -m "test(web): add Dashboard route smoke test"
 ```bash
 #!/usr/bin/env bash
 # Block hardcoded colors and Tailwind palette utilities in frontend paths.
-# Enforces ENGINEERING_PRINCIPLES §2.0 + spec #4 §9.
+# Enforces ENGINEERING_PRINCIPLES section 2.0 + spec #4 section 9.
 set -euo pipefail
 
 # Files to scan: only newly added/modified frontend source under apps/web or packages/ui
@@ -1607,7 +1607,7 @@ for file in $staged; do
   for pat in "${forbidden_patterns[@]}"; do
     matches=$(grep -nE "$pat" "$file" 2>/dev/null || true)
     if [ -n "$matches" ]; then
-      echo "ERROR: hardcoded color in $file (use semantic tokens, see ENGINEERING_PRINCIPLES §2.0):"
+      echo "ERROR: hardcoded color in $file (use semantic tokens, see ENGINEERING_PRINCIPLES section 2.0):"
       echo "$matches" | sed 's/^/  /'
       violations=$((violations + 1))
     fi
@@ -1630,7 +1630,7 @@ chmod +x scripts/check-colors.sh
 
 ```yaml
       - id: no-hardcoded-colors
-        name: Block hardcoded colors in frontend paths (ENGINEERING_PRINCIPLES §2.0 + spec #4 §9)
+        name: Block hardcoded colors in frontend paths (ENGINEERING_PRINCIPLES section 2.0 + spec #4 section 9)
         entry: scripts/check-colors.sh
         language: system
         pass_filenames: false
@@ -1683,7 +1683,7 @@ Replace the existing rules list with:
 
 See [`docs/superpowers/ENGINEERING_PRINCIPLES.md`](docs/superpowers/ENGINEERING_PRINCIPLES.md). The big ones:
 
-- **TypeScript only on the frontend.** No `.js` / `.jsx` / `.mjs` / `.cjs`. Source AND configs (§2.0).
+- **TypeScript only on the frontend.** No `.js` / `.jsx` / `.mjs` / `.cjs`. Source AND configs (section 2.0).
 - **No custom CSS** outside `apps/web/src/globals.css`. Every component composes Tailwind utilities + shadcn primitives.
 - **No hardcoded colors.** Use semantic tokens (`bg-background`, `text-muted-foreground`, `bg-success/10`, etc.). Pre-commit hook (`no-hardcoded-colors`) blocks `#hex` and `bg-zinc-*`/`bg-gray-*`/etc.
 - **No demo or mock data.** Empty states are first-class. The first platform owner is bootstrapped via a CLI script (Plan 1B/1C); every other user is invited via real flows.

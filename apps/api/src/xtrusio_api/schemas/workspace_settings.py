@@ -4,7 +4,7 @@
 to the settings page (no ``created_by`` exposed; slug shown read-only).
 ``WorkspaceSettingsUpdate`` is the MVP edit body — only ``name`` is mutable
 in P6d; slug rename / description / timezone are deliberately deferred (see
-the P6d plan §1 out-of-scope list).
+the P6d plan section 1 out-of-scope list).
 """
 
 from __future__ import annotations

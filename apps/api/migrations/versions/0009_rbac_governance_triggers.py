@@ -1,7 +1,7 @@
 """RBAC governance triggers: privilege-escalation + immutable system roles.
 
-Spec §6.1 (privilege-escalation guard, defense in depth at the DB layer) and
-§6.3 (immutable system roles).
+Spec section 6.1 (privilege-escalation guard, defense in depth at the DB layer) and
+section 6.3 (immutable system roles).
 
 `enforce_priv_escalation` reads the actor from session GUC `app.actor_id`. A
 boot-time reconciler (reconcile_user_roles_from_enums) cannot meaningfully

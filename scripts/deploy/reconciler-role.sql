@@ -11,7 +11,7 @@
 --   RECONCILE_DATABASE_URL=postgresql+asyncpg://xtrusio_reconciler:__RECONCILER_PASSWORD__@db.__PROJECT_REF__.supabase.co:5432/postgres
 --
 -- ⚠️ Leave RECONCILE_DATABASE_URL UNSET until you have smoke-tested it (see
--- docs/DEPLOYMENT.md §6). The dev fallback (the request engine) is safe and
+-- docs/DEPLOYMENT.md section 6). The dev fallback (the request engine) is safe and
 -- correct; a half-working reconciler DSN can break boot/seed reconcile.
 
 alter role xtrusio_reconciler login password '__RECONCILER_PASSWORD__';

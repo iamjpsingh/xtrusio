@@ -2,7 +2,7 @@
 
 - Upserts every CATALOG entry into `permissions` (un-deprecates if it returned).
 - Soft-deprecates any non-catalog `permissions` row (never deletes, never
-  cascades into role_permissions — spec §4).
+  cascades into role_permissions — spec section 4).
 - Ensures every is_system role's role_permissions exactly match
   SYSTEM_ROLE_PERMISSIONS (platform roles + per-workspace roles).
 

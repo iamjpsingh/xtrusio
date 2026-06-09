@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.x async, asyncpg, Postgres (Supabase managed), pytest + pytest-asyncio, `uv`, `make`.
 
-**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §5/§8/§10 (P3). **Builds on merged P2** (`main`: migration `0007` resolvers + transition-safe helpers; `rbac/catalog.py`; `rbac/reconcile.py`; the single-super_admin partial unique index `user_roles_one_super_admin` on fixed role id `00000000-0000-0000-0000-0000000000a1`). This is the **P3a** slice; P3b (enforcement conversion + `/me` effective perms) and P3c (audit + governance + `0008` enum-disjunct retirement) are separate later plans.
+**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 5/section 8/section 10 (P3). **Builds on merged P2** (`main`: migration `0007` resolvers + transition-safe helpers; `rbac/catalog.py`; `rbac/reconcile.py`; the single-super_admin partial unique index `user_roles_one_super_admin` on fixed role id `00000000-0000-0000-0000-0000000000a1`). This is the **P3a** slice; P3b (enforcement conversion + `/me` effective perms) and P3c (audit + governance + `0008` enum-disjunct retirement) are separate later plans.
 
 ---
 
@@ -381,7 +381,7 @@ git commit -m "feat(onboarding): also write user_roles owner grant + seed new wo
 - Modify: `apps/api/src/xtrusio_api/services/invite_acceptance.py` (`_accept_platform`, `_accept_tenant`)
 - Test: `apps/api/tests/services/test_invite_acceptance_grants.py`
 
-- [ ] **Step 1: Read** `apps/api/src/xtrusio_api/services/invite_acceptance.py` fully. `_accept_platform` adds `PlatformUser(id=user_id, email, role=invite.role, is_active=True)` then commits; `invite.role` is `PlatformRole` ∈ {admin, super_admin} but the platform-invite schema validator rejects `super_admin`, so in practice only `admin` (and legacy `editor` which has NO platform system role — spec §2.7). `_accept_tenant` adds `TenantMembership(tenant_id=invite.tenant_id, user_id, role=invite.role)`; `invite.role` is `TenantRole` ∈ {admin, editor, read_only} and that tenant's 4 workspace system roles already exist (tenant pre-existed). Confirm the `IntegrityError → AlreadyProvisionedError` handling and that both commit once.
+- [ ] **Step 1: Read** `apps/api/src/xtrusio_api/services/invite_acceptance.py` fully. `_accept_platform` adds `PlatformUser(id=user_id, email, role=invite.role, is_active=True)` then commits; `invite.role` is `PlatformRole` ∈ {admin, super_admin} but the platform-invite schema validator rejects `super_admin`, so in practice only `admin` (and legacy `editor` which has NO platform system role — spec section 2.7). `_accept_tenant` adds `TenantMembership(tenant_id=invite.tenant_id, user_id, role=invite.role)`; `invite.role` is `TenantRole` ∈ {admin, editor, read_only} and that tenant's 4 workspace system roles already exist (tenant pre-existed). Confirm the `IntegrityError → AlreadyProvisionedError` handling and that both commit once.
 
 - [ ] **Step 2: Write the failing test** `apps/api/tests/services/test_invite_acceptance_grants.py` — two tests: (a) platform admin invite acceptance → a `user_roles` platform `admin` grant exists; (b) tenant `editor` invite acceptance → a `user_roles` workspace `editor` grant for that tenant exists. Use the established ephemeral-`@example.com` + pre-created `platform_invites`/`tenant_invites` rows pattern from `apps/api/tests/integration/test_invite_full_flow.py` (read it for the exact invite-row setup); FK-safe `finally` teardown of `user_roles`, `platform_users`/`tenant_memberships`, the invite rows, `auth.users`. Assert BOTH the legacy enum row (unchanged) AND the new `user_roles` grant. (Do NOT exercise a `super_admin` platform invite — schema rejects it and the hygiene guard forbids the SQL.)
 
@@ -644,7 +644,7 @@ Expected `memberships_without_grant 0` after `make rbac-seed` (every enum member
 
 ## Self-Review (completed during planning)
 
-**Spec coverage (P3 §10 — the write-path/reconciliation subset):**
+**Spec coverage (P3 section 10 — the write-path/reconciliation subset):**
 - "onboarding + invite-acceptance write `user_roles`" → Tasks 2, 3.
 - bootstrap writes `user_roles` (super_admin) honoring the single-super_admin invariant → Task 4.
 - "fully reconcile existing `tenant_memberships`/`platform_users` → `user_roles`" (the P2→P3 precondition before the disjunct is retired) → Task 5 (`reconcile_user_roles_from_enums` + startup/make wiring) + Task 1 (`grant_role`).
@@ -654,6 +654,6 @@ Expected `memberships_without_grant 0` after `make rbac-seed` (every enum member
 
 **Placeholder scan:** none — every code step has concrete code from the verified surface map. Task 2 Step 1 / Task 3 Step 1 deliberately instruct "read & confirm exact current structure then apply the shown change" because the precise insert point depends on file structure the implementer must read (the *change* itself is fully specified); this is a read-first instruction, not a placeholder.
 
-**Type/name consistency:** `grant_role(db, *, auth_user_id, scope, key, workspace_id=None, granted_by=None)` signature consistent across Tasks 1–4; `reconcile_user_roles_from_enums(db)` consistent Tasks 5–6; the fixed super_admin role id `00000000-0000-0000-0000-0000000000a1` consistent with `0006`/`0007`; enum→key mapping (`invite.role.value`, `TenantRole.OWNER`→`'owner'`, platform `'admin'` only, `'editor'` platform-unmapped) consistent with `0006`'s backfill + spec §2.7.
+**Type/name consistency:** `grant_role(db, *, auth_user_id, scope, key, workspace_id=None, granted_by=None)` signature consistent across Tasks 1–4; `reconcile_user_roles_from_enums(db)` consistent Tasks 5–6; the fixed super_admin role id `00000000-0000-0000-0000-0000000000a1` consistent with `0006`/`0007`; enum→key mapping (`invite.role.value`, `TenantRole.OWNER`→`'owner'`, platform `'admin'` only, `'editor'` platform-unmapped) consistent with `0006`'s backfill + spec section 2.7.
 
 **Risk flagged for the spec-compliance reviewer:** the load-bearing claim is **behaviour-invariance** — P3a must not change a single authorization outcome. The reviewer must (a) diff every `routes/`/`core/auth.py`/`services/tenant_invites.py` authz check vs `main` and confirm zero change, (b) run the full pre-existing suite and confirm only the 2 documented env-failures, (c) confirm `make rbac-seed` drives `memberships_without_grant` to 0 (the precondition P3b depends on), and (d) confirm onboarding's new-workspace role seeding doesn't deadlock/duplicate against `reconcile_rbac` (Task 2 Step 1 ordering).

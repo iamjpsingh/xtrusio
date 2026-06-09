@@ -13,7 +13,7 @@ Backend-only per-workspace RBAC admin API, scope-isolated to one `workspace_id` 
 - **No new migration.** Reuses `0009`'s priv-escalation trigger (which already dispatches to `has_workspace_perm` when `workspace_id IS NOT NULL`) and `core/audit.write_audit_event`. `0009.reject_system_role_mutation` deliberately scopes to `scope='platform'` only (lines 119–120, with comment at 102–109 explicitly delegating workspace immutability to P5 service-layer) — so the workspace `SystemRoleImmutableError` guard is load-bearing, not friendly-first.
 - **Scope isolation is load-bearing.** Every read/write filters on `workspace_id`. The grant DELETE is pinned on `(id, user_id, workspace_id)` — without this triple a workspace-A owner could revoke a workspace-B grant by knowing its uuid.
 - **Cursor codec reuse.** `services.workspace_audit_log` imports `_encode_audit_cursor`/`_decode_audit_cursor` from `services.platform_audit_log` (bigint id, distinct from the uuid-id `core/pagination.py` primitive).
-- **Idempotent grant.** `grant_workspace_role` does explicit SELECT-then-INSERT to dodge the documented `UNIQUE NULLS DISTINCT` foot-gun (HANDOFF §follow-ups); workspace grants always have `workspace_id IS NOT NULL` so the trap doesn't actually fire here, but the explicit pattern lets us return the existing row for true idempotency.
+- **Idempotent grant.** `grant_workspace_role` does explicit SELECT-then-INSERT to dodge the documented `UNIQUE NULLS DISTINCT` foot-gun (HANDOFF section follow-ups); workspace grants always have `workspace_id IS NOT NULL` so the trap doesn't actually fire here, but the explicit pattern lets us return the existing row for true idempotency.
 
 ## Test plan
 
@@ -25,8 +25,8 @@ Backend-only per-workspace RBAC admin API, scope-isolated to one `workspace_id` 
 
 ## What's NOT in this PR
 
-- UI — deferred to P6c per scope split (HANDOFF §NEXT).
-- HANDOFF §follow-ups items (`gotrue → supabase_auth` migration, broad-except narrowing, platform `grant_id`/`user_id` consistency polish, `UNIQUE NULLS NOT DISTINCT` migration). Each is a deliberate non-goal of P5.
+- UI — deferred to P6c per scope split (HANDOFF section NEXT).
+- HANDOFF section follow-ups items (`gotrue → supabase_auth` migration, broad-except narrowing, platform `grant_id`/`user_id` consistency polish, `UNIQUE NULLS NOT DISTINCT` migration). Each is a deliberate non-goal of P5.
 - Frontend permission-driven nav / shells (P6b).
 
 ## Next

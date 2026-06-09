@@ -4,7 +4,7 @@ The mechanical, no-email-semantics-change half of PAR-D's invite/tx work.
 The heavier invite-outbox + worker rewrite (H5) and the two invite-create
 services' transaction move land in **slice 2b-ii**.
 
-Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §7.
+Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 7.
 
 ### Findings closed
 

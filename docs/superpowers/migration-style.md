@@ -71,7 +71,7 @@ def upgrade() -> None:
     op.execute("ALTER TABLE my_table DROP CONSTRAINT my_table_col_not_null")
 ```
 
-Backfill any NULLs (see §3) **before** step 2, or `VALIDATE` will fail.
+Backfill any NULLs (see section 3) **before** step 2, or `VALIDATE` will fail.
 
 ---
 
@@ -115,7 +115,7 @@ the loop terminates.
 
 ## 4. General rules
 
-- **Every migration has a working `downgrade()`** (ENGINEERING_PRINCIPLES §5).
+- **Every migration has a working `downgrade()`** (ENGINEERING_PRINCIPLES section 5).
   Concurrent index drops also go in an `autocommit_block`.
 - **Ordering guards for data-dependent migrations.** If a migration assumes a
   prior backfill ran (e.g. it retires a fallback path), assert that

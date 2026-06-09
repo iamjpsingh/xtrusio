@@ -7,7 +7,7 @@ Revision ID: 0008
 Revises: 0007
 Create Date: 2026-05-19
 
-Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md §5.
+Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md section 5.
 Pure raw SQL. Safe because merged P3a made every principal resolver-visible
 and merged P3b made the backend resolver-authoritative; the legacy enum
 fallback is now redundant. Same signatures + SECURITY DEFINER STABLE SET

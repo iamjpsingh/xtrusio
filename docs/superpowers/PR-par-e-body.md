@@ -1,6 +1,6 @@
 ## PAR-E — Frontend correctness
 
-Closes the frontend half of the 2026-05-26 production audit (spec `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §8). Addresses **H1, H2, H3, H4, M10, M11, M12, M23, M24, L8, L9, L10, L11** — 13 findings. All work is in `apps/web`; zero backend / `.env` changes; no new env vars.
+Closes the frontend half of the 2026-05-26 production audit (spec `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 8). Addresses **H1, H2, H3, H4, M10, M11, M12, M23, M24, L8, L9, L10, L11** — 13 findings. All work is in `apps/web`; zero backend / `.env` changes; no new env vars.
 
 ### What changed (by finding)
 

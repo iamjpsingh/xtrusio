@@ -81,7 +81,7 @@ apps/api/src/xtrusio_api/analysis/
     └── stats_tool.py              # WilsonIntervalTool               (~80 LoC)
 ```
 
-Every file targets ≤ 250 LoC; hard ceiling 500 LoC per `ENGINEERING_PRINCIPLES.md` §1.
+Every file targets ≤ 250 LoC; hard ceiling 500 LoC per `ENGINEERING_PRINCIPLES.md` section 1.
 
 ### 2.2 Cross-package shared utility
 
@@ -126,7 +126,7 @@ uv sync --extra ml     # worker dev shell
 
 ## 3. Input/Output Types & Function Signatures
 
-All public functions take Pydantic v2 models in and return Pydantic v2 models out. Per `ENGINEERING_PRINCIPLES.md` §3: "Pydantic v2 models for all I/O. Never accept dicts at API boundaries." The same rule extends to library boundaries — keeps the toolkit self-documenting and gives Tool wrappers their schemas for free.
+All public functions take Pydantic v2 models in and return Pydantic v2 models out. Per `ENGINEERING_PRINCIPLES.md` section 3: "Pydantic v2 models for all I/O. Never accept dicts at API boundaries." The same rule extends to library boundaries — keeps the toolkit self-documenting and gives Tool wrappers their schemas for free.
 
 ### 3.1 Shared types (`analysis/types.py`)
 
@@ -275,7 +275,7 @@ def wilson_interval(inp: WilsonInput) -> WilsonResult: ...
 
 ### 3.3 Three deliberate design choices
 
-**1. `embed()` requires DI for cache and DB session, no defaults.** Forces callers to acknowledge they're hitting persistence and a worker-only path. Per `ENGINEERING_PRINCIPLES.md` §4.
+**1. `embed()` requires DI for cache and DB session, no defaults.** Forces callers to acknowledge they're hitting persistence and a worker-only path. Per `ENGINEERING_PRINCIPLES.md` section 4.
 
 **2. `embed()` import in API process raises.** `analysis/similarity/embedding.py` runs at module-import time:
 
@@ -301,12 +301,12 @@ Avoids the anti-pattern of `async def` everywhere — sync functions pretending 
 
 ## 4. Tool-Protocol Wrappers & Registration
 
-These adapt the pure functions in §3 to spec #2's `Tool` protocol so they're callable both by deterministic flow steps **and** by LLM agent steps that decide to invoke a tool.
+These adapt the pure functions in section 3 to spec #2's `Tool` protocol so they're callable both by deterministic flow steps **and** by LLM agent steps that decide to invoke a tool.
 
 ### 4.1 Tool protocol (recap from spec #2)
 
 ```python
-# orchestration/primitives/tool.py — defined in spec #2 §5
+# orchestration/primitives/tool.py — defined in spec #2 section 5
 class Tool(Protocol):
     name: str                           # globally unique
     description: str                    # shown to LLM
@@ -320,7 +320,7 @@ class Tool(Protocol):
 
 ### 4.1.1 Algorithm-to-tool mapping
 
-The six algorithms in §1.2 expose **four** Tool wrappers, not six:
+The six algorithms in section 1.2 expose **four** Tool wrappers, not six:
 
 | Algorithm | Tool wrapper? | Rationale |
 |---|---|---|
@@ -329,7 +329,7 @@ The six algorithms in §1.2 expose **four** Tool wrappers, not six:
 | MinHash | merged into `TextSimilarityTool` (`method="minhash"`) | Single similarity surface; method discriminator avoids cluttering the LLM's tool list. |
 | Embedding cosine | merged into `TextSimilarityTool` (`method="embedding"`) | Same. |
 | Wilson CI | `WilsonIntervalTool` | Useful for any scoring/audit step. |
-| SHA-256 content addressing | **no Tool wrapper** | Plumbing primitive used internally by caches and runners. Lives in `shared/cache/content_hash.py` (§2.2). Never something an LLM should call — it's deterministic, side-effect-free, and produces output the LLM cannot interpret. |
+| SHA-256 content addressing | **no Tool wrapper** | Plumbing primitive used internally by caches and runners. Lives in `shared/cache/content_hash.py` (section 2.2). Never something an LLM should call — it's deterministic, side-effect-free, and produces output the LLM cannot interpret. |
 
 ### 4.2 The four wrappers
 
@@ -432,12 +432,12 @@ Same code path under the hood. Tests cover the pure function thoroughly; Tool wr
 
 ### 4.5 Tool exposure is per-step
 
-`Step.tools` from spec #2 §5.3 controls which tools are exposed to which agent step. Analysis tools are **not** auto-injected everywhere — flows opt them in per step. Example: a comparison step adds `analysis.text_similarity` to its tool list; a research step does not.
+`Step.tools` from spec #2 section 5.3 controls which tools are exposed to which agent step. Analysis tools are **not** auto-injected everywhere — flows opt them in per step. Example: a comparison step adds `analysis.text_similarity` to its tool list; a research step does not.
 
 ### 4.6 Cost & observability
 
-- The embedding path of `TextSimilarityTool` records cost via `ctx.cost_meter` (spec #2 §10).
-- Every tool emits `run_event` rows through `ctx.logger.tool_*` (spec #2 §7) — call/result/error/duration. Already wired by spec #2's runner; analysis tools inherit the behavior automatically.
+- The embedding path of `TextSimilarityTool` records cost via `ctx.cost_meter` (spec #2 section 10).
+- Every tool emits `run_event` rows through `ctx.logger.tool_*` (spec #2 section 7) — call/result/error/duration. Already wired by spec #2's runner; analysis tools inherit the behavior automatically.
 - Aho-Corasick automaton cache hit rate is logged as a structured metric for tuning.
 
 ---
@@ -485,7 +485,7 @@ CREATE INDEX analysis_embedding_cache_lru_idx
 
 | Column | Why |
 |---|---|
-| `tenant_id` | Tenant isolation per spec #1 §6. Cross-tenant cache hits would leak content even via timing. |
+| `tenant_id` | Tenant isolation per spec #1 section 6. Cross-tenant cache hits would leak content even via timing. |
 | `text_hash` | SHA-256 of canonicalized text. Lookup key. |
 | `model` + `model_version` | Same text under a different model = different vector. Pinning version means upgrading the model invalidates the cache automatically by missing on lookup. |
 | `vector(384)` | MiniLM-L6-v2 dim. A future 768-dim model writes separate rows because `(model, model_version)` differs. |
@@ -507,9 +507,9 @@ CREATE POLICY analysis_embedding_cache_tenant_update ON analysis_embedding_cache
     FOR UPDATE USING (tenant_id = current_setting('app.tenant_id')::uuid);
 ```
 
-Platform-user impersonation (spec #1 §7) already sets `app.tenant_id` to the impersonated tenant's id, so impersonating users see the impersonated tenant's cache. No extra policy.
+Platform-user impersonation (spec #1 section 7) already sets `app.tenant_id` to the impersonated tenant's id, so impersonating users see the impersonated tenant's cache. No extra policy.
 
-The eviction job uses a service role that bypasses RLS; every eviction run is recorded in `worker_log` (spec #1 §9) with rows-deleted and bytes-freed counters.
+The eviction job uses a service role that bypasses RLS; every eviction run is recorded in `worker_log` (spec #1 section 9) with rows-deleted and bytes-freed counters.
 
 ### 5.4 Eviction strategy
 
@@ -544,7 +544,7 @@ No explicit "invalidate cache" admin endpoint in v1. Add later if a real need ap
 | Cache miss + worker round-trip | < 800ms p99 |
 | Eviction job per tenant | < 30s |
 
-Cache hit rate is exposed as a metric in spec #1 §13's observability hooks. Below 30% is a signal that callers' inputs are too varied to cache; revisit strategy or input normalization.
+Cache hit rate is exposed as a metric in spec #1 section 13's observability hooks. Below 30% is a signal that callers' inputs are too varied to cache; revisit strategy or input normalization.
 
 ---
 
@@ -575,7 +575,7 @@ Local dev provides two shell aliases (defined in `Makefile` / `.envrc`): `make a
 
 When a flow step needs embeddings:
 
-- Spec #2 §5 `Step` objects already declare `requires: frozenset[str]`. A step that calls `TextSimilarityTool` with `method="embedding"` declares `requires={"worker"}`.
+- Spec #2 section 5 `Step` objects already declare `requires: frozenset[str]`. A step that calls `TextSimilarityTool` with `method="embedding"` declares `requires={"worker"}`.
 - The runner schedules `requires={"worker"}` steps onto Prefect/Dramatiq worker pool exclusively, never on the in-API path.
 - API-only paths that try to call the embedding tool fail fast at registration with a clear error.
 
@@ -607,9 +607,9 @@ class EmbeddingUnavailableError(AnalysisError):
     """Imported in API process, or worker model load failed."""
 ```
 
-Tool wrappers catch `AnalysisError` and emit a `run_event` row with `event_type="tool_error"` (spec #2 §7), then re-raise to let the runner decide retry/skip.
+Tool wrappers catch `AnalysisError` and emit a `run_event` row with `event_type="tool_error"` (spec #2 section 7), then re-raise to let the runner decide retry/skip.
 
-Per `ENGINEERING_PRINCIPLES.md` §5: no bare `except`, every external call has a timeout, errors live at the boundary.
+Per `ENGINEERING_PRINCIPLES.md` section 5: no bare `except`, every external call has a timeout, errors live at the boundary.
 
 ### 7.2 Specific error policies
 
@@ -650,7 +650,7 @@ apps/api/tests/analysis/
 
 **1. Algorithm correctness uses golden fixtures.** Each algorithm has a fixture file (`tests/analysis/fixtures/...`) with known-good `(input, expected_output)` pairs. Tests assert byte-equal outputs. Drift means a deliberate fixture update — not a silent change.
 
-**2. RLS is tested live.** Every test that touches `analysis_embedding_cache` runs against a real Postgres testcontainer with RLS enabled and `app.tenant_id` set. Required cases (per `ENGINEERING_PRINCIPLES.md` §9):
+**2. RLS is tested live.** Every test that touches `analysis_embedding_cache` runs against a real Postgres testcontainer with RLS enabled and `app.tenant_id` set. Required cases (per `ENGINEERING_PRINCIPLES.md` section 9):
 - Tenant A cannot SELECT tenant B's cache rows
 - Tenant A cannot INSERT a row with tenant B's `tenant_id` (WITH CHECK violation)
 - Service-role bypass works for the eviction job
@@ -699,7 +699,7 @@ uv run pytest tests/analysis -m "perf"
   | grep -v "src/xtrusio_api/analysis/similarity/embedding.py"
 ```
 
-The static grep guard is a belt-and-suspenders backup to the runtime import-time check from §3.3.
+The static grep guard is a belt-and-suspenders backup to the runtime import-time check from section 3.3.
 
 ### 8.5 What's explicitly NOT tested in this spec
 
@@ -720,7 +720,7 @@ Per project policy, **no CI/CD setup is included in this spec**. Everything belo
 | `ruff check` | Lint analysis source | `uv run ruff check apps/api/src/xtrusio_api/analysis/` |
 | `ruff format` | Format | `uv run ruff format apps/api/src/xtrusio_api/analysis/` |
 | `mypy --strict` | Type check | `uv run mypy apps/api/src/xtrusio_api/analysis/` |
-| `pytest` | Tests | see §8.4 |
+| `pytest` | Tests | see section 8.4 |
 | Postgres testcontainer | RLS tests against real Postgres + pgvector | auto-spawned by `conftest.py` |
 | `fakeredis` | Valkey mock for `automaton_cache` tests | imported in test fixtures |
 
@@ -734,7 +734,7 @@ A single Alembic migration creates `analysis_embedding_cache`, its indexes, and 
 apps/api/migrations/versions/2026_05_NN_add_analysis_embedding_cache.py
 ```
 
-Migration includes a working `downgrade()` per `ENGINEERING_PRINCIPLES.md` §5. Run locally:
+Migration includes a working `downgrade()` per `ENGINEERING_PRINCIPLES.md` section 5. Run locally:
 
 ```bash
 uv run alembic upgrade head
@@ -751,7 +751,7 @@ Per project policy ("CI/CD only after local runs cleanly"), the following are **
 - Static-analysis gate for the ML-import grep guard.
 - Nightly perf-benchmark scheduling.
 
-When the platform reaches the readiness bar, a follow-up spec covers all of the above. Until then, the local commands in §8.4 are the contract.
+When the platform reaches the readiness bar, a follow-up spec covers all of the above. Until then, the local commands in section 8.4 are the contract.
 
 ---
 
@@ -769,7 +769,7 @@ When the platform reaches the readiness bar, a follow-up spec covers all of the 
 
 The toolkit is considered "v1 done" when:
 
-1. All six algorithms expose pure-function APIs and Tool wrappers with the signatures from §3 and §4.
+1. All six algorithms expose pure-function APIs and Tool wrappers with the signatures from section 3 and section 4.
 2. `pytest tests/analysis -m "not ml and not perf"` passes locally with ≥ 90% coverage.
 3. `XTRUSIO_PROCESS_ROLE=worker pytest tests/analysis -m "ml"` passes locally on a worker shell.
 4. RLS tests demonstrate cross-tenant isolation on `analysis_embedding_cache`.

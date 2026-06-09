@@ -29,7 +29,7 @@ Backend stayed put; this is the frontend cutover from enum-driven decisions to t
 
 - **RBAC admin UIs (P6c)** — the workspace shell's placeholder pages still render the `EmptyState`. Filling them in is the next phase.
 - **`UserMenu` rewrite** — keeps its own local `Me` type + duplicate `useQuery(['me'])`. Cache is shared so it works fine; cleanup deferred to P6c.
-- **Removing the enum fields from `MeResponse`** — `platform.role` and `tenants[].role` stay on the type until every backend enum read is gone (LATE cleanup per HANDOFF §NEXT item 6).
+- **Removing the enum fields from `MeResponse`** — `platform.role` and `tenants[].role` stay on the type until every backend enum read is gone (LATE cleanup per HANDOFF section NEXT item 6).
 - **Backend changes** — none.
 
 ## Files

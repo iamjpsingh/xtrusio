@@ -3,7 +3,7 @@
 The last of PAR-D. Closes **H5** (Supabase call inside an open DB transaction)
 and the **M1 remainder** (the two invite-create services).
 
-Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §7.
+Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 7.
 
 ### ⚠️ Behavior change (intended)
 

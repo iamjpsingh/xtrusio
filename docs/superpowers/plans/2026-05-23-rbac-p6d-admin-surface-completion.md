@@ -33,8 +33,8 @@ Complete the RBAC admin surface so a super_admin and a workspace owner can do **
 4. **Permission gates:**
    - `GET /api/platform/users` → `platform.users.read`
    - `GET /api/workspaces/{wid}/members` → `workspace.members.read`
-   - `GET /api/workspaces/{wid}/settings` → `workspace.settings.read` (NEW catalog entry — see §5)
-   - `PUT /api/workspaces/{wid}/settings` → `workspace.settings.manage` (NEW catalog entry — see §5)
+   - `GET /api/workspaces/{wid}/settings` → `workspace.settings.read` (NEW catalog entry — see section 5)
+   - `PUT /api/workspaces/{wid}/settings` → `workspace.settings.manage` (NEW catalog entry — see section 5)
 5. **Pagination:** `GET /api/platform/users` and `GET /api/workspaces/{wid}/members` use the existing `core/pagination.py:CursorParams` + UUID cursor codec, matching `services.platform_role_grants:list_platform_role_grants` for consistency.
 6. **Response shape — `PlatformUserListItemOut`:** `{ id: UUID, email: str, role: PlatformRole, is_active: bool, created_at: datetime, last_sign_in_at: datetime | None, granted_role_count: int }`. `granted_role_count` is a left-joined count from `user_roles` filtered to `scope='platform' AND workspace_id IS NULL`. The full grant list per user is fetched separately via the existing `GET /api/platform/users/{user_id}/roles` endpoint (P4).
 7. **Response shape — `WorkspaceMemberListItemOut`:** `{ user_id: UUID, email: str, role: TenantRole, joined_at: datetime, granted_role_count: int }` where `joined_at = tenant_memberships.created_at`. `granted_role_count` from `user_roles` filtered to `scope='workspace' AND workspace_id=:wid`.
@@ -121,7 +121,7 @@ Create:
 
 Modify:
   apps/web/src/lib/api.ts                                    +6 fetchers (list users / list members / get-put settings / list grants × 2 already exist from P4/P5 — confirm)
-  apps/web/src/lib/query-keys.ts                             +5 qk entries (per §2 decision 11)
+  apps/web/src/lib/query-keys.ts                             +5 qk entries (per section 2 decision 11)
   apps/web/src/lib/error-messages.ts                         +error keys for new failure modes (e.g. workspace_not_found, settings_validation_error)
   apps/web/src/components/workspace-members-page.tsx         (created in Slice 3) — embed the LIST UI under the invite section
   apps/web/src/routes/_app.workspace.$workspaceId.settings.tsx  REPLACE placeholder with file-route mounting <WorkspaceSettingsPage workspaceId={...} />
@@ -135,7 +135,7 @@ Modify:
 
 **File:** `apps/api/src/xtrusio_api/rbac/catalog.py`
 
-- [ ] **Step 1:** Add the two `PermissionDef` entries from §3 to the `CATALOG` tuple. Keep them in alphabetical order with the rest of `workspace.*` keys.
+- [ ] **Step 1:** Add the two `PermissionDef` entries from section 3 to the `CATALOG` tuple. Keep them in alphabetical order with the rest of `workspace.*` keys.
 - [ ] **Step 2:** Add the binding rows to `SYSTEM_ROLE_BINDINGS` so `owner` and `admin` workspace system roles get both new perms by default.
 
 ### Task A.2: `GET /api/platform/users`

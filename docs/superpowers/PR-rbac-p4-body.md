@@ -10,7 +10,7 @@ Backend only — UI deferred to P6c per the agreed split.
 
 - Migration `0009`: three DB triggers as defense-in-depth:
   - `enforce_priv_escalation` (BEFORE INSERT on `user_roles`) — actor must hold every permission contained in the target role. Auto-bypasses when `granted_by IS NULL` (system/bootstrap path) and respects an `app.bypass_priv_escalation = on` GUC for the boot reconciler.
-  - `reject_system_role_mutation` (BEFORE UPDATE/DELETE on `roles`) — platform-scope `is_system` roles cannot be modified or deleted. Workspace-scope `is_system` roles are per-workspace data (instantiated per workspace per spec §3.3) and cascade-delete with the tenant.
+  - `reject_system_role_mutation` (BEFORE UPDATE/DELETE on `roles`) — platform-scope `is_system` roles cannot be modified or deleted. Workspace-scope `is_system` roles are per-workspace data (instantiated per workspace per spec section 3.3) and cascade-delete with the tenant.
   - `reject_system_role_perm_change` (BEFORE INSERT/UPDATE/DELETE on `role_permissions`) — same platform-scope-only immutability.
 - `reconcile_rbac`, `wire_workspace_role_perms`, and `reconcile_user_roles_from_enums` set the bypass GUC so the boot reconciler can re-sync system role permissions without tripping the triggers.
 - `core/audit.py` — `write_audit_event(db, *, actor_id, action, target_type, target_id, scope, workspace_id, before, after)`. One row per RBAC mutation, written in the same tx as the mutation; atomicity guaranteed.

@@ -142,7 +142,7 @@ policy's SQL untouched, minimizes blast radius, single Alembic head, reversible.
 
 **Why the OR-legacy disjunct is mandatory (corrected 2026-05-17):** a *pure* delegation
 (`is_super_admin(uid)` → `has_platform_perm(uid,'platform.roles.manage')` alone) is **not**
-behaviour-preserving in the **P2→P3 window** and contradicts §7.5 ("enum columns kept — nothing
+behaviour-preserving in the **P2→P3 window** and contradicts section 7.5 ("enum columns kept — nothing
 breaks mid-flight"). P1's backfill is a one-time snapshot; until P3 makes `user_roles` the write
 path, onboarding/invite-acceptance keep creating `tenant_memberships`/`platform_users` rows with
 **no** `user_roles` grant — pure delegation would lock a newly onboarded owner out of their own
@@ -212,7 +212,7 @@ This deliberately touches already-merged Plan 2 code:
   it (P3 + P6).
 - Invite acceptance (`/invites/accept`) creates a `user_roles` grant instead of writing an enum
   role. `platform_invites` / `tenant_invites` carry `role_id` (P7-style invite tables already
-  exist from Plan 2B; the migration in §7.4 adapts them).
+  exist from Plan 2B; the migration in section 7.4 adapts them).
 - `pending_invite` population logic in `/me` is preserved; only the role representation changes.
 
 ---

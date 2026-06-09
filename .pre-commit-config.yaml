@@ -54,14 +54,14 @@ repos:
           )$
 
       - id: no-js-in-frontend
-        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES §2.0)
+        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES section 2.0)
         entry: scripts/check-no-js-in-frontend.sh
         language: system
         pass_filenames: false
         always_run: true
 
       - id: no-hardcoded-colors
-        name: Block hardcoded colors in frontend paths (ENGINEERING_PRINCIPLES §2.0 + spec #4 §9)
+        name: Block hardcoded colors in frontend paths (ENGINEERING_PRINCIPLES section 2.0 + spec #4 section 9)
         entry: scripts/check-colors.sh
         language: system
         pass_filenames: false

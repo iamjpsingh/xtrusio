@@ -51,21 +51,21 @@ Then sign in at http://localhost:5173/sign-in with those credentials.
 
 ## Daily development
 
-| Command                       | What it does                                            |
-| ----------------------------- | ------------------------------------------------------- |
-| `make dev`                    | Brings up local Valkey + API + Web in one terminal.     |
-| `make db-up` / `make db-down` | Local Valkey only.                                      |
+| Command                       | What it does                                                |
+| ----------------------------- | ----------------------------------------------------------- |
+| `make dev`                    | Brings up local Valkey + API + Web in one terminal.         |
+| `make db-up` / `make db-down` | Local Valkey only.                                          |
 | `make api`                    | FastAPI dev server on `:8000` (`XTRUSIO_PROCESS_ROLE=api`). |
-| `make web`                    | Vite dev server on `:5173`.                             |
-| `make worker`                 | Placeholder until later plans add Dramatiq / Prefect.   |
-| `make migrate`                | Apply Alembic migrations to the `DATABASE_URL` project. |
-| `make migrate-down`           | Revert the most recent migration.                       |
-| `make lint`                   | Ruff + ESLint check.                                    |
-| `make format`                 | Auto-format Python + TypeScript.                        |
-| `make typecheck`              | mypy + tsc.                                             |
-| `make test`                   | pytest + Vitest.                                        |
-| `make check`                  | lint + typecheck + test (run before committing).        |
-| `make clean`                  | Wipe caches and venvs.                                  |
+| `make web`                    | Vite dev server on `:5173`.                                 |
+| `make worker`                 | Placeholder until later plans add Dramatiq / Prefect.       |
+| `make migrate`                | Apply Alembic migrations to the `DATABASE_URL` project.     |
+| `make migrate-down`           | Revert the most recent migration.                           |
+| `make lint`                   | Ruff + ESLint check.                                        |
+| `make format`                 | Auto-format Python + TypeScript.                            |
+| `make typecheck`              | mypy + tsc.                                                 |
+| `make test`                   | pytest + Vitest.                                            |
+| `make check`                  | lint + typecheck + test (run before committing).            |
+| `make clean`                  | Wipe caches and venvs.                                      |
 
 ## Layout
 
@@ -87,9 +87,9 @@ Only Valkey runs locally; everything else lives in your managed Supabase project
 
 **`docker-compose.yml`:**
 
-| Service  | Container name   | Host (OrbStack DNS)              | In-network address |
-| -------- | ---------------- | -------------------------------- | ------------------ |
-| Valkey 8 | `xtrusio-valkey` | `xtrusio-valkey.orb.local:6379`  | `valkey:6379`      |
+| Service  | Container name   | Host (OrbStack DNS)             | In-network address |
+| -------- | ---------------- | ------------------------------- | ------------------ |
+| Valkey 8 | `xtrusio-valkey` | `xtrusio-valkey.orb.local:6379` | `valkey:6379`      |
 
 No host ports are published — OrbStack's auto-DNS (`<container>.orb.local`) is how the host reaches Valkey. This guarantees zero conflict with other local Docker stacks. Containers we add later that need to talk to Valkey will join `xtrusio-net` and resolve `valkey:6379` by name.
 
@@ -97,13 +97,13 @@ No host ports are published — OrbStack's auto-DNS (`<container>.orb.local`) is
 
 **Managed Supabase (set in `.env`):**
 
-| Service             | URL                                                |
-| ------------------- | -------------------------------------------------- |
-| Supabase API        | `https://<PROJECT_REF>.supabase.co`                |
-| Postgres (direct)   | `db.<PROJECT_REF>.supabase.co:5432`                |
-| Auth (GoTrue)       | `https://<PROJECT_REF>.supabase.co/auth/v1`        |
-| Realtime            | `https://<PROJECT_REF>.supabase.co/realtime/v1`    |
-| Studio (dashboard)  | `https://supabase.com/dashboard/project/<PROJECT_REF>` |
+| Service            | URL                                                    |
+| ------------------ | ------------------------------------------------------ |
+| Supabase API       | `https://<PROJECT_REF>.supabase.co`                    |
+| Postgres (direct)  | `db.<PROJECT_REF>.supabase.co:5432`                    |
+| Auth (GoTrue)      | `https://<PROJECT_REF>.supabase.co/auth/v1`            |
+| Realtime           | `https://<PROJECT_REF>.supabase.co/realtime/v1`        |
+| Studio (dashboard) | `https://supabase.com/dashboard/project/<PROJECT_REF>` |
 
 ## URLs
 
@@ -118,7 +118,7 @@ No host ports are published — OrbStack's auto-DNS (`<container>.orb.local`) is
 
 See [`docs/superpowers/ENGINEERING_PRINCIPLES.md`](docs/superpowers/ENGINEERING_PRINCIPLES.md). The big ones:
 
-- **TypeScript only on the frontend.** No `.js` / `.jsx` / `.mjs` / `.cjs`. Source AND configs (§2.0).
+- **TypeScript only on the frontend.** No `.js` / `.jsx` / `.mjs` / `.cjs`. Source AND configs (section 2.0).
 - **No custom CSS** outside `apps/web/src/globals.css`. Every component composes Tailwind utilities + shadcn primitives.
 - **No hardcoded colors.** Use semantic tokens (`bg-background`, `text-muted-foreground`, `bg-success/10`, etc.). Pre-commit hook (`no-hardcoded-colors`) blocks `#hex` and `bg-zinc-*`/`bg-gray-*`/etc.
 - **No demo or mock data.** Empty states are first-class. The first platform owner is bootstrapped via a CLI script (Plan 1B/1C); every other user is invited via real flows.

@@ -175,7 +175,7 @@ async def test_membership_enum_backfilled_to_user_roles() -> None:
 
 
 async def test_invites_have_role_id_backfilled() -> None:
-    # The platform 'editor' enum is deliberately NOT a system role (spec §2.7/§7),
+    # The platform 'editor' enum is deliberately NOT a system role (spec section 2.7/section 7),
     # so a legacy platform_invites row with role='editor' correctly keeps
     # role_id NULL — exclude it from the orphan assertion. Every tenant-invite
     # role (admin/editor/read_only) maps to a workspace system role, so the

@@ -4,7 +4,7 @@
 **Status:** Approved (all sections) — ready for implementation planning
 **Builds on:** `main` @ `8e709f7` (P6b merged; Alembic head `0009`; backend 279 / web 74 green).
 **Drains from `docs/superpowers/HANDOFF.md`:** the "NEXT — P6c" gated phase.
-**Splits off `P6d` (future):** missing list endpoints + grant-management UIs + workspace Settings UI (§3).
+**Splits off `P6d` (future):** missing list endpoints + grant-management UIs + workspace Settings UI (section 3).
 
 ---
 
@@ -16,7 +16,7 @@ platform audit log; a workspace owner can do the same for their own workspace; r
 enum reads (`UserMenu`, `tenant-users-page`) become permission-driven.
 
 P6c is **frontend-driven** with three tiny backend additions that exist only to unblock the UIs
-(§3). It does NOT ship grant-management UIs or workspace-settings UI — those depend on backend
+(section 3). It does NOT ship grant-management UIs or workspace-settings UI — those depend on backend
 list-users / settings endpoints that don't exist yet, and were factored into a separate **P6d**
 phase per the user's explicit scope decision (brainstorming session 2026-05-22).
 
@@ -68,7 +68,7 @@ phase per the user's explicit scope decision (brainstorming session 2026-05-22).
     `qk.platformRoles()`, `qk.workspaceRoles(wid)`, `qk.platformAudit()`, `qk.workspaceAudit(wid)`,
     `qk.workspaceInvites(wid)`, `qk.permissionsCatalog()`. Never stringly-typed.
 11. **Error mapping** lives in the existing `lib/error-messages.ts` — extended with the new backend
-    error codes (§5.4).
+    error codes (section 5.4).
 12. **Adds one shadcn primitive: `checkbox`.** The current `apps/web/src/components/ui/` set has no
     `checkbox.tsx` (verified: `tabs, card, popover, sheet, scroll-area, label, sonner, tooltip,
     switch, breadcrumb, command, avatar, dialog, badge, sidebar, table, separator, button,

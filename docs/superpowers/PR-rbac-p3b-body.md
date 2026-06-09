@@ -9,9 +9,9 @@ Replaces every enum-role backend authz check with the `0007` SECURITY DEFINER re
 - **`/me` additive**: `MeResponse.platform_permissions` + `TenantContext.permissions` added; existing `platform`(role)/`tenants[].role` kept (frontend P6b removes them later — no break).
 - Dead code removed (grep-zero refs): `require_super_admin`, `_require_owner_or_admin`, `NotOwnerOrAdminError`. Kept: `get_current_user`/`require_authenticated`/`AuthIdentity`/`can_invite`/`NotAMemberError`/`ForbiddenRoleError`.
 
-**This intentionally changes authorization** (per spec §10 — not behaviour-preserving; that was P3a): platform `admin` now correctly gains operational perms (clients/users/settings); only `platform.roles.manage`-gated stays super_admin-only; `editor`/`read_only` do NOT gain workspace `members.manage`/`invite` (verified against `SYSTEM_ROLE_PERMISSIONS`). Precondition (every enum principal resolver-visible) satisfied by merged P3a.
+**This intentionally changes authorization** (per spec section 10 — not behaviour-preserving; that was P3a): platform `admin` now correctly gains operational perms (clients/users/settings); only `platform.roles.manage`-gated stays super_admin-only; `editor`/`read_only` do NOT gain workspace `members.manage`/`invite` (verified against `SYSTEM_ROLE_PERMISSIONS`). Precondition (every enum principal resolver-visible) satisfied by merged P3a.
 
-Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §5/§8/§10. Plan: `docs/superpowers/plans/2026-05-19-rbac-p3b-permission-enforcement.md`.
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 5/section 8/section 10. Plan: `docs/superpowers/plans/2026-05-19-rbac-p3b-permission-enforcement.md`.
 
 ## Test status
 

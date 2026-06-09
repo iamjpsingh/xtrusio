@@ -4,7 +4,7 @@ Revision ID: 0006
 Revises: 0005
 Create Date: 2026-05-17
 
-Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md (§3, §6, §7).
+Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md (section 3, section 6, section 7).
 Pure raw SQL (codebase convention). Permission catalog rows + system-role
 role_permissions are projected by the reconciler (xtrusio_api.rbac.reconcile),
 NOT this migration — see plan Architecture note.
@@ -188,7 +188,7 @@ def upgrade() -> None:
 
     # --- backfill user_roles from platform_users.role --------------------
     # Only super_admin/admin map to platform system roles; the legacy platform
-    # 'editor' enum has no system role (spec §2.7) and is intentionally dropped.
+    # 'editor' enum has no system role (spec section 2.7) and is intentionally dropped.
     op.execute(
         """
         INSERT INTO user_roles (auth_user_id, role_id, workspace_id, granted_by)

@@ -1631,7 +1631,7 @@ repos:
   - repo: local
     hooks:
       - id: no-js-in-frontend
-        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES §2.0)
+        name: Block .js/.jsx/.mjs/.cjs files in frontend paths (ENGINEERING_PRINCIPLES section 2.0)
         entry: bash -c 'staged=$(git diff --cached --name-only --diff-filter=AM | grep -E "^(apps/web|packages/(ui|api-types))/.*\\.(js|jsx|mjs|cjs)$" || true); if [ -n "$staged" ]; then echo "ERROR: forbidden non-TS files in frontend:"; echo "$staged"; exit 1; fi'
         language: system
         pass_filenames: false

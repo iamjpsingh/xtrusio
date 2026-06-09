@@ -1,13 +1,13 @@
 # PAR-A — Auth / security perimeter (audit C1, C2, H8, M22)
 
-First phase of the **Production Audit Remediation** (PAR) sprint. Closes the perimeter findings from the 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §4).
+First phase of the **Production Audit Remediation** (PAR) sprint. Closes the perimeter findings from the 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 4).
 
 ## Summary
 
 - **C1 — JWT verification hardened.** Algorithms pinned to `RS256` only; `header.alg` validated BEFORE the JWKS lookup; `iss/aud/exp/iat/sub` required-claim enforcement; `iss` pinned to `<supabase_url>/auth/v1`; `aud` stays `"authenticated"` (Supabase default).
 - **C2 — Invite metadata moved to `app_metadata`.** Was: invite ids written via `data={...}` → `user_metadata` (user-writable via the Supabase JS client). Now: post-create `admin.update_user_by_id(..., app_metadata={...})` (service-role-only writable). Acceptance reads from `app_metadata`. Closes the takeover surface where a leaked invite UUID + matching email = account hijack.
 - **H8 — Rate limiting + signup non-enumeration.**
-  - SlowAPI wired to Valkey (single backend, dev + prod, per spec §14):
+  - SlowAPI wired to Valkey (single backend, dev + prod, per spec section 14):
     - `/api/signup` — 5/IP/hour
     - `/api/invites/accept` — 10/IP/hour
     - `/api/onboarding/tenants` — 5/user/hour

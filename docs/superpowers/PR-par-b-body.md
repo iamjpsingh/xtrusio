@@ -1,6 +1,6 @@
 # PAR-B — DB pool + JWKS rotation + observability (audit C3, H7, M13, M14, L1, L2, L16)
 
-Second phase of the **Production Audit Remediation** (PAR) sprint. Closes the operational hardening findings from the 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §5).
+Second phase of the **Production Audit Remediation** (PAR) sprint. Closes the operational hardening findings from the 2026-05-26 audit (`docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 5).
 
 ## Summary
 
@@ -60,7 +60,7 @@ Second phase of the **Production Audit Remediation** (PAR) sprint. Closes the op
 
 ## Spec
 
-- `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §5 — this PR ships Phase B.
+- `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 5 — this PR ships Phase B.
 
 ## Documentation
 

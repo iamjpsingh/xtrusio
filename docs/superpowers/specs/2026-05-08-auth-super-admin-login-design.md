@@ -806,7 +806,7 @@ Frontend tests mock `supabase.auth.*` and `fetch`. No real Supabase contact.
 
 ### 7.3 Coverage target
 
-≥ 80% on new code per `ENGINEERING_PRINCIPLES` §9.
+≥ 80% on new code per `ENGINEERING_PRINCIPLES` section 9.
 
 ---
 

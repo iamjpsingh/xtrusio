@@ -77,7 +77,7 @@ async def _accept_platform(
     # enum row (before the single commit below) so IntegrityError ->
     # AlreadyProvisionedError still applies and a re-accept stays idempotent
     # (grant_role is ON CONFLICT DO NOTHING). Only 'admin' has a platform
-    # system role; legacy 'editor' has none (spec §2.7) so is intentionally
+    # system role; legacy 'editor' has none (spec section 2.7) so is intentionally
     # skipped (no raise); 'super_admin' can't reach here (schema rejects it).
     if invite.role.value == "admin":
         await grant_role(db, auth_user_id=user_id, scope="platform", key="admin")

@@ -2,7 +2,7 @@
 
 > Execution: lean model (memory `feedback_lean_review_workflow`) — build the whole slice in coherent steps with clean/reusable code; ONE full-suite run at the end by the controller (not per-file/per-subagent); ONE final review; auth-gate exception → ONE targeted mid-build check (the auth route tests) before the full run. Code subagents = Opus (`feedback_model_selection`).
 
-**Goal:** Replace every enum-based backend authorization check with the `0007` SECURITY DEFINER resolvers (`has_platform_perm`/`has_workspace_perm`) via a single reusable `core/permissions.py` primitive, and extend `/me` to return effective permission keys — so authorization is permission-driven per spec §5/§8/§10.
+**Goal:** Replace every enum-based backend authorization check with the `0007` SECURITY DEFINER resolvers (`has_platform_perm`/`has_workspace_perm`) via a single reusable `core/permissions.py` primitive, and extend `/me` to return effective permission keys — so authorization is permission-driven per spec section 5/section 8/section 10.
 
 **This intentionally CHANGES authorization** (not behaviour-preserving — that was P3a). Per the spec role→permission matrix, platform `admin` gains the operational perms it should have (clients/users/settings management), while `super_admin`-only `platform.roles.manage` stays super_admin-only. Tests asserting old enum-role 403s are **reframed** to the permission model — expected, in-scope. Precondition (every enum principal has a resolver-visible `user_roles` grant) is satisfied by merged P3a.
 
@@ -118,4 +118,4 @@ audit-log writes; privilege-escalation guard + DB trigger; single-super_admin Py
 
 ## Self-review
 
-Covers spec §10-P3 backend items: `require_permission` replaces all enum checks (Tasks 1–2, full route/service map); `/me` returns effective perms (Task 3); resolver = single source of truth shared with RLS (core/permissions.py calls the same `0007` fns). Risk: P3b changes live authz — mitigated by the explicit conversion map (each key spec-derived), preserving identity/active guards + the tenant-invite error-code contract, the auth-gate mid-build check, and reframed tests. Precondition (resolver-visible principals) satisfied by merged P3a.
+Covers spec section 10-P3 backend items: `require_permission` replaces all enum checks (Tasks 1–2, full route/service map); `/me` returns effective perms (Task 3); resolver = single source of truth shared with RLS (core/permissions.py calls the same `0007` fns). Risk: P3b changes live authz — mitigated by the explicit conversion map (each key spec-derived), preserving identity/active guards + the tenant-invite error-code contract, the auth-gate mid-build check, and reframed tests. Precondition (resolver-visible principals) satisfied by merged P3a.

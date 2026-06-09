@@ -69,7 +69,7 @@ db-logs:
 dev-local:
 	@echo "Starting OPT-IN local Postgres (pgvector) on host port 5433..."
 	@echo "DEFAULT dev runtime is managed Supabase — this is a convenience for"
-	@echo "contributors without a Supabase project. See ENGINEERING_PRINCIPLES §8a."
+	@echo "contributors without a Supabase project. See ENGINEERING_PRINCIPLES section 8a."
 	docker compose --profile local up -d postgres-local
 	@echo "Waiting for xtrusio-postgres-local to be healthy..."
 	@until docker inspect --format='{{.State.Health.Status}}' xtrusio-postgres-local 2>/dev/null | grep -q healthy; do sleep 1; done
@@ -122,7 +122,7 @@ test:
 	uv run pytest apps/api/tests
 	pnpm exec turbo run test
 
-# Coverage gate (PAR-F F.5 / §9.4). NOT part of `make check` — local gates stay
+# Coverage gate (PAR-F F.5 / section 9.4). NOT part of `make check` — local gates stay
 # fast. The 70% floor is enforced authoritatively in CI (.github/workflows/
 # security.yml::backend-coverage). Run this locally when you want the number.
 test-cov:

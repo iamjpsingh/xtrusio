@@ -22,7 +22,7 @@ Auth + Realtime) · Cloudflare Pages (web) · Valkey (rate-limit + perm cache �
 - API + workers deployed to a host with a **public HTTPS URL**, behind a proxy/CDN.
 - Valkey reachable from the API (`VALKEY_URL`).
 - `XTRUSIO_ENV=prod`, `STARTUP_RECONCILE_TOLERANT=false` set in the prod env.
-- `gh` CLI authed with repo admin — only needed for §7 (CI), which is deferred.
+- `gh` CLI authed with repo admin — only needed for section 7 (CI), which is deferred.
 
 ---
 
@@ -32,7 +32,7 @@ Auth + Realtime) · Cloudflare Pages (web) · Valkey (rate-limit + perm cache �
 # CURSOR_HMAC_KEY  — signs pagination cursors (rotate from the dev value)
 python -c "import secrets; print('CURSOR_HMAC_KEY=' + secrets.token_hex(32))"
 
-# AUTH_WEBHOOK_SECRET — the only gate on the auth-event ingest endpoint (§5)
+# AUTH_WEBHOOK_SECRET — the only gate on the auth-event ingest endpoint (section 5)
 python -c "import secrets; print('AUTH_WEBHOOK_SECRET=' + secrets.token_hex(32))"
 ```
 
@@ -122,7 +122,7 @@ for IaC.)
 Lights up the activity feed's `auth` category. Needs the API reachable at a
 public URL (Supabase cloud POSTs to it).
 
-1. Ensure `AUTH_WEBHOOK_SECRET` (from §1) is set in the API env and the API is
+1. Ensure `AUTH_WEBHOOK_SECRET` (from section 1) is set in the API env and the API is
    restarted.
 2. **Dashboard → Database → Webhooks → Create a new hook:**
    - Table: `auth.audit_log_entries` · Events: **Insert**

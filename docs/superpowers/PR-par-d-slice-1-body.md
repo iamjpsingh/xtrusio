@@ -5,7 +5,7 @@ slice is the low-risk, no-new-infra half: query perf, signed cursors, and a set
 of correctness/polish fixes. Slice 2 (invite outbox + worker, transaction-
 ownership, Valkey perm cache, advisory locks) follows.
 
-Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §7.
+Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 7.
 
 ### Findings closed
 

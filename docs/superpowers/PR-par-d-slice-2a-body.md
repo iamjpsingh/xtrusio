@@ -6,7 +6,7 @@ rewrite (caller-owns-tx M1 + invite outbox H5 + invite-revoke `FOR UPDATE` L4)
 is deliberately left for **slice 2b** since it changes user-facing email-delivery
 semantics.
 
-Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` §7.
+Spec: `docs/superpowers/specs/2026-05-26-production-audit-remediation-design.md` section 7.
 
 ### Findings closed
 

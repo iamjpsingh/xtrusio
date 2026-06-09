@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Block hardcoded colors and Tailwind palette utilities in frontend paths.
-# Enforces ENGINEERING_PRINCIPLES §2.0 + spec #4 §9.
+# Enforces ENGINEERING_PRINCIPLES section 2.0 + spec #4 section 9.
 set -euo pipefail
 
 # Files to scan: only newly added/modified frontend source under apps/web or packages/ui
@@ -28,7 +28,7 @@ for file in $staged; do
   for pat in "${forbidden_patterns[@]}"; do
     matches=$(grep -nE "$pat" "$file" 2>/dev/null || true)
     if [ -n "$matches" ]; then
-      echo "ERROR: hardcoded color in $file (use semantic tokens, see ENGINEERING_PRINCIPLES §2.0):"
+      echo "ERROR: hardcoded color in $file (use semantic tokens, see ENGINEERING_PRINCIPLES section 2.0):"
       echo "$matches" | sed 's/^/  /'
       violations=$((violations + 1))
     fi

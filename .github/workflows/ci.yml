@@ -60,10 +60,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ban .js/.jsx/.mjs/.cjs in frontend paths (§2.0)
+      - name: Ban .js/.jsx/.mjs/.cjs in frontend paths (section 2.0)
         run: |
           if git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs' | grep -q .; then
-            echo "::error::Frontend path contains a .js/.jsx/.mjs/.cjs file. See ENGINEERING_PRINCIPLES.md §2.0."
+            echo "::error::Frontend path contains a .js/.jsx/.mjs/.cjs file. See ENGINEERING_PRINCIPLES.md section 2.0."
             git ls-files 'apps/web/**/*.js' 'apps/web/**/*.jsx' 'apps/web/**/*.mjs' 'apps/web/**/*.cjs' 'packages/**/*.js' 'packages/**/*.jsx' 'packages/**/*.mjs' 'packages/**/*.cjs'
             exit 1
           fi

@@ -3046,16 +3046,16 @@ make check
 
 ## Self-review against the spec
 
-- [ ] §3.4 `platform_invites` — Task 1, with CHECK preventing super_admin invites.
-- [ ] §3.5 `tenant_invites` — Task 1, with CHECK preventing owner invites.
-- [ ] §3.6 RLS on `platform_invites` + `tenant_invites` — Task 1, tested in Task 9.
-- [ ] §4.3 `POST/GET/DELETE /platform/users/invites` — Task 5.
-- [ ] §4.4 `POST/GET/DELETE /tenants/{id}/invites` — Task 6.
-- [ ] §4.2 `POST /invites/accept` — Task 7.
-- [ ] §4.2 `/me` includes `pending_invite` — Task 8.
-- [ ] §5.1 routes `/accept-invite`, expanded `/users`, `/clients/$slug/users` — Tasks 12–14.
-- [ ] §7 testing — Tasks 3, 5–10 (backend); 12–14 (frontend); 9 (RLS).
-- [ ] §6 emails — verified by manual smoke test (Task 15); template config is dashboard-only.
+- [ ] section 3.4 `platform_invites` — Task 1, with CHECK preventing super_admin invites.
+- [ ] section 3.5 `tenant_invites` — Task 1, with CHECK preventing owner invites.
+- [ ] section 3.6 RLS on `platform_invites` + `tenant_invites` — Task 1, tested in Task 9.
+- [ ] section 4.3 `POST/GET/DELETE /platform/users/invites` — Task 5.
+- [ ] section 4.4 `POST/GET/DELETE /tenants/{id}/invites` — Task 6.
+- [ ] section 4.2 `POST /invites/accept` — Task 7.
+- [ ] section 4.2 `/me` includes `pending_invite` — Task 8.
+- [ ] section 5.1 routes `/accept-invite`, expanded `/users`, `/clients/$slug/users` — Tasks 12–14.
+- [ ] section 7 testing — Tasks 3, 5–10 (backend); 12–14 (frontend); 9 (RLS).
+- [ ] section 6 emails — verified by manual smoke test (Task 15); template config is dashboard-only.
 
 If any spec section lacks a corresponding task, add it here before declaring this plan complete.
 

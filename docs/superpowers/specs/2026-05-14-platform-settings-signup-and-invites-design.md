@@ -530,7 +530,7 @@ on every navigation:
   else                                    → redirect /onboarding
 ```
 
-Decision logic is extracted into a **pure function** `resolveRoute(me, path)` for testability (see §7.1).
+Decision logic is extracted into a **pure function** `resolveRoute(me, path)` for testability (see section 7.1).
 
 ### 5.3 Route component responsibilities
 
@@ -594,7 +594,7 @@ INFO on every state-changing request with `{user_id, route, status_code, duratio
 
 ## 7. Testing strategy
 
-Project rules §8, §9.
+Project rules section 8, section 9.
 
 ### 7.1 Unit tests (pure)
 
@@ -647,7 +647,7 @@ Same DB; tests run as different roles via `SET request.jwt.claims`:
 
 ### 7.6 Coverage
 
-80% on new code (rule §9). Migrations excluded.
+80% on new code (rule section 9). Migrations excluded.
 
 ### 7.7 Explicitly not tested
 

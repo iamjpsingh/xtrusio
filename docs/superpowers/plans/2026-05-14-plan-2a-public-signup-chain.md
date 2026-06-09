@@ -3129,16 +3129,16 @@ Should be clean. If not, fix and commit before declaring done.
 
 After completing all tasks, run this check:
 
-- [ ] Spec §3.1–3.3 (tenant_role, platform_settings, tenant_memberships) — implemented in Task 1.
-- [ ] Spec §3.6 RLS policies (platform_settings, tenant_memberships, tenants_member_read) — implemented in Task 1, tested in Task 9.
-- [ ] Spec §4.1 `GET /platform/signup-status`, `POST /signup` — Task 6.
-- [ ] Spec §4.2 `GET /me`, `POST /onboarding/tenants` — Tasks 7, 8.
-- [ ] Spec §4.3 `GET/PUT /platform/settings` — Task 5.
-- [ ] Spec §5.1 routes `/sign-up`, `/onboarding`, `/settings` — Tasks 15, 16, 17.
-- [ ] Spec §5.2 AuthGuard state machine — Task 14, with pure logic tested in Task 12.
-- [ ] Spec §5.3 route component responsibilities — Tasks 15–17.
-- [ ] Spec §6 emails — Supabase project config (manual, step 5.1 of spec; not code).
-- [ ] Spec §7 testing — Tasks 5–10, 11–17.
+- [ ] Spec section 3.1–3.3 (tenant_role, platform_settings, tenant_memberships) — implemented in Task 1.
+- [ ] Spec section 3.6 RLS policies (platform_settings, tenant_memberships, tenants_member_read) — implemented in Task 1, tested in Task 9.
+- [ ] Spec section 4.1 `GET /platform/signup-status`, `POST /signup` — Task 6.
+- [ ] Spec section 4.2 `GET /me`, `POST /onboarding/tenants` — Tasks 7, 8.
+- [ ] Spec section 4.3 `GET/PUT /platform/settings` — Task 5.
+- [ ] Spec section 5.1 routes `/sign-up`, `/onboarding`, `/settings` — Tasks 15, 16, 17.
+- [ ] Spec section 5.2 AuthGuard state machine — Task 14, with pure logic tested in Task 12.
+- [ ] Spec section 5.3 route component responsibilities — Tasks 15–17.
+- [ ] Spec section 6 emails — Supabase project config (manual, step 5.1 of spec; not code).
+- [ ] Spec section 7 testing — Tasks 5–10, 11–17.
 
 If anything in the spec lacks a corresponding task above, add it before declaring this plan complete.
 

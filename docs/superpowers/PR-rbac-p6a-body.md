@@ -1,14 +1,14 @@
 ## Summary
 
-RBAC re-architecture **Phase 6a** — the backend-independent frontend slice of spec §9. No RBAC-backend dependency; the only backend change is a single public-route path move.
+RBAC re-architecture **Phase 6a** — the backend-independent frontend slice of spec section 9. No RBAC-backend dependency; the only backend change is a single public-route path move.
 
 - **Structural shell-bleed fix.** New pathless `routes/_app.tsx` layout owns the dashboard shell (`SidebarProvider`/`AppSidebar`/`AppTopbar`); the 5 in-app routes are nested under it; `sign-in`/`sign-up`/`onboarding`/`accept-invite` are root-level siblings → **cannot** render the sidebar by route-tree structure. `__root.tsx` reduced to providers + `AuthGuard` + `Outlet` + `Toaster` (the old `useRouterState`/`isAuthRoute` pathname hack removed). User-facing URLs unchanged. A real-router regression test (`app-shell-structure.test.tsx`) actively guards the boundary (sidebar present at `/`, absent at `/sign-in`).
 - **Shared `AuthLayout`** extracted from the sign-in dark card; `sign-up`, `onboarding`, `accept-invite` now render through it (consistent dark-card identity; shadcn+Tailwind only, no hardcoded colors).
 - **`ApiError.message` debt fixed.** `sign-up` and `onboarding` were passing the raw `Error.message` to the message map (always generic fallback); now `errorMessage(errorCode(...))` in `role="alert"`, matching the `accept-invite` reference.
-- **Signup-status rename (spec §9).** Public `GET /api/signup-status` (old `GET /api/platform/signup-status` now 404s); UI relabelled to **"Public client signup"** (sign-in link, sign-up disabled copy, settings toggle + description). The super_admin-managed `GET/PUT /api/platform/settings` is **untouched**.
+- **Signup-status rename (spec section 9).** Public `GET /api/signup-status` (old `GET /api/platform/signup-status` now 404s); UI relabelled to **"Public client signup"** (sign-in link, sign-up disabled copy, settings toggle + description). The super_admin-managed `GET/PUT /api/platform/settings` is **untouched**.
 - **Test infra:** hermetic vitest env (placeholder `VITE_SUPABASE_*` so the suite runs without machine `.env`); per-query scoped timeout for the 2 slow real-router tests (no suite-global ceiling); documented unconditional `window.scrollTo` jsdom stub.
 
-Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §9
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 9
 Plan: `docs/superpowers/plans/2026-05-17-rbac-p6a-frontend-shell-and-auth-pages.md`
 
 12 code commits, each via TDD with two-stage review (spec-compliance + code-quality) + a final whole-branch review → **READY TO MERGE** (no Critical/Important findings).

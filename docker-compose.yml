@@ -7,7 +7,7 @@ name: xtrusio
 # .env), so the only ALWAYS-ON service here is Valkey (cache / rate-limit / queue).
 # A throwaway local Postgres lives behind the opt-in `local` PROFILE for
 # contributors who can't / won't provision a managed Supabase project — the
-# default dev runtime stays managed Supabase (docs/superpowers/ENGINEERING_PRINCIPLES.md §8a).
+# default dev runtime stays managed Supabase (docs/superpowers/ENGINEERING_PRINCIPLES.md section 8a).
 #
 #   make valkey-up                          # default services only (Valkey)
 #   make dev-local                          # + the `local` profile (postgres-local)

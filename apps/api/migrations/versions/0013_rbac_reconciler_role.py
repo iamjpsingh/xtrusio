@@ -28,7 +28,7 @@ role-gated here. The 0009 system-role immutability triggers
 = 'on'`` from ANY role, BY DESIGN: onboarding's ``wire_workspace_role_perms``
 re-seeds is_system ``role_permissions`` on the request path and the test-purge
 opts out of the owner floor — both need the un-gated bypass. Role-gating those
-is deferred (out of C4 scope per spec §6.2.1/§6.2.2); no shipped request-path
+is deferred (out of C4 scope per spec section 6.2.1/section 6.2.2); no shipped request-path
 code sets the GUC, and ``require_permission()`` remains the primary gate.
 
 RLS NOTE (why the policies below exist): the backend bypasses RLS by connecting
@@ -41,7 +41,7 @@ touches. (For ``user_roles`` the priv-escalation trigger still governs
 escalation safety; ``USING/WITH CHECK true`` only lifts RLS.)
 
 DEFERRED to a live-DB slice (deliberately NOT in this migration), with rationale:
-  - §6.2.3 ``granted_by NOT NULL`` + system sentinel. ``user_roles.granted_by``
+  - section 6.2.3 ``granted_by NOT NULL`` + system sentinel. ``user_roles.granted_by``
     is ``REFERENCES auth.users(id) ON DELETE SET NULL`` — NOT NULL conflicts
     with ``SET NULL``, and the sentinel's FK target is the Supabase-owned
     ``auth.users`` table. Worse, onboarding (``create_tenant_with_owner``) and
@@ -166,7 +166,7 @@ def upgrade() -> None:
             -- short-circuit (a brand-new principal holds no perms, so the
             -- perm-walk below would reject them). The grant API ALWAYS sets
             -- granted_by to the actor's id, so this branch never relaxes the
-            -- human-actor path. KEPT pending the §6.2.3 sentinel rework — see
+            -- human-actor path. KEPT pending the section 6.2.3 sentinel rework — see
             -- the migration docstring for why dropping it now would break
             -- onboarding + invite-accept.
             IF NEW.granted_by IS NULL THEN

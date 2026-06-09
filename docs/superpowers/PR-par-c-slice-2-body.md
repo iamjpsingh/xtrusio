@@ -15,7 +15,7 @@ Closes the final 3 audit findings. With this, **all 60 PAR findings are code-com
 ## Two deliberate omissions (both would otherwise break things)
 
 - **No `GRANT SET ON PARAMETER app.bypass_priv_escalation`.** It requires superuser — managed-Supabase `postgres` is not one, so it would **abort the whole migration**. It's also functionally inert (custom placeholder GUCs are session-settable by any role; the trigger's `current_user` gate is the real control). *Caught in adversarial review before this PR.*
-- **§6.2.3 `granted_by NOT NULL` + system sentinel stays DEFERRED.** `granted_by` is `REFERENCES auth.users(id) ON DELETE SET NULL` (NOT NULL conflicts), the sentinel's FK target is the Supabase-owned `auth.users`, and onboarding + invite-accept self-grant with `granted_by=NULL` relying on the short-circuit. Dropping it without rerouting those request-path flows would break onboarding + invite-accept — unsafe without a live DB to validate.
+- **section 6.2.3 `granted_by NOT NULL` + system sentinel stays DEFERRED.** `granted_by` is `REFERENCES auth.users(id) ON DELETE SET NULL` (NOT NULL conflicts), the sentinel's FK target is the Supabase-owned `auth.users`, and onboarding + invite-accept self-grant with `granted_by=NULL` relying on the short-circuit. Dropping it without rerouting those request-path flows would break onboarding + invite-accept — unsafe without a live DB to validate.
 
 ## Why the RLS policies exist (the critical fix)
 
@@ -23,7 +23,7 @@ The backend bypasses RLS by connecting as the table **owner** (`postgres`). `xtr
 
 ## Scope of the role-gate (no overclaim)
 
-Only `enforce_priv_escalation` is role-gated. The 0009 immutability triggers (`reject_system_role_mutation`, `reject_system_role_perm_change`) and the 0010 owner-floor still honour the bypass GUC from **any** role **by design** — onboarding's `wire_workspace_role_perms` re-seeds `is_system role_permissions` on the request path and needs the un-gated bypass. No shipped request-path code sets the GUC, and `require_permission()` remains the primary gate. Role-gating those is out of C4's scope (spec §6.2.1/§6.2.2) and deferred.
+Only `enforce_priv_escalation` is role-gated. The 0009 immutability triggers (`reject_system_role_mutation`, `reject_system_role_perm_change`) and the 0010 owner-floor still honour the bypass GUC from **any** role **by design** — onboarding's `wire_workspace_role_perms` re-seeds `is_system role_permissions` on the request path and needs the un-gated bypass. No shipped request-path code sets the GUC, and `require_permission()` remains the primary gate. Role-gating those is out of C4's scope (spec section 6.2.1/section 6.2.2) and deferred.
 
 ## Review
 

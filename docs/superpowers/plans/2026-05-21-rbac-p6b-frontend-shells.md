@@ -2097,7 +2097,7 @@ git push
 
 ## Self-Review
 
-**Spec coverage (HANDOFF §NEXT item 4):**
+**Spec coverage (HANDOFF section NEXT item 4):**
 
 1. **Pinned `/me` effective-perms TS contract in `packages/api-types/src/me.ts`** — Task A1. Mirrors `apps/api/.../schemas/me.py` exactly with `platform_permissions: PermissionKey[]` and `tenants[].permissions: PermissionKey[]`, enums kept additively.
 2. **Legacy-compat adapter** — Tasks A4 + A5. `hasPlatformPerm`, `hasWorkspacePerm`, `findTenant`, `getDefaultLandingPath`, `useMe`. Enum-path reads (`me.platform.role`) keep working because the enum fields stay on the type; the adapter only adds permission helpers.

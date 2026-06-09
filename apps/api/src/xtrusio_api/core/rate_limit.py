@@ -53,7 +53,7 @@ from .logging import get_logger
 
 _log = get_logger(__name__)
 
-# Per-route limit specs (PAR-A §4.2 H8). The authenticated catch-all rate is
+# Per-route limit specs (PAR-A section 4.2 H8). The authenticated catch-all rate is
 # read from settings (``AUTHED_CATCHALL_RATE`` env, default "120/minute") so an
 # operator can tune the ceiling without a code change; the module constant
 # below mirrors the default purely for the existing config-shape test.
@@ -147,7 +147,7 @@ limiter = Limiter(
     default_limits=[get_settings().authed_catchall_rate],
     storage_uri=get_settings().valkey_url,
     # No in-memory fallback — single backend in dev AND prod (PAR-A locked
-    # decision §14). If Valkey is unreachable, callers see 500s; that's the
+    # decision section 14). If Valkey is unreachable, callers see 500s; that's the
     # explicit signal to fix infra, not a silent fall-back to a forgettable
     # in-memory counter.
     in_memory_fallback_enabled=False,

@@ -124,7 +124,7 @@ A grep gate in CI (see .github/workflows/ci.yml) and as a local pre-commit hook 
 
 A PR fails review if:
 - Any file exceeds 500 LoC
-- **Any frontend path contains a `.js`/`.jsx`/`.mjs`/`.cjs` file** (§2.0)
+- **Any frontend path contains a `.js`/`.jsx`/`.mjs`/`.cjs` file** (section 2.0)
 - Any new TS file uses `any` without a justification comment
 - Any new endpoint is missing pagination, error tests, or auth tests
 - Any new tenant-scoped table is missing RLS policies + RLS tests
@@ -132,4 +132,4 @@ A PR fails review if:
 - Any new migration is missing a working `downgrade()`
 - Coverage of new code is under 80%
 
-Reviewers cite the specific clause when blocking ("§1: file is 612 LoC, please split").
+Reviewers cite the specific clause when blocking ("section 1: file is 612 LoC, please split").

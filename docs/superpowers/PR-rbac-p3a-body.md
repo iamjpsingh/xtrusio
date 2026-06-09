@@ -11,7 +11,7 @@ RBAC re-architecture **Phase 3a — `user_roles` write-paths & reconciliation** 
 - **bootstrap** — grants platform `super_admin`; `--force` clears the stale `user_roles …00a1` grant before recreating, upholding the single-super_admin global-singleton invariant across force/non-force/crash/re-run.
 - **startup hook** (`main.py`) + `__main__.py`/`make rbac-seed` run both reconcilers (best-effort, boot-safe).
 
-Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §5/§8/§10. Plan: `docs/superpowers/plans/2026-05-18-rbac-p3a-user-roles-write-paths.md`.
+Spec: `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 5/section 8/section 10. Plan: `docs/superpowers/plans/2026-05-18-rbac-p3a-user-roles-write-paths.md`.
 
 ## Test status
 

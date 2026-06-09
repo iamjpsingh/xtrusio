@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Structurally fix the shell-bleed bug (auth/onboarding/accept-invite pages render inside the dashboard sidebar) via a pathless app-shell layout route, extract a shared `AuthLayout`, bring `/sign-up` `/onboarding` `/accept-invite` to the `/sign-in` dark-card design, fix `ApiError.message` misuse, and perform the spec §9 signup-status rename — all with **zero RBAC-backend dependency**.
+**Goal:** Structurally fix the shell-bleed bug (auth/onboarding/accept-invite pages render inside the dashboard sidebar) via a pathless app-shell layout route, extract a shared `AuthLayout`, bring `/sign-up` `/onboarding` `/accept-invite` to the `/sign-in` dark-card design, fix `ApiError.message` misuse, and perform the spec section 9 signup-status rename — all with **zero RBAC-backend dependency**.
 
 **Architecture:** TanStack Router file-based routing with `autoCodeSplitting: true`. Introduce a pathless layout route `routes/_app.tsx` that owns the `SidebarProvider`/`AppSidebar`/`AppTopbar` shell; move the five in-app routes under it (`_app.index`, `_app.users`, `_app.settings`, `_app.clients`, `_app.clients.$slug.users`); leave the four standalone routes flat (`sign-in`, `sign-up`, `onboarding`, `accept-invite`) so they render with NO shell **by route-tree structure**, not a pathname check. `__root.tsx` keeps only providers + `AuthGuard` + `<Outlet/>` + `Toaster`. A new `components/auth-layout.tsx` carries the dark-card chrome; the four auth pages consume it. Signup-status endpoint moves to a public `GET /api/signup-status`; UI copy becomes "Public client signup".
 
 **Tech Stack:** Vite, React 18, TypeScript (strict, no `any`), TanStack Router (file-based, `autoCodeSplitting`), TanStack Query, Tailwind (CSS-var theme, no hardcoded colors), shadcn/ui, motion/react, vitest + jsdom + Testing Library, FastAPI (one route-path rename only).
 
-**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §9 (frontend; the shell-bleed structural fix, shared `AuthLayout`, signup-status rename, `ApiError.message` debt). This plan is the **P6a** slice of spec §10 row P6 — the backend-independent subset. P6b (permission-driven nav, two shells, pinned `/me` effective-perms contract) and P6c (RBAC admin UIs) are separate later plans.
+**Spec:** `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 9 (frontend; the shell-bleed structural fix, shared `AuthLayout`, signup-status rename, `ApiError.message` debt). This plan is the **P6a** slice of spec section 10 row P6 — the backend-independent subset. P6b (permission-driven nav, two shells, pinned `/me` effective-perms contract) and P6c (RBAC admin UIs) are separate later plans.
 
 ---
 
@@ -767,7 +767,7 @@ Expected: PASS. Then full `pnpm --filter @xtrusio/web test` green; `pnpm exec tu
 
 ```bash
 git add apps/api/src apps/api/tests/routes/test_signup.py apps/web/src/lib/api.ts apps/web/src/components/sign-in-page.tsx apps/web/src/components/sign-up-page.tsx apps/web/src/components/settings-page.tsx apps/web/src/components/settings-page.test.tsx apps/web/src/components/sign-in-page.test.tsx apps/web/src/components/sign-up-page.test.tsx
-git commit -m "feat: public GET /api/signup-status + 'Public client signup' relabel (spec §9)"
+git commit -m "feat: public GET /api/signup-status + 'Public client signup' relabel (spec section 9)"
 ```
 
 ---
@@ -802,7 +802,7 @@ Confirm by reading `routeTree.gen.ts`: `sign-in`, `sign-up`, `onboarding`, `acce
 
 ## Self-Review (completed during planning)
 
-**Spec coverage (spec §9, P6a subset):**
+**Spec coverage (spec section 9, P6a subset):**
 - Shell-bleed structural fix (pathless app-shell layout route; auth/onboarding/accept-invite outside it) → Task 2.
 - Shared `AuthLayout` matching the sign-in dark shadcn card; shadcn+Tailwind only, no raw CSS/hardcoded colors → Task 1 (extract) + Tasks 3–5 (apply).
 - `/sign-up`, `/onboarding`, `/accept-invite` brought to the dark-card design → Tasks 3, 4, 5.

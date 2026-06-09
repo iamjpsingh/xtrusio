@@ -29,7 +29,7 @@ This plan **assumes the [Type-the-Tests plan](./2026-05-20-type-the-tests.md) ha
 
 ## Spec anchors
 
-- `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` §4 (permission catalog), §6 (governance), §3.2 (tables — `roles / role_permissions / user_roles / rbac_audit_log / permissions`).
+- `docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md` section 4 (permission catalog), section 6 (governance), section 3.2 (tables — `roles / role_permissions / user_roles / rbac_audit_log / permissions`).
 - HANDOFF.md item 1 (P4 scope) and item 3 (governance bundle).
 
 ## Permission gates
@@ -211,8 +211,8 @@ Create `apps/api/migrations/versions/0009_rbac_governance_triggers.py`:
 ```python
 """RBAC governance triggers: privilege-escalation + immutable system roles.
 
-Spec §6.1 (privilege-escalation guard, defense in depth at the DB layer) and
-§6.3 (immutable system roles).
+Spec section 6.1 (privilege-escalation guard, defense in depth at the DB layer) and
+section 6.3 (immutable system roles).
 
 revision: 0009
 down_revision: 0008
@@ -1015,7 +1015,7 @@ git commit -m "feat(rbac): platform-role grant/revoke + priv-escalation + single
 ### Task C2: Route layer for grants
 
 **Files:**
-- Modify: `apps/api/src/xtrusio_api/routes/platform_roles.py` (extend with grant/revoke routes — OR split into a new `routes/platform_role_grants.py` if the file approaches 200 LoC; honor §1 file-size rules)
+- Modify: `apps/api/src/xtrusio_api/routes/platform_roles.py` (extend with grant/revoke routes — OR split into a new `routes/platform_role_grants.py` if the file approaches 200 LoC; honor section 1 file-size rules)
 - Test: extend `apps/api/tests/routes/test_platform_roles.py` (or new file matching the split)
 
 Endpoints:
@@ -1123,7 +1123,7 @@ Resolve any blocking findings.
 
 ## Self-review checklist
 
-1. **Spec coverage:** §4 catalog (unchanged), §6.1 priv-escalation (service + trigger), §6.2 single super_admin (DB index from P1 + service check), §6.3 immutable system roles (trigger + service), §6.5 audit log (writer + viewer). ✅
+1. **Spec coverage:** section 4 catalog (unchanged), section 6.1 priv-escalation (service + trigger), section 6.2 single super_admin (DB index from P1 + service check), section 6.3 immutable system roles (trigger + service), section 6.5 audit log (writer + viewer). ✅
 2. **Placeholder scan:** every step has concrete code or a documented `...` for mechanical bodies that mirror an existing pattern. The `...` placeholders are limited to: helper bodies mirroring P3.5 cursor pagination, test bodies mirroring existing service tests, role-deletion-with-FK behaviour (resolved at implementation time after reading `0006`). All are flagged for the implementer to expand. ✅
 3. **Type consistency:** `actor_id` everywhere (not `user_id` or `granted_by`); `permission_keys: list[str]` everywhere; `cursor: tuple[datetime, UUID] | None` matches the P3.5 service signatures. ✅
 4. **Out-of-scope discipline:** no frontend, no workspace RBAC, no catalog edits, no enum-column drop. ✅

@@ -1028,7 +1028,7 @@ gh pr view <PR#> --json state  # confirm "MERGED"
 
 - [ ] **Step 2: Update HANDOFF.md — close P6c, pivot to P6d**
 
-Open `docs/superpowers/HANDOFF.md`. Move all three P6c slices into the "Done & merged" table. Rewrite the prose lead-in to reflect that P6c is fully merged. Pivot the "NEXT" block to **P6d**, with these items (taken from spec §3 and §8):
+Open `docs/superpowers/HANDOFF.md`. Move all three P6c slices into the "Done & merged" table. Rewrite the prose lead-in to reflect that P6c is fully merged. Pivot the "NEXT" block to **P6d**, with these items (taken from spec section 3 and section 8):
 
 - `GET /api/platform/users` (cursor-paginated, gated `platform.users.read`)
 - `GET /api/workspaces/{wid}/members` (cursor-paginated, gated `workspace.members.read`)

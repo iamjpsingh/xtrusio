@@ -1,6 +1,6 @@
 ## PAR-F — CI / testing / migrations
 
-Closes the final phase of the 2026-05-26 production audit (spec §9). Addresses **H12, H13, H14, H15, M19, M20, M21, L12, L13, L15**. This phase gates everything PAR-A…E shipped. Implemented as two halves on one branch — backend+infra (`1766e03`) and frontend+packages (`5bd808a`) — plus a codegen-idempotency fix (`85a0550`).
+Closes the final phase of the 2026-05-26 production audit (spec section 9). Addresses **H12, H13, H14, H15, M19, M20, M21, L12, L13, L15**. This phase gates everything PAR-A…E shipped. Implemented as two halves on one branch — backend+infra (`1766e03`) and frontend+packages (`5bd808a`) — plus a codegen-idempotency fix (`85a0550`).
 
 > **Note:** the user explicitly greenlit the CI/CD work for this gating phase, overriding the standing "defer CI/CD until local dev is fully working" rule. CI jobs that need the `xtrusio-ci` managed-Supabase secrets stay **advisory** until those secrets are added; the api-types-drift gate runs with placeholder env and is live immediately.
 

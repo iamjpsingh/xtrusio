@@ -2,7 +2,7 @@
 
 > ## ✅ STATUS (updated 2026-06-01): ALL 60 FINDINGS CODE-COMPLETE
 > **60 of 60 findings.** PAR-A (#25), PAR-B (#26), PAR-C slice 1 (#27), PAR-D (#28–#31), PAR-E (#32), PAR-F (#33), **PAR-C slice 2 (C4/H9/M15)** all on `main`. **M7** was a false finding (no fix); **L14** folded into M5.
-> **PAR-C slice 2** ships: migration `0013` (least-privileged `xtrusio_reconciler` role + permissive RLS policies; `enforce_priv_escalation` recreated `SECURITY INVOKER`, role-gated bypass on `current_user = 'xtrusio_reconciler'`, broadened to `INSERT OR UPDATE`), `RECONCILE_DATABASE_URL` engine isolation (OPTIONAL — dev falls back to the request engine with a warning), and the four `_set_actor` copies → one `core.permissions.set_actor`. **Scope note:** §6.2.3 (`granted_by NOT NULL` + sentinel) stays DEFERRED — it would break onboarding + invite-accept without a live DB to validate (FK to Supabase-owned `auth.users`; the request-path self-grants rely on the `granted_by IS NULL` short-circuit). Only `enforce_priv_escalation` is role-gated; the 0009/0010 immutability+owner-floor triggers still honour the bypass GUC from any role by design (onboarding's `wire_workspace_role_perms` needs it). **The production `RECONCILE_DATABASE_URL` path needs a live smoke-test before reliance** (it can't be exercised in dev, where reconcile runs as `postgres`/owner). See §6.2 + HANDOFF.
+> **PAR-C slice 2** ships: migration `0013` (least-privileged `xtrusio_reconciler` role + permissive RLS policies; `enforce_priv_escalation` recreated `SECURITY INVOKER`, role-gated bypass on `current_user = 'xtrusio_reconciler'`, broadened to `INSERT OR UPDATE`), `RECONCILE_DATABASE_URL` engine isolation (OPTIONAL — dev falls back to the request engine with a warning), and the four `_set_actor` copies → one `core.permissions.set_actor`. **Scope note:** section 6.2.3 (`granted_by NOT NULL` + sentinel) stays DEFERRED — it would break onboarding + invite-accept without a live DB to validate (FK to Supabase-owned `auth.users`; the request-path self-grants rely on the `granted_by IS NULL` short-circuit). Only `enforce_priv_escalation` is role-gated; the 0009/0010 immutability+owner-floor triggers still honour the bypass GUC from any role by design (onboarding's `wire_workspace_role_perms` needs it). **The production `RECONCILE_DATABASE_URL` path needs a live smoke-test before reliance** (it can't be exercised in dev, where reconcile runs as `postgres`/owner). See section 6.2 + HANDOFF.
 > ⚠️ **This spec is security/correctness only.** It does NOT cover UI/UX, polish, or "does login work." In fact PAR-A's RS256 pin was a **regression that broke login** (the project uses ES256) — fixed post-spec in #57. Product/UX work is tracked in the HANDOFF "POST-AUDIT REALITY CHECK", not here.
 
 **Date:** 2026-05-26
@@ -75,9 +75,9 @@ These decisions span multiple phases and must be settled before any plan-writing
 | **E — Frontend correctness** | H1, H2, H3, H4, M10, M11, M12, M24, L8, L9, L10, L11 | Cross-account cache leak on sign-out; broken pagination accumulator on nav-away; queryKey divergence cache-miss; perm flash on deep links; missing toasts | 3-4 days |
 | **F — CI/testing/migrations** | H12, H13, H14, H15, M19, M20, M21, L12, L13, L15 | Serial CI throttle at any contributor velocity; cross-layer regressions invisible; bootstrap untested; no dep audit, no secret scan, no coverage gate; production-scale migration locks | 3-4 days |
 
-**Estimated total:** 17–23 engineering days. With the lean-controller cadence (CLAUDE.md §"one subagent for whole slice + ship it"), realistically 2–3 calendar weeks.
+**Estimated total:** 17–23 engineering days. With the lean-controller cadence (CLAUDE.md section "one subagent for whole slice + ship it"), realistically 2–3 calendar weeks.
 
-**Sequencing (§13 below):** A + B can run in parallel; C must follow B; D depends on C (for the perm-cache invalidation seams); E can run in parallel with D; F lands last.
+**Sequencing (section 13 below):** A + B can run in parallel; C must follow B; D depends on C (for the perm-cache invalidation seams); E can run in parallel with D; F lands last.
 
 ---
 
@@ -896,7 +896,7 @@ Day 0       Day 1       Day 2       Day 3       Day 4       Day 5       Day 6   
 - **E parallels D** (frontend-only changes; the only backend touch is OpenAPI codegen which lands in F).
 - **F lands last** so its drift gates can guard everything PAR-D and PAR-E shipped.
 
-**Total wall-clock estimate:** 2-3 calendar weeks at one engineer with the lean-controller cadence (CLAUDE.md §"one Opus subagent per phase + ship it"). Each PR is one branch, one squash-merge, post-merge HANDOFF update.
+**Total wall-clock estimate:** 2-3 calendar weeks at one engineer with the lean-controller cadence (CLAUDE.md section "one Opus subagent per phase + ship it"). Each PR is one branch, one squash-merge, post-merge HANDOFF update.
 
 ---
 

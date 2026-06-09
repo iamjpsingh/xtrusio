@@ -5,7 +5,7 @@ Revision ID: 0007
 Revises: 0006
 Create Date: 2026-05-17
 
-Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md §5/§6.
+Spec: docs/superpowers/specs/2026-05-17-rbac-rls-rearchitecture-design.md section 5/section 6.
 Pure raw SQL. Resolvers are SECURITY DEFINER (bypass RLS internally — no
 recursion, the 0003 technique) and are the single source of truth both RLS
 and the P3 backend call.
@@ -101,10 +101,10 @@ def upgrade() -> None:
     # Supersede the 0003 enum helpers with TRANSITION-SAFE bodies: the new
     # resolver OR the original 0003 enum check. Same signatures → every
     # existing 0003/0004 policy keeps working unchanged. The OR-legacy
-    # disjunct is mandatory (spec §5, corrected): pure delegation strands
+    # disjunct is mandatory (spec section 5, corrected): pure delegation strands
     # enum-era memberships until P3 (proven: 0006 passes, pure-0007 fails) and
     # would lock newly-onboarded owners out — this superset breaks nothing
-    # mid-flight (§7.5) while giving instant-revoke for RBAC-granted access.
+    # mid-flight (section 7.5) while giving instant-revoke for RBAC-granted access.
     # SECURITY DEFINER → the legacy EXISTS subqueries don't recurse (0003
     # technique). P3 retires the legacy disjunct when user_roles is authoritative.
     op.execute(
