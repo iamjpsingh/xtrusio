@@ -26,6 +26,11 @@ const MESSAGES: Record<string, string> = {
   scope_mismatch: "That permission belongs to a different scope.",
   single_super_admin_invariant: "You can't remove the last super admin.",
   owner_floor: "You can't revoke the last workspace owner.",
+  // Owner-role protection (grant/revoke owner = owner-only; owner can't be removed).
+  owner_grant_requires_owner: "Only an owner can grant the owner role.",
+  cannot_remove_owner: "Owners can't be removed. Revoke their owner role first.",
+  permission_denied: "You don't have permission to do that.",
+  member_not_found: "That user isn't a member of this workspace.",
   membership_not_found: "That user isn't a member of this workspace.",
   platform_user_not_found: "That user isn't a platform user.",
   "invalid cursor": "Couldn't load more events. Try refreshing.",

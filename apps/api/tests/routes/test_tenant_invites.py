@@ -265,6 +265,49 @@ async def test_list_and_revoke(
         await _cleanup(db_session, user_id)
 
 
+async def test_clear_accepted_invite(
+    http_client: AsyncClient,
+    db_session: AsyncSession,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+) -> None:
+    """An ACCEPTED tenant invite can be CLEARED: DELETE returns 204 and the
+    record is removed from the list (no 409). The invitee's membership/auth
+    identity is untouched — tenant invites never delete auth.users."""
+    user_id, tid = await _seed_owner(db_session)
+    try:
+        mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock()
+        token = make_jwt(sub=user_id)
+        c = await http_client.post(
+            f"/api/tenants/{tid}/invites",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"email": "accepted@example.com", "role": "editor"},
+        )
+        assert c.status_code == 201
+        invite_id = c.json()["id"]
+        # Simulate acceptance (the invitee accepted and became a member).
+        await db_session.execute(
+            text("UPDATE tenant_invites SET accepted_at = now() WHERE id = :id"),
+            {"id": invite_id},
+        )
+        await db_session.commit()
+        d = await http_client.delete(
+            f"/api/tenants/{tid}/invites/{invite_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert d.status_code == 204, d.text
+        # The record is GONE (cleared), not just soft-revoked.
+        row = (
+            await db_session.execute(
+                text("SELECT 1 FROM tenant_invites WHERE id = :id"),
+                {"id": invite_id},
+            )
+        ).first()
+        assert row is None
+    finally:
+        await _cleanup(db_session, user_id)
+
+
 async def test_non_member_cannot_list(
     http_client: AsyncClient, db_session: AsyncSession, make_jwt: Callable[..., str]
 ) -> None:

@@ -18,7 +18,6 @@ from ..schemas.invite import (
 )
 from ..services.tenant_invites import (
     ForbiddenRoleError,
-    InviteAlreadyAcceptedError,
     InvitePendingError,
     NotAMemberError,
     UserAlreadyMemberError,
@@ -102,12 +101,12 @@ async def revoke(
     identity: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
+    # PENDING invite → revoked (204); ACCEPTED invite → record cleared (204).
+    # The service no longer raises on an accepted invite — both states 204.
     try:
         await revoke_tenant_invite(
             db, tenant_id=tenant_id, invite_id=invite_id, requester_id=identity.user_id
         )
     except NotAMemberError as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "not_a_member") from e
-    except InviteAlreadyAcceptedError as e:
-        raise HTTPException(status.HTTP_409_CONFLICT, "invite_already_accepted") from e
     return Response(status_code=status.HTTP_204_NO_CONTENT)

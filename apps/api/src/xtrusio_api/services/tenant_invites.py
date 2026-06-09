@@ -34,10 +34,6 @@ class InvitePendingError(Exception):
     pass
 
 
-class InviteAlreadyAcceptedError(Exception):
-    pass
-
-
 async def _load_membership(db: AsyncSession, *, tenant_id: UUID, user_id: UUID) -> TenantMembership:
     """Load the requester's membership (needed by `can_invite`).
 
@@ -193,12 +189,27 @@ async def revoke_tenant_invite(
     ).scalar_one_or_none()
     if invite is None:
         return  # idempotent: revoking an unknown invite is a 204 no-op
+    # Capture the before-payload from the loaded row BEFORE mutating/deleting it.
+    before = {"email": invite.email, "role": invite.role.value}
     if invite.accepted_at is not None:
-        raise InviteAlreadyAcceptedError()
+        # ACCEPTED invite → "clear" it: delete the record only so it drops off
+        # the invites list. The invitee is now a real member (their
+        # tenant_memberships row + auth identity are untouched). 204, not 409.
+        await db.delete(invite)
+        await write_audit_event(
+            db,
+            actor_id=requester_id,
+            action="tenant_invite.clear",
+            target_type="invite",
+            target_id=invite_id,
+            scope="workspace",
+            workspace_id=tenant_id,
+            before=before,
+        )
+        await db.commit()
+        return
     if invite.revoked_at is not None:
         return  # already revoked — idempotent no-op
-    # Capture the before-payload from the loaded row BEFORE mutating it.
-    before = {"email": invite.email, "role": invite.role.value}
     invite.revoked_at = datetime.now(UTC)
     # Audit row in the SAME tx as the revoke — this fn self-commits, so the
     # event MUST be written before the commit below.

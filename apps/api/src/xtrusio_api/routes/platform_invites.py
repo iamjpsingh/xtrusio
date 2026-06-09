@@ -24,7 +24,6 @@ from ..schemas.invite import (
     PlatformInvitesPage,
 )
 from ..services.platform_invites import (
-    InviteAlreadyAcceptedError,
     InvitePendingError,
     UnsupportedInviteRoleError,
     UserExistsError,
@@ -94,8 +93,7 @@ async def revoke(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await require_super_admin(db, user.user_id)
-    try:
-        await revoke_platform_invite(db, invite_id=invite_id, actor_id=user.user_id)
-    except InviteAlreadyAcceptedError as e:
-        raise HTTPException(status.HTTP_409_CONFLICT, "invite_already_accepted") from e
+    # PENDING invite → revoked + unconfirmed Supabase user deleted (204);
+    # ACCEPTED invite → record cleared, real Supabase user kept (204).
+    await revoke_platform_invite(db, invite_id=invite_id, actor_id=user.user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

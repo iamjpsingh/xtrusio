@@ -270,6 +270,53 @@ async def test_revoke_invite(
     await db_session.commit()
 
 
+async def test_clear_accepted_platform_invite(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    """An ACCEPTED platform invite can be CLEARED: DELETE returns 204, the
+    record is removed, and the now-REAL Supabase user is NOT deleted (clearing
+    an accepted invite must not nuke a live account)."""
+    token = make_jwt(sub=existing_super_admin.id)
+    sb_uid = str(uuid4())
+    mock_supabase_admin.auth.admin.invite_user_by_email.return_value = MagicMock(
+        user=MagicMock(id=sb_uid)
+    )
+    r = await http_client.post(
+        "/api/platform/users/invites",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"email": "accepted-pf@example.com", "role": "admin"},
+    )
+    invite_id = r.json()["id"]
+    # Simulate the post-send + accepted state: the worker set supabase_user_id,
+    # then the invitee accepted (became a real platform user).
+    await db_session.execute(
+        text(
+            "UPDATE platform_invites SET supabase_user_id = CAST(:sid AS uuid), "
+            "accepted_at = now() WHERE id = :id"
+        ),
+        {"sid": sb_uid, "id": invite_id},
+    )
+    await db_session.commit()
+    r = await http_client.delete(
+        f"/api/platform/users/invites/{invite_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 204, r.text
+    # The record is GONE (cleared), not soft-revoked.
+    row = (
+        await db_session.execute(
+            text("SELECT 1 FROM platform_invites WHERE id = :id"), {"id": invite_id}
+        )
+    ).first()
+    assert row is None
+    # The real Supabase user MUST NOT be deleted on an accepted-invite clear.
+    mock_supabase_admin.auth.admin.delete_user.assert_not_called()
+
+
 async def test_create_invite_super_admin_role_rejected_422(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,

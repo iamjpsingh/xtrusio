@@ -58,6 +58,22 @@ describe("errorMessage — P6c Slice 1 codes", () => {
   it("maps platform_user_not_found", () => {
     expect(errorMessage("platform_user_not_found")).toBe("That user isn't a platform user.");
   });
+  it("maps owner_grant_requires_owner", () => {
+    expect(errorMessage("owner_grant_requires_owner")).toBe(
+      "Only an owner can grant the owner role.",
+    );
+  });
+  it("maps cannot_remove_owner", () => {
+    expect(errorMessage("cannot_remove_owner")).toBe(
+      "Owners can't be removed. Revoke their owner role first.",
+    );
+  });
+  it("maps permission_denied", () => {
+    expect(errorMessage("permission_denied")).toBe("You don't have permission to do that.");
+  });
+  it("maps member_not_found", () => {
+    expect(errorMessage("member_not_found")).toBe("That user isn't a member of this workspace.");
+  });
   it("falls through to the existing default for unknown codes", () => {
     const result = errorMessage("definitely-not-a-real-code");
     expect(result).toBeTruthy();

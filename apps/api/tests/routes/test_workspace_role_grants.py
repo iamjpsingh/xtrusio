@@ -74,6 +74,50 @@ async def _role_id(workspace_id: UUID, key: str) -> UUID:
         return UUID(str(rid))
 
 
+async def _grant_owner_perms_via_custom_role(workspace_id: UUID, user_id: UUID) -> None:
+    """Give ``user_id`` every permission the workspace owner role holds, via a
+    NON-system custom role — so they pass the grant priv-esc pre-check but are
+    NOT an owner (no owner system-role grant). This isolates the owner-role gate
+    from the perm-based priv-escalation gate."""
+    async with SessionLocal() as s:
+        await s.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
+        owner_role = (
+            await s.execute(
+                text(
+                    "SELECT id FROM roles WHERE scope='workspace' "
+                    "AND workspace_id = :w AND key='owner' AND is_system"
+                ),
+                {"w": str(workspace_id)},
+            )
+        ).scalar_one()
+        custom_id = (
+            await s.execute(
+                text(
+                    "INSERT INTO roles (scope, workspace_id, key, name, description, is_system) "
+                    "VALUES ('workspace', :w, 'owner_clone', 'Owner Clone', '', false) "
+                    "RETURNING id"
+                ),
+                {"w": str(workspace_id)},
+            )
+        ).scalar_one()
+        # Copy owner's role_permissions onto the custom role.
+        await s.execute(
+            text(
+                "INSERT INTO role_permissions (role_id, permission_id) "
+                "SELECT :c, permission_id FROM role_permissions WHERE role_id = :o"
+            ),
+            {"c": str(custom_id), "o": str(owner_role)},
+        )
+        await s.execute(
+            text(
+                "INSERT INTO user_roles (auth_user_id, role_id, workspace_id) "
+                "VALUES (:u, :r, :w)"
+            ),
+            {"u": str(user_id), "r": str(custom_id), "w": str(workspace_id)},
+        )
+        await s.commit()
+
+
 async def test_get_list_requires_auth(http_client: AsyncClient) -> None:
     res = await http_client.get(f"/api/workspaces/{uuid4()}/members/{uuid4()}/roles")
     assert res.status_code == 401
@@ -304,3 +348,73 @@ async def test_get_403_for_lacking_members_read(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert res.status_code == 403
+
+
+async def test_post_403_non_owner_grant_owner(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """A non-owner actor who holds EVERY owner permission (via a custom role,
+    so the priv-esc pre-check passes) but is NOT an owner cannot grant the owner
+    system role → 403 owner_grant_requires_owner. This proves the owner gate is
+    a ROLE check layered on TOP of the perm-based priv-escalation check."""
+    tid, _, actor = await _provision_owner_and_member(member_role="admin")
+    await _grant_owner_perms_via_custom_role(tid, actor)
+    token = make_jwt(sub=actor)
+    owner_role = await _role_id(tid, "owner")
+    res = await http_client.post(
+        f"/api/workspaces/{tid}/members/{actor}/roles",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"role_id": str(owner_role)},
+    )
+    assert res.status_code == 403, res.text
+    assert res.json()["detail"] == "owner_grant_requires_owner"
+
+
+async def test_post_201_owner_grants_owner(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """An existing owner CAN grant the owner system role to another member
+    (creates a second owner) — the owner gate permits owner actors."""
+    tid, owner_id, member_id = await _provision_owner_and_member()
+    token = make_jwt(sub=owner_id)
+    owner_role = await _role_id(tid, "owner")
+    res = await http_client.post(
+        f"/api/workspaces/{tid}/members/{member_id}/roles",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"role_id": str(owner_role)},
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["role_key"] == "owner"
+
+
+async def test_delete_403_non_owner_revokes_owner(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """A non-owner actor (holds every owner perm via a custom role, so priv-esc
+    passes) cannot revoke an owner grant → 403 permission_denied. Combined with
+    the floor, only an owner may revoke an owner grant. The workspace keeps 2
+    owners so the floor is NOT what triggers the 403."""
+    tid, owner_id, actor = await _provision_owner_and_member(member_role="admin")
+    await _grant_owner_perms_via_custom_role(tid, actor)
+    # Make `actor` perms-equivalent to owner but NOT an owner; the real owner
+    # (owner_id) keeps the only owner grant. Find owner_id's owner grant id.
+    async with SessionLocal() as s:
+        owner_grant_id = (
+            await s.execute(
+                text(
+                    "SELECT ur.id FROM user_roles ur "
+                    "JOIN roles r ON r.id = ur.role_id "
+                    "WHERE r.scope='workspace' AND r.workspace_id = :w "
+                    "AND r.key='owner' AND r.is_system "
+                    "AND ur.auth_user_id = :u AND ur.workspace_id = :w"
+                ),
+                {"w": str(tid), "u": str(owner_id)},
+            )
+        ).scalar_one()
+    token = make_jwt(sub=actor)
+    res = await http_client.delete(
+        f"/api/workspaces/{tid}/members/{owner_id}/roles/{owner_grant_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 403, res.text
+    assert res.json()["detail"] == "permission_denied"
