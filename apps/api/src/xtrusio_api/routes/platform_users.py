@@ -18,7 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user, require_super_admin
+from ..core.auth import AuthIdentity, require_authenticated, require_super_admin
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/api/platform/users", tags=["platform-users"])
 
 @router.get("", response_model=PlatformUsersPage)
 async def list_users(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -57,10 +57,10 @@ async def list_users(
 @router.post("", response_model=PlatformUserCreated, status_code=status.HTTP_201_CREATED)
 async def create_user(
     body: PlatformUserCreate,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PlatformUserCreated:
-    require_super_admin(user)
+    await require_super_admin(db, user.user_id)
     # PAR-D M1: caller-owns-transaction — the service flushes so a duplicate
     # surfaces here; we commit on success and roll back on any typed error.
     try:

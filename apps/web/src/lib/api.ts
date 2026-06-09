@@ -465,6 +465,15 @@ export async function fetchWorkspaceMembers(
   return apiFetch<WorkspaceMembersPage>(`/api/workspaces/${workspaceId}/members${qs}`);
 }
 
+/**
+ * Remove a member from a workspace (DELETE → 204). Gated server-side by
+ * `workspace.members.manage`. 409 `cannot_remove_owner` if the target holds the
+ * workspace owner system role; 404 `member_not_found` for a non-member.
+ */
+export async function deleteWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+  await apiFetchVoid(`/api/workspaces/${workspaceId}/members/${userId}`, { method: "DELETE" });
+}
+
 // ----- Workspace settings (P6d) -----
 
 export async function fetchWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettingsOut> {

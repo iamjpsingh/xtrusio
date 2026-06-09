@@ -15,7 +15,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -47,7 +47,7 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspace-roles"])
 @router.get("/{workspace_id}/roles", response_model=WorkspaceRolesPage)
 async def list_roles(
     workspace_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -75,7 +75,7 @@ async def list_roles(
 async def create_role(
     workspace_id: UUID,
     body: WorkspaceRoleIn,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceRoleOut:
     await require_permission(db, user.user_id, "workspace.roles.manage", workspace_id=workspace_id)
@@ -118,7 +118,7 @@ async def create_role(
 async def get_role(
     workspace_id: UUID,
     role_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceRoleOut:
     await require_permission(db, user.user_id, "workspace.roles.manage", workspace_id=workspace_id)
@@ -134,7 +134,7 @@ async def update_role(
     workspace_id: UUID,
     role_id: UUID,
     body: WorkspaceRolePatch,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceRoleOut:
     await require_permission(db, user.user_id, "workspace.roles.manage", workspace_id=workspace_id)
@@ -184,7 +184,7 @@ async def update_role(
 async def delete_role(
     workspace_id: UUID,
     role_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await require_permission(db, user.user_id, "workspace.roles.manage", workspace_id=workspace_id)

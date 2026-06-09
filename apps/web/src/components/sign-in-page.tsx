@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchSignupStatus, postSignupResend } from "@/lib/api";
+import { fetchSignupStatus } from "@/lib/api";
 import { qk } from "@/lib/query-keys";
 import { authErrorMessage, errorMessage } from "@/lib/error-messages";
 import { Eye, EyeOff, LockKeyhole, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import { AuthLayout } from "@/components/auth-layout";
 
 export function SignInPage() {
@@ -43,7 +44,8 @@ export function SignInPage() {
         setError(errorMessage("rate_limited"));
         return;
       }
-      // invalid_credentials (and any other auth error) → generic, non-enumerating.
+      // invalid_credentials (and any other unmapped auth error) → "wrong
+      // email or password" (keeps the Forgot-password link visible).
       setError(errorMessage("invalid_credentials"));
       return;
     }
@@ -52,13 +54,13 @@ export function SignInPage() {
 
   const onResend = async () => {
     setResendState("sending");
-    try {
-      await postSignupResend(email);
-      setResendState("sent");
-    } catch (err) {
+    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+    if (resendError) {
       setResendState("idle");
-      setError(authErrorMessage(err));
+      setError(authErrorMessage(resendError));
+      return;
     }
+    setResendState("sent");
   };
 
   return (
@@ -169,7 +171,7 @@ export function SignInPage() {
                   disabled={resendState === "sending"}
                   className="text-sm font-medium text-foreground underline-offset-4 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {resendState === "sending" ? "Sending…" : "Resend verification email"}
+                  {resendState === "sending" ? "Sending…" : "Resend verification link"}
                 </button>
               ))}
           </div>

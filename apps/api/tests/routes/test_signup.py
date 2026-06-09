@@ -1,10 +1,12 @@
 """Tests for /api/signup and /api/signup-status.
 
-Native ``sign_up`` model: signup is hard-gated by ``signups_enabled``
-(disabled → 403, no auth user created). When enabled, the route calls the
-ANON-key client's ``auth.sign_up`` — which sends the confirmation email and
-natively obfuscates an already-registered email (no 409 oracle). The route
-ALWAYS returns 202 ``confirm_email_sent`` when enabled.
+Flow B (existence-revealing): signup is hard-gated by ``signups_enabled``
+(disabled → 403, no auth user created). When enabled, the route looks the
+email up in ``auth.users``:
+
+* new email → ``auth.sign_up`` (sends the verification email) → 202.
+* existing email (verified or not) → 409 ``email_exists`` (no account
+  created, no email sent).
 """
 
 from __future__ import annotations
@@ -141,14 +143,20 @@ async def test_signup_resend_transport_failure_returns_502(
         )
 
 
-async def test_signup_happy_path_calls_native_sign_up(
+async def test_signup_new_email_calls_native_sign_up(
     http_client: AsyncClient,
     existing_super_admin: PlatformUser,
     make_jwt: Callable[..., str],
     mock_supabase_admin: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Gated ON: the route calls ``auth.sign_up`` (native flow) and NEVER
-    ``admin.create_user`` — the old admin-create path is gone."""
+    """A NEW email → ``auth.sign_up`` (native flow, sends verification) → 202.
+    It must NEVER call ``admin.create_user`` (the old admin-create path is gone)."""
+
+    async def _never_exists(_db: object, _email: str) -> tuple[bool, bool]:
+        return (False, False)
+
+    monkeypatch.setattr("xtrusio_api.services.signup.lookup_auth_user", _never_exists)
     token = make_jwt(sub=existing_super_admin.id)
     await http_client.put(
         "/api/platform/settings",
@@ -168,6 +176,47 @@ async def test_signup_happy_path_calls_native_sign_up(
         mock_supabase_admin.auth.sign_up.assert_called_once()
         # The admin-create path is removed: it must NEVER be called from signup.
         mock_supabase_admin.auth.admin.create_user.assert_not_called()
+    finally:
+        await http_client.put(
+            "/api/platform/settings",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"signups_enabled": False},
+        )
+
+
+@pytest.mark.parametrize("confirmed", [True, False])
+async def test_signup_existing_email_returns_409(
+    http_client: AsyncClient,
+    existing_super_admin: PlatformUser,
+    make_jwt: Callable[..., str],
+    mock_supabase_admin: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    confirmed: bool,
+) -> None:
+    """An EXISTING email — verified OR unverified — → 409 ``email_exists``.
+    No account is created and NO Supabase email of any kind is sent."""
+
+    async def _exists(_db: object, _email: str) -> tuple[bool, bool]:
+        return (True, confirmed)
+
+    monkeypatch.setattr("xtrusio_api.services.signup.lookup_auth_user", _exists)
+    token = make_jwt(sub=existing_super_admin.id)
+    await http_client.put(
+        "/api/platform/settings",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"signups_enabled": True},
+    )
+    try:
+        r = await http_client.post(
+            "/api/signup",
+            json={"email": "exists-flowb@example.com", "password": "Password1!"},
+        )
+        assert r.status_code == 409
+        assert r.json()["detail"] == "email_exists"
+        # Flow B: an existing email sends NOTHING — no sign_up, no resend, no reset.
+        mock_supabase_admin.auth.sign_up.assert_not_called()
+        mock_supabase_admin.auth.resend.assert_not_called()
+        mock_supabase_admin.auth.reset_password_email.assert_not_called()
     finally:
         await http_client.put(
             "/api/platform/settings",

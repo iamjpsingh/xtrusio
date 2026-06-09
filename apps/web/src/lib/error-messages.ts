@@ -1,7 +1,8 @@
 import { ApiError } from "./api";
 
 const MESSAGES: Record<string, string> = {
-  signups_disabled: "Signups are currently disabled.",
+  signups_disabled: "Signups are disabled.",
+  email_exists: "This email already has an account.",
   email_taken: "An account with that email already exists.",
   user_exists: "A user with that email already exists.",
   invalid_email: "That email address doesn't look valid.",
@@ -25,6 +26,11 @@ const MESSAGES: Record<string, string> = {
   scope_mismatch: "That permission belongs to a different scope.",
   single_super_admin_invariant: "You can't remove the last super admin.",
   owner_floor: "You can't revoke the last workspace owner.",
+  // Owner-role protection (grant/revoke owner = owner-only; owner can't be removed).
+  owner_grant_requires_owner: "Only an owner can grant the owner role.",
+  cannot_remove_owner: "Owners can't be removed. Revoke their owner role first.",
+  permission_denied: "You don't have permission to do that.",
+  member_not_found: "That user isn't a member of this workspace.",
   membership_not_found: "That user isn't a member of this workspace.",
   platform_user_not_found: "That user isn't a platform user.",
   "invalid cursor": "Couldn't load more events. Try refreshing.",
@@ -37,8 +43,8 @@ const MESSAGES: Record<string, string> = {
   rate_limited: "Too many attempts. Please wait a minute and try again.",
   over_request_rate_limit: "Too many attempts. Please wait a minute and try again.",
   over_email_send_rate_limit: "Too many emails sent. Please wait a minute and try again.",
-  email_not_confirmed: "Your email isn't verified yet. Check your inbox for the link.",
-  invalid_credentials: "Email or password is incorrect.",
+  email_not_confirmed: "Your email isn't verified yet.",
+  invalid_credentials: "Wrong email or password.",
   otp_expired: "This link has expired. Request a new one.",
   same_password: "Your new password must be different from your current one.",
   network_error: "Couldn't reach the server. Check your connection and try again.",

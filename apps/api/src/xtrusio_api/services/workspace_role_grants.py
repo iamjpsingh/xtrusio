@@ -78,7 +78,44 @@ class OwnerFloorError(Exception):
     owners. A workspace MUST retain at least one active owner grant."""
 
 
+class OwnerGrantRequiresOwnerError(Exception):
+    """Granting the workspace ``owner`` system role requires the actor to
+    already be an owner of this workspace. A non-owner (even a workspace_admin
+    holding ``workspace.members.manage``) MUST NOT be able to mint a new owner.
+    Route maps this to 403 ``owner_grant_requires_owner``."""
+
+
+class OwnerRevokeRequiresOwnerError(Exception):
+    """Revoking a workspace ``owner`` system-role grant requires the actor to
+    already be an owner of this workspace. Combined with the ≥1-owner floor,
+    this means only an owner can revoke an owner grant (and never the last one),
+    so a non-owner cannot demote an owner. Route maps to 403 ``permission_denied``."""
+
+
 # PAR-C H9: actor-set is shared (core.permissions.set_actor).
+
+
+async def _actor_is_owner(db: AsyncSession, *, workspace_id: UUID, actor_id: UUID) -> bool:
+    """True iff ``actor_id`` holds the workspace ``owner`` system-role grant in
+    ``workspace_id``. Mirrors :func:`_count_owner_grants` (``r.key='owner' AND
+    r.is_system``) but pinned to one actor — the owner-only gate for granting
+    and revoking the owner role."""
+    return bool(
+        (
+            await db.execute(
+                text(
+                    "SELECT 1 FROM user_roles ur "
+                    "JOIN roles r ON r.id = ur.role_id "
+                    "WHERE r.scope='workspace' AND r.workspace_id = :w "
+                    "AND r.key='owner' AND r.is_system "
+                    "AND ur.auth_user_id = :a AND ur.workspace_id = :w "
+                    "LIMIT 1"
+                ),
+                {"w": str(workspace_id), "a": str(actor_id)},
+            )
+        ).first()
+        is not None
+    )
 
 
 async def _load_role(
@@ -175,6 +212,17 @@ async def grant_workspace_role(
     )
     if missing is not None:
         raise PrivilegeEscalationError(missing)
+    # Owner-role gate (on TOP of the perm-based priv-esc check): granting the
+    # workspace owner system role requires the actor to already be an owner.
+    # This is a ROLE check, not a permission check — a workspace_admin holding
+    # workspace.members.manage + workspace.roles.manage would otherwise pass the
+    # priv-esc check yet must not be able to create a new owner.
+    if (
+        role["is_system"]
+        and role["key"] == "owner"
+        and not await _actor_is_owner(db, workspace_id=workspace_id, actor_id=actor_id)
+    ):
+        raise OwnerGrantRequiresOwnerError()
     inserted = (
         (
             await db.execute(
@@ -294,6 +342,13 @@ async def revoke_workspace_role_grant(
     # trigger, which takes ``SELECT … FOR UPDATE`` on the workspace owner role
     # row and raises ``last_owner`` on the loser (mapped to 409 in the route).
     if grant["is_system"] and grant["key"] == "owner":
+        # Owner-role gate: only an owner of this workspace may revoke an owner
+        # grant. A non-owner (even a workspace_admin holding the perms) MUST NOT
+        # be able to demote an owner (= revoke-owner + grant). Checked BEFORE the
+        # floor so a non-owner gets the 403 permission_denied contract, not a 409.
+        if not await _actor_is_owner(db, workspace_id=workspace_id, actor_id=actor_id):
+            raise OwnerRevokeRequiresOwnerError()
+        # KEEP the ≥1-owner floor: even an owner can't revoke the last owner.
         owners = await _count_owner_grants(db, workspace_id=workspace_id)
         if owners <= 1:
             raise OwnerFloorError(str(grant_id))

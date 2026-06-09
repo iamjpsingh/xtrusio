@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..rbac.catalog import CATALOG
 from ..schemas.permission import PermissionDef, PermissionsCatalog
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/permissions", tags=["permissions"])
 
 @router.get("/catalog", response_model=PermissionsCatalog)
 async def get_catalog(
-    _user: Annotated[CurrentUser, Depends(get_current_user)],
+    _user: Annotated[AuthIdentity, Depends(require_authenticated)],
 ) -> PermissionsCatalog:
     return PermissionsCatalog(
         items=[

@@ -97,16 +97,8 @@ async def close_jwks_client() -> None:
         _HTTP_CLIENT = None
 
 
-@dataclass
-class CurrentUser:
-    user_id: UUID
-    email: str
-    role: PlatformRole
-    is_active: bool
-
-
-def require_super_admin(user: CurrentUser) -> None:
-    """Gate an endpoint to the platform ``super_admin`` role ONLY.
+async def require_super_admin(db: AsyncSession, user_id: UUID) -> None:
+    """Gate an endpoint to an ACTIVE platform ``super_admin`` ONLY.
 
     Deliberately ROLE-based, not permission-based: provisioning platform staff
     (creating platform users, sending/revoking platform invites) is
@@ -114,8 +106,17 @@ def require_super_admin(user: CurrentUser) -> None:
     ``platform.users.invite``/``manage`` (for read + management) but MUST NOT be
     able to add other platform staff. Only ``super_admin`` may. Raises 403 with
     the same ``permission_denied`` detail as ``require_permission``.
+
+    There is ONE authentication dependency (``require_authenticated``); the
+    platform-user role is an AUTHORIZATION concern resolved here, looked up by
+    ``user_id``. A missing / inactive / non-super_admin row → 403.
     """
-    if user.role != PlatformRole.SUPER_ADMIN:
+    row = (
+        await db.execute(
+            select(PlatformUser.role, PlatformUser.is_active).where(PlatformUser.id == user_id)
+        )
+    ).first()
+    if row is None or not row.is_active or row.role != PlatformRole.SUPER_ADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "permission_denied")
 
 
@@ -232,43 +233,6 @@ async def _decode_jwt(token: str) -> dict[str, Any]:
         _log.warning("jwt_decode_failed", error=str(e), error_type=type(e).__name__)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, _CODE_INVALID_TOKEN) from e
     return payload
-
-
-async def get_current_user(
-    request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    authorization: Annotated[str | None, Header()] = None,
-) -> CurrentUser:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
-    token = authorization.split(" ", 1)[1]
-    payload = await _decode_jwt(token)
-    sub = payload.get("sub")
-    if not sub:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token missing sub")
-    try:
-        user_id = UUID(sub)
-    except ValueError as e:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid sub") from e
-
-    row = (
-        await db.execute(select(PlatformUser).where(PlatformUser.id == user_id))
-    ).scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not provisioned")
-    if not row.is_active:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "user disabled")
-    # Publish identity on request.state so the rate-limiter key_func can read
-    # it (PAR-A H8). AuthIdentity carries the same user_id; this is a
-    # lightweight shim so user-keyed limits work on routes that already use
-    # ``CurrentUser`` instead of ``AuthIdentity``.
-    request.state.identity = AuthIdentity(
-        user_id=row.id,
-        email=row.email,
-        user_metadata=payload.get("user_metadata") or {},
-        app_metadata=payload.get("app_metadata") or {},
-    )
-    return CurrentUser(user_id=row.id, email=row.email, role=row.role, is_active=row.is_active)
 
 
 @dataclass

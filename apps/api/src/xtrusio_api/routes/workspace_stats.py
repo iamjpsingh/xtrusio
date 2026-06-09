@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.permissions import has_permission, require_permission
 from ..schemas.workspace_stats import WorkspaceStats
@@ -34,7 +34,7 @@ _METRIC_PERMS = (
 @router.get("/{workspace_id}/stats", response_model=WorkspaceStats)
 async def get_stats(
     workspace_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceStats:
     await require_permission(db, user.user_id, "workspace.members.read", workspace_id=workspace_id)

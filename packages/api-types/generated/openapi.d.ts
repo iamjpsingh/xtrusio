@@ -296,6 +296,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/internal/auth-events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Ingest Auth Event */
+    post: operations["ingest_auth_event_api_internal_auth_events_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/platform/clients/{slug}": {
     parameters: {
       query?: never;
@@ -430,9 +447,9 @@ export interface paths {
      * @description Resend the signup-confirmation email.
      *
      *     Gated behind ``signups_enabled`` and rate-limited identically to /signup
-     *     (5/IP/hr per-IP PLUS the RL-2 per-email throttle). ALWAYS returns 202
-     *     ``confirm_email_sent`` when enabled — there is no oracle revealing whether
-     *     the email exists (non-enumeration).
+     *     (5/IP/hr per-IP PLUS the RL-2 per-email throttle). Returns 202
+     *     ``confirm_email_sent`` when enabled; an ineligible address (already
+     *     confirmed, etc.) is swallowed to the same 202 by the service layer.
      */
     post: operations["signup_resend_api_signup_resend_post"];
     delete?: never;
@@ -524,6 +541,31 @@ export interface paths {
     put?: never;
     post?: never;
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspaces/{workspace_id}/members/{user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Remove Member
+     * @description Remove a member from the workspace. Gated by ``workspace.members.manage``.
+     *
+     *     404 if the target isn't a member; 409 ``cannot_remove_owner`` if the target
+     *     holds the workspace owner system role (owners are protected — demote via the
+     *     owner-only revoke first). The caller owns the commit here (the service does
+     *     not self-commit).
+     */
+    delete: operations["remove_member_api_workspaces__workspace_id__members__user_id__delete"];
     options?: never;
     head?: never;
     patch?: never;
@@ -1477,6 +1519,28 @@ export interface components {
       /** Recent Activity */
       recent_activity?: number | null;
     };
+    /** _AuthRecord */
+    _AuthRecord: {
+      /** Id */
+      id?: string | null;
+      /**
+       * Payload
+       * @default {}
+       */
+      payload: Record<string, never>;
+      /** Ip Address */
+      ip_address?: string | null;
+      /** Created At */
+      created_at?: string | null;
+    };
+    /** _WebhookBody */
+    _WebhookBody: {
+      /** Type */
+      type: string;
+      /** Table */
+      table: string;
+      record?: components["schemas"]["_AuthRecord"] | null;
+    };
   };
   responses: never;
   parameters: never;
@@ -2263,6 +2327,43 @@ export interface operations {
       };
     };
   };
+  ingest_auth_event_api_internal_auth_events_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "x-webhook-secret"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["_WebhookBody"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": {
+            [key: string]: string;
+          };
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_client_detail_api_platform_clients__slug__get: {
     parameters: {
       query?: never;
@@ -2816,6 +2917,38 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["WorkspaceMembersPage"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  remove_member_api_workspaces__workspace_id__members__user_id__delete: {
+    parameters: {
+      query?: never;
+      header?: {
+        authorization?: string | null;
+      };
+      path: {
+        workspace_id: string;
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {

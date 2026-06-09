@@ -8,11 +8,12 @@
 // View gate: workspace.members.read.
 // Manage-roles gate: workspace.members.manage.
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Users } from "lucide-react";
 import type { WorkspaceMemberListItem } from "@xtrusio/api-types";
-import { fetchWorkspaceMembers } from "@/lib/api";
+import { deleteWorkspaceMember, errorCode, fetchWorkspaceMembers } from "@/lib/api";
+import { errorMessage } from "@/lib/error-messages";
 import { formatDateTime } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
 import { getDefaultLandingPath, hasWorkspacePerm, useMe } from "@/lib/me-adapter";
@@ -32,6 +33,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { LoadMoreButton } from "@/components/audit/load-more-button";
 import { GrantManagerDialog } from "@/components/grants/grant-manager-dialog";
+import { RemoveMemberDialog } from "@/components/remove-member-dialog";
 
 export function WorkspaceMembersListPage({ workspaceId }: { workspaceId: string }) {
   const { me } = useMe();
@@ -39,11 +41,25 @@ export function WorkspaceMembersListPage({ workspaceId }: { workspaceId: string 
     return <Forbidden landingPath={getDefaultLandingPath(me)} />;
   }
   const canManage = hasWorkspacePerm(me, workspaceId, "workspace.members.manage");
-  return <Body workspaceId={workspaceId} canManage={canManage} />;
+  // The current user's id — used to hide the Remove action on their own row
+  // (you can't remove yourself here; this mirrors the backend's owner guard).
+  const currentUserId = me?.user_id ?? null;
+  return <Body workspaceId={workspaceId} canManage={canManage} currentUserId={currentUserId} />;
 }
 
-function Body({ workspaceId, canManage }: { workspaceId: string; canManage: boolean }) {
+function Body({
+  workspaceId,
+  canManage,
+  currentUserId,
+}: {
+  workspaceId: string;
+  canManage: boolean;
+  currentUserId: string | null;
+}) {
+  const qc = useQueryClient();
   const [selected, setSelected] = useState<WorkspaceMemberListItem | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<WorkspaceMemberListItem | null>(null);
+  const [removeError, setRemoveError] = useState<string | null>(null);
 
   // H3: useInfiniteQuery owns the page accumulator (no setState in queryFn).
   const query = useInfiniteQuery({
@@ -51,6 +67,16 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
     queryFn: ({ pageParam }) => fetchWorkspaceMembers(workspaceId, pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+  });
+
+  const remove = useMutation({
+    mutationFn: (userId: string) => deleteWorkspaceMember(workspaceId, userId),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: qk.workspaceMembers(workspaceId) });
+      setRemoveTarget(null);
+      setRemoveError(null);
+    },
+    onError: (e) => setRemoveError(errorMessage(errorCode(e))),
   });
 
   const members = useMemo<WorkspaceMemberListItem[]>(
@@ -105,9 +131,26 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
               </TableCell>
               <TableCell className="text-right">
                 {canManage ? (
-                  <Button variant="outline" size="sm" onClick={() => setSelected(m)}>
-                    Manage roles
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setSelected(m)}>
+                      Manage roles
+                    </Button>
+                    {/* Hide Remove for an owner (protected) and for the current
+                        user (can't remove yourself here). The backend is the
+                        real gate (409 cannot_remove_owner); this is UX polish. */}
+                    {m.role !== "owner" && m.user_id !== currentUserId ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setRemoveError(null);
+                          setRemoveTarget(m);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                  </div>
                 ) : null}
               </TableCell>
             </TableRow>
@@ -138,6 +181,18 @@ function Body({ workspaceId, canManage }: { workspaceId: string; canManage: bool
           }}
         />
       ) : null}
+      <RemoveMemberDialog
+        member={removeTarget}
+        pending={remove.isPending}
+        error={removeError}
+        onConfirm={() => removeTarget && remove.mutate(removeTarget.user_id)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRemoveTarget(null);
+            setRemoveError(null);
+          }
+        }}
+      />
     </section>
   );
 }

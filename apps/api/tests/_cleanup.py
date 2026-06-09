@@ -34,6 +34,11 @@ async def purge_test_data() -> dict[str, int]:
         # roles via FK, which reject_system_role_mutation would otherwise
         # block. See rbac/reconcile.py for the same bypass pattern.
         await s.execute(text("SELECT set_config('app.bypass_priv_escalation', 'on', true)"))
+        # Cleanup is a maintenance op: a single tx of heavy cascading DELETEs over
+        # however much @example.com data has accumulated. Disable the request-path
+        # statement_timeout (LOCAL → reverts at commit) so the tenants cascade can't
+        # be cancelled mid-purge ("canceling statement due to statement timeout").
+        await s.execute(text("SELECT set_config('statement_timeout', '0', true)"))
         # Resolve the set of test auth.users ids first (drives FK-dependent deletes).
         test_ids = [
             r[0]

@@ -52,6 +52,20 @@ const MEMBER_HARD_DELETED: WorkspaceMemberListItem = {
   role: "editor",
   granted_role_count: 0,
 };
+// An owner member (Remove must be hidden — owners are protected).
+const MEMBER_OWNER: WorkspaceMemberListItem = {
+  ...MEMBER_A,
+  user_id: "u-owner",
+  email: "boss@acme.com",
+  role: "owner",
+};
+// The current user's own row (Remove must be hidden — can't remove yourself).
+const MEMBER_SELF: WorkspaceMemberListItem = {
+  ...MEMBER_A,
+  user_id: "u-self",
+  email: "owner@acme.com",
+  role: "admin",
+};
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
@@ -63,6 +77,7 @@ vi.mock("@/lib/api", async () => {
     fetchWorkspaceRoles: vi.fn(),
     postWorkspaceRoleGrant: vi.fn(),
     deleteWorkspaceRoleGrant: vi.fn(),
+    deleteWorkspaceMember: vi.fn(),
   };
 });
 
@@ -190,5 +205,54 @@ describe("<WorkspaceMembersListPage />", () => {
     });
     expect(api.fetchWorkspaceMembers).toHaveBeenCalledTimes(2);
     expect(api.fetchWorkspaceMembers).toHaveBeenLastCalledWith(WID, "next-1");
+  });
+
+  it("shows Remove for a non-owner, non-self member when caller can manage", async () => {
+    vi.mocked(api.fetchMe).mockResolvedValue(ME_OWNER);
+    vi.mocked(api.fetchWorkspaceMembers).mockResolvedValue({
+      items: [MEMBER_A],
+      next_cursor: null,
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWith(qc);
+    await waitFor(() => screen.getByText("alice@acme.com"));
+    expect(screen.getByRole("button", { name: /^remove$/i })).toBeInTheDocument();
+  });
+
+  it("hides Remove for an owner member and for the current user's own row", async () => {
+    vi.mocked(api.fetchMe).mockResolvedValue(ME_OWNER);
+    vi.mocked(api.fetchWorkspaceMembers).mockResolvedValue({
+      items: [MEMBER_OWNER, MEMBER_SELF],
+      next_cursor: null,
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWith(qc);
+    await waitFor(() => screen.getByText("boss@acme.com"));
+    // Neither the owner row nor the self row exposes a Remove button.
+    expect(screen.queryByRole("button", { name: /^remove$/i })).toBeNull();
+    // But Manage roles is still present for both (manage gate unchanged).
+    expect(screen.getAllByRole("button", { name: /manage roles/i })).toHaveLength(2);
+  });
+
+  it("removes a member after confirming the dialog", async () => {
+    vi.mocked(api.fetchMe).mockResolvedValue(ME_OWNER);
+    vi.mocked(api.fetchWorkspaceMembers).mockResolvedValue({
+      items: [MEMBER_A],
+      next_cursor: null,
+    });
+    vi.mocked(api.deleteWorkspaceMember).mockResolvedValue(undefined);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWith(qc);
+    await waitFor(() => screen.getByText("alice@acme.com"));
+    await userEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    // Confirm dialog opens; click the destructive Remove button inside it.
+    await waitFor(() => screen.getByText(/remove member — alice@acme.com/i));
+    const confirm = screen
+      .getAllByRole("button", { name: /^remove$/i })
+      .find((b) => b.textContent === "Remove" && b.closest('[role="dialog"]'));
+    await userEvent.click(confirm!);
+    await waitFor(() => {
+      expect(api.deleteWorkspaceMember).toHaveBeenCalledWith(WID, "u-a");
+    });
   });
 });

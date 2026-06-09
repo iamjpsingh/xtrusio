@@ -42,10 +42,6 @@ class InvitePendingError(Exception):
     pass
 
 
-class InviteAlreadyAcceptedError(Exception):
-    pass
-
-
 async def create_platform_invite(
     db: AsyncSession,
     *,
@@ -122,12 +118,27 @@ async def revoke_platform_invite(db: AsyncSession, *, invite_id: UUID, actor_id:
     ).scalar_one_or_none()
     if invite is None:
         return  # idempotent: revoking an unknown/already-deleted invite is a 204 no-op
+    # Capture the before-payload from the loaded row BEFORE mutating/deleting it.
+    before = {"email": invite.email, "role": invite.role.value}
     if invite.accepted_at is not None:
-        raise InviteAlreadyAcceptedError()
+        # ACCEPTED invite → "clear" it: delete the record only so it drops off
+        # the invites list. The invitee is now a REAL, confirmed platform user;
+        # we deliberately do NOT delete their Supabase auth identity here (that
+        # would orphan a live account). No Supabase call on this branch. 204.
+        await db.delete(invite)
+        await write_audit_event(
+            db,
+            actor_id=actor_id,
+            action="platform_invite.clear",
+            target_type="invite",
+            target_id=invite_id,
+            scope="platform",
+            before=before,
+        )
+        await db.commit()
+        return
     if invite.revoked_at is not None:
         return  # already revoked — idempotent no-op, skip duplicate Supabase cleanup
-    # Capture the before-payload from the loaded row BEFORE mutating it.
-    before = {"email": invite.email, "role": invite.role.value}
     invite.revoked_at = datetime.now(UTC)
     # Audit row in the SAME tx as the revoke — this fn self-commits, so the
     # event MUST be written before the commit below.

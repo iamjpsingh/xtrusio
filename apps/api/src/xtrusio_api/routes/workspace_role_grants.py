@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import DEFAULT_LIMIT, MAX_LIMIT, CursorParams
 from ..core.permissions import require_permission
@@ -28,6 +28,8 @@ from ..services.workspace_role_grants import (
     GrantNotFoundError,
     MembershipNotFoundError,
     OwnerFloorError,
+    OwnerGrantRequiresOwnerError,
+    OwnerRevokeRequiresOwnerError,
     PrivilegeEscalationError,
     RoleNotFoundError,
     RoleScopeMismatchError,
@@ -48,7 +50,7 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspace-role-grants"])
 async def list_grants(
     workspace_id: UUID,
     user_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -81,7 +83,7 @@ async def create_grant(
     workspace_id: UUID,
     user_id: UUID,
     body: WorkspaceRoleGrantIn,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> WorkspaceRoleGrantOut:
     await require_permission(
@@ -120,6 +122,11 @@ async def create_grant(
             },
         )
         raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
+    except OwnerGrantRequiresOwnerError as e:
+        await db.rollback()
+        # ROLE-based gate (on top of priv-esc): only an owner may grant the
+        # workspace owner system role.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_grant_requires_owner") from e
     return WorkspaceRoleGrantOut.model_validate(row)
 
 
@@ -132,7 +139,7 @@ async def delete_grant(
     workspace_id: UUID,
     user_id: UUID,
     grant_id: UUID,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     await require_permission(
@@ -168,6 +175,12 @@ async def delete_grant(
             },
         )
         raise HTTPException(status.HTTP_403_FORBIDDEN, "privilege_escalation") from e
+    except OwnerRevokeRequiresOwnerError as e:
+        await db.rollback()
+        # ROLE-based gate: only an owner may revoke an owner grant. Surfaced as
+        # the unified 403 permission_denied contract (a non-owner is simply not
+        # permitted to touch an owner grant).
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "permission_denied") from e
     except OwnerFloorError as e:
         await db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "owner_floor") from e

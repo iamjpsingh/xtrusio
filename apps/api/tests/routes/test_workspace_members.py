@@ -166,3 +166,83 @@ async def test_list_403_for_other_workspaces_owner(
     )
     assert res.status_code == 403
     assert res.json()["detail"] == "permission_denied"
+
+
+async def test_remove_member_requires_auth(http_client: AsyncClient) -> None:
+    res = await http_client.delete(f"/api/workspaces/{uuid4()}/members/{uuid4()}")
+    assert res.status_code == 401
+
+
+async def test_remove_member_204_non_owner(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """Owner removes a non-owner member → 204; membership + workspace grants
+    gone."""
+    tid, owner_id, member_id = await _provision_owner_workspace()
+    token = make_jwt(sub=owner_id)
+    res = await http_client.delete(
+        f"/api/workspaces/{tid}/members/{member_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 204, res.text
+    async with SessionLocal() as s:
+        m = (
+            await s.execute(
+                text("SELECT 1 FROM tenant_memberships " "WHERE tenant_id = :w AND user_id = :u"),
+                {"w": str(tid), "u": str(member_id)},
+            )
+        ).first()
+        assert m is None
+        g = (
+            await s.execute(
+                text("SELECT 1 FROM user_roles WHERE auth_user_id = :u AND workspace_id = :w"),
+                {"u": str(member_id), "w": str(tid)},
+            )
+        ).first()
+        assert g is None
+
+
+async def test_remove_member_409_owner_protected(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """Removing a member who holds the workspace owner system role → 409
+    cannot_remove_owner (owners are protected)."""
+    tid, owner_id, _ = await _provision_owner_workspace()
+    token = make_jwt(sub=owner_id)
+    res = await http_client.delete(
+        f"/api/workspaces/{tid}/members/{owner_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 409, res.text
+    assert res.json()["detail"] == "cannot_remove_owner"
+
+
+async def test_remove_member_404_non_member(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """Removing a user who isn't a member of this workspace → 404
+    member_not_found."""
+    tid, owner_id, _ = await _provision_owner_workspace()
+    token = make_jwt(sub=owner_id)
+    res = await http_client.delete(
+        f"/api/workspaces/{tid}/members/{uuid4()}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "member_not_found"
+
+
+async def test_remove_member_403_lacking_manage(
+    http_client: AsyncClient, make_jwt: Callable[..., str]
+) -> None:
+    """A member without workspace.members.manage (editor) cannot remove a
+    member → 403 permission_denied (route gate)."""
+    tid, _, editor_id = await _provision_owner_workspace(member_role="editor")
+    other = await _seed_non_member("p6da-wmr-other")
+    token = make_jwt(sub=editor_id)
+    res = await http_client.delete(
+        f"/api/workspaces/{tid}/members/{other}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert res.status_code == 403
+    assert res.json()["detail"] == "permission_denied"

@@ -163,7 +163,20 @@ export function TenantUsersPage() {
                     <p className="text-xs text-muted-foreground">{i.role}</p>
                   </div>
                   {i.accepted_at ? (
-                    <span className="text-xs text-foreground">Accepted</span>
+                    // ACCEPTED → "Clear" removes the redundant invite record
+                    // (the invitee is already a member). Same DELETE endpoint as
+                    // Revoke; the backend returns 204 either way.
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-foreground">Accepted</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => revoke.mutate(i.id)}
+                        disabled={revoke.isPending}
+                      >
+                        Clear
+                      </Button>
+                    </div>
                   ) : i.revoked_at ? (
                     <span className="text-xs text-muted-foreground">Revoked</span>
                   ) : (

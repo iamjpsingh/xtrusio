@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from ..core.audit_catalog import actions, categories
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..schemas.audit_catalog import AuditActionDef, AuditCatalog, AuditCategoryDef
 
 router = APIRouter(prefix="/api/audit", tags=["audit-catalog"])
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit-catalog"])
 
 @router.get("/catalog", response_model=AuditCatalog)
 async def get_catalog(
-    _user: Annotated[CurrentUser, Depends(get_current_user)],
+    _user: Annotated[AuthIdentity, Depends(require_authenticated)],
 ) -> AuditCatalog:
     return AuditCatalog(
         categories=[AuditCategoryDef(key=key, label=label) for key, label in categories()],

@@ -9,7 +9,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.auth import CurrentUser, get_current_user
+from ..core.auth import AuthIdentity, require_authenticated
 from ..core.db import get_db
 from ..core.pagination import (
     DEFAULT_LIMIT,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/tenants", tags=["tenants"])
 
 @router.get("", response_model=TenantsPage)
 async def list_tenants(
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=0, le=MAX_LIMIT)] = DEFAULT_LIMIT,
@@ -55,7 +55,7 @@ async def list_tenants(
 @router.post("", response_model=TenantOut, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     body: TenantIn,
-    user: Annotated[CurrentUser, Depends(get_current_user)],
+    user: Annotated[AuthIdentity, Depends(require_authenticated)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Tenant:
     await require_permission(db, user.user_id, "platform.clients.manage")
